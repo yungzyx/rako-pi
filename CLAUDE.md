@@ -39,7 +39,7 @@ app móvil ni el contenido del RAG.
 
 ### En la Pi
 - **OS:** Raspberry Pi OS (Debian 64-bit).
-- **Lenguaje:** Python 3.11+.
+- **Lenguaje:** Python 3.12 (Pi OS Bookworm). Mantener compat 3.11+.
 - **Frameworks:** FastAPI (servicios internos), LangChain (orquestación RAG+LLM).
 - **Vector DB:** ChromaDB (local).
 - **Relacional local:** SQLite + SQLCipher (cifrado en disco).
@@ -64,7 +64,7 @@ app móvil ni el contenido del RAG.
 ## 3. Reglas de código (siempre)
 
 ### Python
-- **Python 3.11+.** Type hints en toda función pública.
+- **Python 3.12** (compat 3.11+). Type hints en toda función pública.
 - **Inmutabilidad por defecto.** Crear objetos nuevos, no mutar. `@dataclass(frozen=True)` cuando aplica.
 - **Archivos chicos:** ~200–400 líneas, máximo 800. Si crece, partir.
 - **Funciones cortas:** <50 líneas. Anidamiento <4 niveles. Early returns.
@@ -171,11 +171,14 @@ puede consultar `safety/` y debe respetar su veredicto. `hardware/` no conoce
 
 ### Setup local (mac/linux para desarrollo, no la Pi)
 ```bash
-python3.11 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # rellenar con credenciales reales (no commitear)
 ```
+
+Para iterar en `safety/` (no necesita las deps pesadas) basta con
+`pip install pytest pytest-cov` en el venv.
 
 ### Tests
 ```bash

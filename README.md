@@ -38,7 +38,7 @@ src/
 ### Desarrollo local (mac / linux, sin Pi)
 
 ```bash
-python3.11 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -56,12 +56,12 @@ cp .env.example .env
 
 ```bash
 sudo apt update && sudo apt install -y \
-  python3.11 python3.11-venv python3-pip \
+  python3.12 python3.12-venv python3-pip \
   sqlcipher libsqlcipher-dev \
   portaudio19-dev libsndfile1 \
   ffmpeg
 
-python3.11 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
