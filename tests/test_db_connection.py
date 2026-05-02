@@ -60,6 +60,25 @@ def test_open_file_connection_creates_file(tmp_path: Path) -> None:
     assert db_path.exists()
 
 
+def test_is_encrypted_returns_false_in_dev_mode() -> None:
+    from db.encryption import is_encrypted
+
+    conn = open_connection(":memory:")
+    assert is_encrypted(conn) is False
+    conn.close()
+
+
+def test_escape_doubles_single_quotes() -> None:
+    # Crítico: `PRAGMA key = '<key>'` debe escapar comillas simples para
+    # evitar inyección. Esta función nunca debe perder cobertura.
+    from db.encryption import _escape
+
+    assert _escape("abc") == "abc"
+    assert _escape("ab'c") == "ab''c"
+    assert _escape("'") == "''"
+    assert _escape("a';DROP--") == "a'';DROP--"
+
+
 def test_require_encrypted_raises_in_dev_mode() -> None:
     conn = open_connection(":memory:")
 
