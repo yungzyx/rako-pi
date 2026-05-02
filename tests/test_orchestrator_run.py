@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable
 
 import pytest
 
@@ -14,7 +13,6 @@ from config import Settings
 from hardware.event_bus import InMemoryHardwareEventBus
 from hardware.types import HardwareEvent, HardwareEventKind, LEDState
 from orchestrator.run import RunConfig, RunLoop
-from safety.types import PanicSource
 from voice.types import AudioBuffer, SynthesisResult, TranscriptResult
 
 
@@ -253,6 +251,98 @@ def test_pir_motion_does_not_immediately_trigger_voice(tmp_path: Path) -> None:
         # Y los LEDs no debieron entrar a LISTENING.
         history = app.leds.history  # type: ignore[attr-defined]
         assert LEDState.LISTENING not in history
+    finally:
+        app.close()
+
+
+def test_handler_exception_is_logged_and_loop_continues(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Si _handle_event lanza, el loop captura la excepción y sigue."""
+    loop, app, _ = _make_loop(tmp_path)
+
+    # Reemplazamos el orquestador por uno que crashea.
+    @dataclass
+    class _CrashingOrchestrator:
+        def handle_turn(self, turn):  # type: ignore[no-untyped-def]
+            raise RuntimeError("boom")
+
+    app.orchestrator = _CrashingOrchestrator()  # type: ignore[assignment]
+    try:
+        _emit(app.event_bus, HardwareEventKind.BUTTON_PANIC)  # type: ignore[arg-type]
+        loop.run(max_iterations=2)
+        # No assertion sobre el contenido del log — la garantía es que
+        # el loop NO crashee.
+    finally:
+        app.close()
+
+
+def test_sync_drain_failure_is_logged_and_loop_continues(tmp_path: Path) -> None:
+    loop, app, _ = _make_loop(
+        tmp_path, config=RunConfig(sleep_seconds=0.0, drain_every_n_iterations=1)
+    )
+
+    class _FailingSync:
+        def enqueue(self, event):  # type: ignore[no-untyped-def]
+            pass
+
+        def drain(self):  # type: ignore[no-untyped-def]
+            raise RuntimeError("network down")
+
+    app.sync = _FailingSync()  # type: ignore[assignment]
+    try:
+        loop.run(max_iterations=3)
+        # Loop completó sin crashear.
+    finally:
+        app.close()
+
+
+def test_capture_failure_returns_to_idle(tmp_path: Path) -> None:
+    loop, app, _ = _make_loop(tmp_path)
+
+    class _FailingCapture:
+        def capture(self, max_seconds):  # type: ignore[no-untyped-def]
+            raise RuntimeError("mic gone")
+
+    app.capture = _FailingCapture()  # type: ignore[assignment]
+    try:
+        _emit(app.event_bus, HardwareEventKind.TOUCH)  # type: ignore[arg-type]
+        loop.run(max_iterations=1)
+
+        history = app.leds.history  # type: ignore[attr-defined]
+        # LISTENING fue intentado, luego OFF tras la falla.
+        assert history[-1] is LEDState.OFF
+        # No hubo SPEAKING porque no llegamos al orquestador.
+        assert LEDState.SPEAKING not in history
+    finally:
+        app.close()
+
+
+def test_run_loop_works_when_stt_is_none(tmp_path: Path) -> None:
+    loop, app, _ = _make_loop(tmp_path)
+    app.stt = None  # type: ignore[assignment]
+    try:
+        _emit(app.event_bus, HardwareEventKind.TOUCH)  # type: ignore[arg-type]
+        loop.run(max_iterations=1)
+        # transcript vacío → no turn → LEDs OFF
+        history = app.leds.history  # type: ignore[attr-defined]
+        assert history[-1] is LEDState.OFF
+        assert LEDState.SPEAKING not in history
+    finally:
+        app.close()
+
+
+def test_run_loop_works_when_tts_is_none(tmp_path: Path) -> None:
+    loop, app, _ = _make_loop(tmp_path)
+    app.tts = None  # type: ignore[assignment]
+    try:
+        _emit(app.event_bus, HardwareEventKind.TOUCH)  # type: ignore[arg-type]
+        loop.run(max_iterations=1)
+        history = app.leds.history  # type: ignore[attr-defined]
+        # Pasó por SPEAKING (LLM produjo texto) pero no hubo playback.
+        assert LEDState.SPEAKING in history
+        assert app.playback.played == []  # type: ignore[attr-defined]
+        assert history[-1] is LEDState.OFF
     finally:
         app.close()
 

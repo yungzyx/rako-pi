@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,3 +19,22 @@ class UserContext:
     robot_level: int
     time_of_day: str
     recent_mood_summary: str | None
+
+
+def default_user_context(now: datetime) -> UserContext:
+    """Contexto mínimo basado solo en la hora — para usar cuando todavía
+    no tenemos estado real del usuario en SQLite (e.g. demos, primer turn)."""
+    hour = now.hour
+    if 6 <= hour < 12:
+        tod = "mañana"
+    elif 12 <= hour < 19:
+        tod = "tarde"
+    else:
+        tod = "noche"
+    return UserContext(
+        pending_task_count=0,
+        recent_completion_count=0,
+        robot_level=1,
+        time_of_day=tod,
+        recent_mood_summary=None,
+    )

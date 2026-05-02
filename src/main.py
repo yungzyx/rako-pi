@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from bootstrap import Application, build_dev_application
 from config import Settings
 from orchestrator.orchestrator import TurnInput, TurnKind
-from orchestrator.types import UserContext
+from orchestrator.types import default_user_context
 from safety.types import PanicSource
 
 
@@ -37,6 +37,14 @@ def cli(argv: list[str] | None = None) -> int:
 
     sub.add_parser("purge-all", help="Borra todo el historial e identidad.")
 
+    p_run = sub.add_parser("run", help="Loop principal continuo (Ctrl+C para detener).")
+    p_run.add_argument(
+        "--max-iterations",
+        type=int,
+        default=None,
+        help="Límite de iteraciones (default: infinito).",
+    )
+
     args = parser.parse_args(argv)
 
     settings = Settings()
@@ -50,6 +58,8 @@ def cli(argv: list[str] | None = None) -> int:
             return _run_reindex_rag(app)
         if args.cmd == "purge-all":
             return _run_purge_all(app)
+        if args.cmd == "run":
+            return _run_loop(app, max_iterations=args.max_iterations)
         parser.error(f"unknown command: {args.cmd}")  # pragma: no cover
         return 2  # pragma: no cover - argparse already exits
     finally:
@@ -70,7 +80,7 @@ def _run_demo_turn(app: Application, text: str) -> int:
         emotion_history=(),
         last_high_distress_at=None,
         last_interaction_at=None,
-        user_context=_default_context(now),
+        user_context=default_user_context(now),
         now=now,
     )
     result = app.orchestrator.handle_turn(turn)
@@ -94,7 +104,7 @@ def _run_demo_crisis_panic(app: Application) -> int:
         emotion_history=(),
         last_high_distress_at=None,
         last_interaction_at=None,
-        user_context=_default_context(now),
+        user_context=default_user_context(now),
         now=now,
     )
     result = app.orchestrator.handle_turn(turn)
@@ -134,26 +144,16 @@ def _run_purge_all(app: Application) -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+def _run_loop(app: Application, *, max_iterations: int | None) -> int:
+    from orchestrator.run import RunLoop
 
-
-def _default_context(now: datetime) -> UserContext:
-    hour = now.hour
-    if 6 <= hour < 12:
-        tod = "mañana"
-    elif 12 <= hour < 19:
-        tod = "tarde"
-    else:
-        tod = "noche"
-    return UserContext(
-        pending_task_count=0,
-        recent_completion_count=0,
-        robot_level=1,
-        time_of_day=tod,
-        recent_mood_summary=None,
-    )
+    loop = RunLoop(app=app)
+    print("[Rako] loop principal iniciado. Ctrl+C para detener.")
+    try:
+        loop.run(max_iterations=max_iterations)
+    except KeyboardInterrupt:  # pragma: no cover - interactive only
+        print("\n[Rako] deteniendo.")
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover

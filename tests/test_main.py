@@ -186,10 +186,26 @@ def test_demo_turn_prints_rag_chunks_when_present(
     "hour,expected",
     [(8, "mañana"), (15, "tarde"), (23, "noche"), (3, "noche")],
 )
-def test_default_context_time_of_day(hour: int, expected: str) -> None:
+def test_default_user_context_time_of_day(hour: int, expected: str) -> None:
     from datetime import datetime
 
+    from orchestrator.types import default_user_context
+
     now = datetime(2026, 5, 1, hour, 0, tzinfo=UTC)
-    ctx = cli_module._default_context(now)
+    ctx = default_user_context(now)
 
     assert ctx.time_of_day == expected
+
+
+def test_run_subcommand_executes_finite_iterations(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _common_env(monkeypatch, tmp_path)
+
+    exit_code = cli_module.cli(["run", "--max-iterations", "2"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "loop principal" in captured.out.lower()

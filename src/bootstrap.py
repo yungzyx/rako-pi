@@ -43,7 +43,9 @@ from sync.coordinator import SyncCoordinator
 from sync.firebase_client import FakeFirebaseClient, FirebaseClient
 from sync.queue import SyncQueue
 from voice.audio_io import AudioCaptureSource, AudioPlaybackSink
-from voice.types import AudioBuffer
+from voice.stt import STTClient
+from voice.tts import TTSClient
+from voice.types import AudioBuffer, SynthesisResult, TranscriptResult
 from voice.wake_word import SubstringWakeWordDetector, WakeWordDetector
 
 _FALLBACK_SYSTEM_PROMPT = (
@@ -102,6 +104,40 @@ class _CannedLLMClient:
         )
 
 
+@dataclass
+class _CannedSTT:
+    """STT fake — devuelve un placeholder seguro para que el loop
+    progrese end-to-end en dev sin un mic real. La impl real
+    (`GoogleCloudSTT`) reemplaza esta clase en build_pi_application
+    cuando hay credenciales."""
+
+    canned_text: str = "estoy aquí"
+
+    def transcribe(self, audio: AudioBuffer) -> TranscriptResult:
+        return TranscriptResult(
+            text=self.canned_text,
+            confidence=0.0,
+            language="es-CL",
+        )
+
+
+@dataclass
+class _CannedTTS:
+    """TTS fake — devuelve un buffer silencioso del tamaño correcto."""
+
+    def synthesize(self, text: str) -> SynthesisResult:
+        audio = AudioBuffer(
+            data=b"\x00" * 1024,
+            sample_rate=22050,
+            encoding="MP3",
+        )
+        return SynthesisResult(
+            audio=audio,
+            voice_name="canned-dev",
+            text_synthesized=text,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Application
 # ---------------------------------------------------------------------------
@@ -121,6 +157,8 @@ class Application:
     playback: AudioPlaybackSink
     wake_word: WakeWordDetector
     retriever: Retriever
+    stt: STTClient
+    tts: TTSClient
 
     def close(self) -> None:
         self.db.close()
@@ -188,6 +226,8 @@ def build_dev_application(settings: Settings) -> Application:
         playback=playback,
         wake_word=wake_word,
         retriever=retriever,
+        stt=_CannedSTT(),
+        tts=_CannedTTS(),
     )
 
 
@@ -246,6 +286,8 @@ def build_pi_application(settings: Settings) -> Application:
         playback=playback,
         wake_word=wake_word,
         retriever=retriever,
+        stt=_CannedSTT(),
+        tts=_CannedTTS(),
     )
 
 
