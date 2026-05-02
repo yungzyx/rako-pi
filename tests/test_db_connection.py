@@ -68,15 +68,50 @@ def test_is_encrypted_returns_false_in_dev_mode() -> None:
     conn.close()
 
 
-def test_escape_doubles_single_quotes() -> None:
-    # Crítico: `PRAGMA key = '<key>'` debe escapar comillas simples para
-    # evitar inyección. Esta función nunca debe perder cobertura.
-    from db.encryption import _escape
+def test_validate_key_format_accepts_hex_keys() -> None:
+    from db.encryption import validate_key_format
 
-    assert _escape("abc") == "abc"
-    assert _escape("ab'c") == "ab''c"
-    assert _escape("'") == "''"
-    assert _escape("a';DROP--") == "a'';DROP--"
+    # 64 hex chars (32 bytes) — recomendado por SQLCipher.
+    validate_key_format("a" * 64)
+    validate_key_format("0123456789abcdef" * 4)
+    validate_key_format("DEADBEEF" * 8)  # uppercase aceptado
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "",                       # vacía
+        "abc",                    # muy corta
+        "g" * 64,                 # caracteres no-hex
+        "a" * 63,                 # impar
+        "a" * 30,                 # menor a 16 bytes
+        "abcd-ef" * 8,            # con guiones
+    ],
+)
+def test_validate_key_format_rejects_invalid(key: str) -> None:
+    from db.encryption import KeyFormatError, validate_key_format
+
+    with pytest.raises(KeyFormatError):
+        validate_key_format(key)
+
+
+def test_open_encrypted_validates_key_before_attempting_connection() -> None:
+    # Sin SQLCipher en dev, llamar open_encrypted con clave inválida
+    # debe fallar con KeyFormatError ANTES de tocar el driver.
+    from db.encryption import KeyFormatError, open_encrypted
+
+    with pytest.raises(KeyFormatError):
+        open_encrypted(":memory:", "not-hex")
+
+
+def test_open_encrypted_with_valid_key_raises_runtime_error_in_dev() -> None:
+    # En dev (sin sqlcipher), una clave válida pasa validate pero la
+    # apertura debe fallar con RuntimeError (no abrir sin cifrado).
+    from db.encryption import open_encrypted
+
+    valid_key = "a" * 64
+    with pytest.raises(RuntimeError, match="SQLCipher not available"):
+        open_encrypted(":memory:", valid_key)
 
 
 def test_require_encrypted_raises_in_dev_mode() -> None:

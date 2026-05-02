@@ -117,3 +117,9 @@ def test_record_defaults_when_no_response_metadata(journal: CrisisJournal) -> No
     entry = journal.list_recent()[0]
     assert entry.response_id is None
     assert entry.contact_notified is False
+
+
+@pytest.mark.parametrize("limit", [0, -1, -100])
+def test_list_recent_rejects_non_positive_limit(journal: CrisisJournal, limit: int) -> None:
+    with pytest.raises(ValueError):
+        journal.list_recent(limit=limit)

@@ -64,6 +64,8 @@ class CrisisJournal:
 
     def list_recent(self, limit: int = _DEFAULT_LIMIT) -> list[CrisisJournalEntry]:
         """Devuelve los `limit` eventos más recientes (más nuevos primero)."""
+        if limit <= 0:
+            raise ValueError(f"limit must be positive, got {limit}")
         rows = self._conn.execute(
             """
             SELECT id, detected_at, level, reasons, response_id,
