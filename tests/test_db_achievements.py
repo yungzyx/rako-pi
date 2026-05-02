@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from db.repositories import AchievementRepository
 from db.types import Achievement
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _achievement(*, id: str = "a1", type: str = "first_task", level: int = 1) -> Achievement:
@@ -31,8 +31,12 @@ def test_record_persists_achievement(db_conn) -> None:
 
 def test_list_all_orders_by_earned_at_descending(db_conn) -> None:
     repo = AchievementRepository(db_conn)
-    a = Achievement(id="a", type="t", earned_at=datetime(2026, 5, 1, 18, 0, tzinfo=UTC), robot_level_after=1)
-    b = Achievement(id="b", type="t", earned_at=datetime(2026, 5, 2, 18, 0, tzinfo=UTC), robot_level_after=2)
+    a = Achievement(
+        id="a", type="t", earned_at=datetime(2026, 5, 1, 18, 0, tzinfo=UTC), robot_level_after=1
+    )
+    b = Achievement(
+        id="b", type="t", earned_at=datetime(2026, 5, 2, 18, 0, tzinfo=UTC), robot_level_after=2
+    )
     repo.record(a)
     repo.record(b)
 

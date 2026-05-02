@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from pathlib import Path
-
-import pytest
 
 from bootstrap import Application, build_dev_application
 from config import Settings
@@ -61,7 +60,7 @@ def test_build_dev_creates_schema(tmp_path: Path) -> None:
 
 
 def test_build_dev_wires_crisis_lighting_to_leds(tmp_path: Path) -> None:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from hardware.types import LEDState
     from safety.types import CrisisLevel, CrisisReason, CrisisSignal
@@ -71,7 +70,7 @@ def test_build_dev_wires_crisis_lighting_to_leds(tmp_path: Path) -> None:
         signal = CrisisSignal(
             level=CrisisLevel.CRISIS,
             reasons=(CrisisReason.PANIC_BUTTON_PHYSICAL,),
-            detected_at=datetime.now(timezone.utc),
+            detected_at=datetime.now(UTC),
         )
         app.crisis_protocol.execute(signal)
 

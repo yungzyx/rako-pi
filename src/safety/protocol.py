@@ -54,9 +54,7 @@ class CrisisProtocol:
     def execute(self, signal: CrisisSignal) -> ProtocolOutcome:
         """Despacha el protocolo completo. Solo válido para CRISIS."""
         if signal.level is not CrisisLevel.CRISIS:
-            raise ValueError(
-                f"execute requires CRISIS level, got {signal.level.name}"
-            )
+            raise ValueError(f"execute requires CRISIS level, got {signal.level.name}")
 
         # Registro privado primero — si algo falla más adelante, el
         # evento queda anotado para que el contacto pueda revisar.

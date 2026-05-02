@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -49,7 +49,11 @@ def _audio() -> AudioBuffer:
 
 def _response_with(transcript: str, confidence: float = 0.92) -> _FakeResponse:
     return _FakeResponse(
-        results=[_FakeResult(alternatives=[_FakeAlternative(transcript=transcript, confidence=confidence)])]
+        results=[
+            _FakeResult(
+                alternatives=[_FakeAlternative(transcript=transcript, confidence=confidence)]
+            )
+        ]
     )
 
 

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from hardware.event_bus import HardwareEventBus, InMemoryHardwareEventBus
 from hardware.types import HardwareEvent, HardwareEventKind
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _event(kind: HardwareEventKind = HardwareEventKind.TOUCH) -> HardwareEvent:

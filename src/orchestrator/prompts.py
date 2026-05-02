@@ -49,7 +49,7 @@ def format_chunks_for_prompt(chunks: Iterable[Chunk]) -> str:
             if value:
                 meta_bits.append(f"{key}={value}")
         meta_str = f" [{', '.join(meta_bits)}]" if meta_bits else ""
-        parts.append(f"<chunk id=\"{chunk.id}\"{meta_str}>\n{chunk.text}\n</chunk>")
+        parts.append(f'<chunk id="{chunk.id}"{meta_str}>\n{chunk.text}\n</chunk>')
     return "\n\n".join(parts)
 
 

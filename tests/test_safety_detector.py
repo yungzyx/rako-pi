@@ -6,7 +6,7 @@ deben pasar siempre — un fallo aquí bloquea el merge.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -20,7 +20,7 @@ from safety.types import (
     PanicSource,
 )
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _now() -> datetime:
@@ -40,7 +40,9 @@ def _input(**overrides: object) -> CrisisInput:
     return CrisisInput(**base)  # type: ignore[arg-type]
 
 
-def _sample(minutes_ago: float, valence: float, arousal: float, dominance: float = 0.5) -> EmotionalSample:
+def _sample(
+    minutes_ago: float, valence: float, arousal: float, dominance: float = 0.5
+) -> EmotionalSample:
     return EmotionalSample(
         vector=EmotionalVector(valence=valence, arousal=arousal, dominance=dominance),
         at=_now() - timedelta(minutes=minutes_ago),
@@ -155,10 +157,7 @@ def test_selfharm_does_not_trigger_on_clearly_unrelated(phrase: str) -> None:
 
 
 def test_sustained_extreme_distress_triggers_crisis() -> None:
-    history = tuple(
-        _sample(minutes_ago=m, valence=-0.85, arousal=0.85)
-        for m in (8, 6, 4, 2, 0)
-    )
+    history = tuple(_sample(minutes_ago=m, valence=-0.85, arousal=0.85) for m in (8, 6, 4, 2, 0))
 
     signal = detect_crisis(_input(emotion_history=history))
 
@@ -188,10 +187,7 @@ def test_distress_only_recently_does_not_count_as_sustained() -> None:
 
 
 def test_extreme_values_below_threshold_do_not_trigger() -> None:
-    history = tuple(
-        _sample(minutes_ago=m, valence=-0.5, arousal=0.5)
-        for m in (8, 6, 4, 2, 0)
-    )
+    history = tuple(_sample(minutes_ago=m, valence=-0.5, arousal=0.5) for m in (8, 6, 4, 2, 0))
 
     signal = detect_crisis(_input(emotion_history=history))
 
@@ -199,10 +195,7 @@ def test_extreme_values_below_threshold_do_not_trigger() -> None:
 
 
 def test_moderate_distress_returns_elevated_not_crisis() -> None:
-    history = tuple(
-        _sample(minutes_ago=m, valence=-0.55, arousal=0.6)
-        for m in (40, 30, 20, 10, 0)
-    )
+    history = tuple(_sample(minutes_ago=m, valence=-0.55, arousal=0.6) for m in (40, 30, 20, 10, 0))
 
     signal = detect_crisis(_input(emotion_history=history))
 
@@ -300,10 +293,7 @@ def test_empty_input_returns_none() -> None:
 
 
 def test_multiple_reasons_are_all_reported() -> None:
-    history = tuple(
-        _sample(minutes_ago=m, valence=-0.85, arousal=0.85)
-        for m in (8, 6, 4, 2, 0)
-    )
+    history = tuple(_sample(minutes_ago=m, valence=-0.85, arousal=0.85) for m in (8, 6, 4, 2, 0))
 
     signal = detect_crisis(
         _input(

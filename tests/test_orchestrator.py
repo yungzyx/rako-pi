@@ -3,24 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from emotion.types import EmotionalVector
+from orchestrator.llm_client import LLMResponse
+from orchestrator.orchestrator import Orchestrator, TurnInput, TurnKind, TurnResult
+from orchestrator.types import UserContext
 from rag.types import Chunk
 from safety.types import (
-    CrisisInput,
-    CrisisLevel,
-    CrisisReason,
     CrisisSignal,
     EmotionalSample,
     PanicSource,
 )
 
-from orchestrator.llm_client import LLMResponse
-from orchestrator.orchestrator import Orchestrator, TurnInput, TurnResult, TurnKind
-from orchestrator.types import UserContext
-
-UTC = timezone.utc
+UTC = UTC
 
 
 def _now() -> datetime:

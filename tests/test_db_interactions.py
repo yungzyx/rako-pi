@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
-from emotion.types import EmotionalVector
+from datetime import UTC, datetime, timedelta
 
 from db.repositories import InteractionRepository
 from db.types import Interaction, InteractionType
+from emotion.types import EmotionalVector
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _now() -> datetime:

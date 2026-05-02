@@ -13,7 +13,6 @@ from enum import Enum
 from emotion.types import EmotionalVector
 from safety.types import EmotionalSample
 
-
 # ---------------------------------------------------------------------------
 # Tasks
 # ---------------------------------------------------------------------------

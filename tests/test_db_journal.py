@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -11,7 +11,7 @@ from db.journal import CrisisJournal, CrisisJournalEntry
 from db.schema import create_all
 from safety.types import CrisisLevel, CrisisReason, CrisisSignal
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _now() -> datetime:
@@ -60,7 +60,9 @@ def test_record_preserves_reason_order(journal: CrisisJournal) -> None:
 
 
 def test_list_recent_orders_newest_first(journal: CrisisJournal) -> None:
-    a = CrisisSignal(CrisisLevel.CRISIS, (CrisisReason.PANIC_BUTTON_APP,), _now() - timedelta(hours=1))
+    a = CrisisSignal(
+        CrisisLevel.CRISIS, (CrisisReason.PANIC_BUTTON_APP,), _now() - timedelta(hours=1)
+    )
     b = CrisisSignal(CrisisLevel.CRISIS, (CrisisReason.KEYWORDS_IDEATION,), _now())
 
     journal.record(a)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from emotion.patterns import (
     BlockLevel,
@@ -12,7 +12,7 @@ from emotion.patterns import (
     analyze_patterns,
 )
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _now() -> datetime:
@@ -38,18 +38,14 @@ def test_no_signal_for_recent_interaction_and_no_load() -> None:
 
 
 def test_moderate_inactivity_triggers_mild() -> None:
-    signal = analyze_patterns(
-        _input(last_interaction_at=_now() - timedelta(hours=5))
-    )
+    signal = analyze_patterns(_input(last_interaction_at=_now() - timedelta(hours=5)))
 
     assert signal.level is BlockLevel.MILD
     assert BlockReason.PROLONGED_INACTIVITY in signal.reasons
 
 
 def test_long_inactivity_triggers_moderate() -> None:
-    signal = analyze_patterns(
-        _input(last_interaction_at=_now() - timedelta(hours=14))
-    )
+    signal = analyze_patterns(_input(last_interaction_at=_now() - timedelta(hours=14)))
 
     assert signal.level is BlockLevel.MODERATE
     assert BlockReason.PROLONGED_INACTIVITY in signal.reasons

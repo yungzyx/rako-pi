@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Final
 
 from sync.sanitizer import sanitize_payload
@@ -54,9 +54,7 @@ class SyncQueue:
                     event.id,
                     event.occurred_at.isoformat(),
                     event.kind.name,
-                    json.dumps(
-                        {"_kind_value": event.kind.value, **clean_payload}
-                    ),
+                    json.dumps({"_kind_value": event.kind.value, **clean_payload}),
                 ),
             )
 
@@ -77,9 +75,7 @@ class SyncQueue:
 
     def mark_succeeded(self, queued: QueuedSyncEvent) -> None:
         with self._conn:
-            self._conn.execute(
-                "DELETE FROM sync_queue WHERE id = ?", (queued.event.id,)
-            )
+            self._conn.execute("DELETE FROM sync_queue WHERE id = ?", (queued.event.id,))
 
     def mark_failed(self, queued: QueuedSyncEvent, *, error: str) -> None:
         with self._conn:

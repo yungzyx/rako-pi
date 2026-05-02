@@ -1,0 +1,19 @@
+# Dev / CI dependencies for rako-pi.
+#
+# Light enough to install fast in CI without pulling torch / chromadb /
+# sentence-transformers. The full Pi-side requirements live in
+# `requirements.txt`.
+
+pytest>=8.3,<10
+pytest-cov>=5.0,<8
+ruff>=0.6,<1.0
+
+# Imported by orchestrator/llm_client (kept light at v0.97).
+anthropic>=0.39,<1.0
+
+# Imported by config (Settings).
+pydantic>=2.9,<3.0
+pydantic-settings>=2.5,<3.0
+
+# Imported by rag/chunker for Obsidian frontmatter parsing.
+PyYAML>=6.0,<7.0

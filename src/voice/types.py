@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 _LINEAR16_BYTES_PER_SAMPLE = 2
 
 

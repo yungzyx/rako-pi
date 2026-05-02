@@ -101,9 +101,7 @@ def test_format_user_context_omits_pii_and_includes_safe_aggregates() -> None:
 
 
 def test_build_user_message_combines_query_chunks_and_context() -> None:
-    chunks = (
-        Chunk(id="01#0", text="Respira profundo.", metadata={}),
-    )
+    chunks = (Chunk(id="01#0", text="Respira profundo.", metadata={}),)
     ctx = UserContext(
         pending_task_count=2,
         recent_completion_count=1,
@@ -134,9 +132,7 @@ def test_build_user_message_handles_empty_chunks() -> None:
 
 
 def test_build_user_message_does_not_leak_metadata_secrets() -> None:
-    chunks = (
-        Chunk(id="01#0", text="x", metadata={"source_path": "/private/path/file.md"}),
-    )
+    chunks = (Chunk(id="01#0", text="x", metadata={"source_path": "/private/path/file.md"}),)
     ctx = UserContext(
         pending_task_count=0,
         recent_completion_count=0,

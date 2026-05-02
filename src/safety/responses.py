@@ -105,9 +105,7 @@ def pick_response(signal: CrisisSignal) -> CrisisResponse:
     Solo válido para `CrisisLevel.CRISIS`.
     """
     if signal.level is not CrisisLevel.CRISIS:
-        raise ValueError(
-            f"pick_response requires CRISIS level, got {signal.level.name}"
-        )
+        raise ValueError(f"pick_response requires CRISIS level, got {signal.level.name}")
 
     reasons_set = set(signal.reasons)
     for reason, response_id in _REASON_PRIORITY:

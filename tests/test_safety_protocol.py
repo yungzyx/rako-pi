@@ -7,14 +7,14 @@ Usa fakes en memoria que cumplen los Protocols definidos en
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from safety.protocol import CrisisProtocol, ProtocolOutcome
 from safety.types import CrisisLevel, CrisisReason, CrisisSignal
 
-UTC = timezone.utc
+UTC = UTC
 
 
 @dataclass
@@ -61,8 +61,15 @@ def _signal(*reasons: CrisisReason, level: CrisisLevel = CrisisLevel.CRISIS) -> 
     )
 
 
-def _build_protocol() -> tuple[CrisisProtocol, _FakeVoice, _FakeLighting, _FakeNotifier, _FakeJournal]:
-    voice, lighting, notifier, journal = _FakeVoice(), _FakeLighting(), _FakeNotifier(), _FakeJournal()
+def _build_protocol() -> tuple[
+    CrisisProtocol, _FakeVoice, _FakeLighting, _FakeNotifier, _FakeJournal
+]:
+    voice, lighting, notifier, journal = (
+        _FakeVoice(),
+        _FakeLighting(),
+        _FakeNotifier(),
+        _FakeJournal(),
+    )
     protocol = CrisisProtocol(
         voice=voice,
         lighting=lighting,
@@ -90,7 +97,7 @@ def test_executes_full_sequence_for_crisis() -> None:
 def test_does_not_notify_contact_if_response_says_so() -> None:
     # PROLONGED_INACTIVITY_AFTER_DISTRESS no escala automáticamente al
     # contacto de confianza (solo "presencia" + recursos).
-    protocol, voice, lighting, notifier, journal = _build_protocol()
+    protocol, _voice, _lighting, notifier, journal = _build_protocol()
     signal = _signal(CrisisReason.PROLONGED_INACTIVITY_AFTER_DISTRESS)
 
     outcome = protocol.execute(signal)

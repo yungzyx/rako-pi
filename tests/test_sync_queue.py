@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
-from sync.queue import QueuedSyncEvent, SyncQueue
+from sync.queue import SyncQueue
 from sync.types import SyncEvent, SyncEventKind
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _now() -> datetime:

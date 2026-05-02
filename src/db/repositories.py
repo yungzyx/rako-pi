@@ -13,9 +13,6 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Final
 
-from emotion.types import EmotionalVector
-from safety.types import EmotionalSample
-
 from db.types import (
     Achievement,
     EmotionalStateRecord,
@@ -25,6 +22,8 @@ from db.types import (
     TaskSource,
     TaskStatus,
 )
+from emotion.types import EmotionalVector
+from safety.types import EmotionalSample
 
 # Privacidad: la transcripción nunca se persiste completa. Es un
 # "excerpt" — el detector ya tomó su decisión sobre el texto entero,
@@ -65,9 +64,7 @@ class TaskRepository:
         return task
 
     def find_by_id(self, id: str) -> Task | None:
-        row = self._conn.execute(
-            "SELECT * FROM tasks WHERE id = ?", (id,)
-        ).fetchone()
+        row = self._conn.execute("SELECT * FROM tasks WHERE id = ?", (id,)).fetchone()
         return self._row_to_task(row) if row else None
 
     def list_by_status(self, status: TaskStatus) -> list[Task]:
@@ -142,9 +139,7 @@ class TaskRepository:
             status=TaskStatus(row["status"]),
             created_at=datetime.fromisoformat(row["created_at"]),
             completed_at=(
-                datetime.fromisoformat(row["completed_at"])
-                if row["completed_at"]
-                else None
+                datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None
             ),
             source=TaskSource(row["source"]),
         )
@@ -262,9 +257,7 @@ class EmotionalStateRepository:
             )
         return record
 
-    def list_in_window(
-        self, end: datetime, lookback: timedelta
-    ) -> list[EmotionalStateRecord]:
+    def list_in_window(self, end: datetime, lookback: timedelta) -> list[EmotionalStateRecord]:
         if lookback.total_seconds() < 0:
             raise ValueError(f"lookback must be non-negative, got {lookback}")
         start = end - lookback
@@ -329,9 +322,7 @@ class AchievementRepository:
         return achievement
 
     def list_all(self) -> list[Achievement]:
-        rows = self._conn.execute(
-            "SELECT * FROM achievements ORDER BY earned_at DESC"
-        ).fetchall()
+        rows = self._conn.execute("SELECT * FROM achievements ORDER BY earned_at DESC").fetchall()
         return [
             Achievement(
                 id=r["id"],
@@ -358,9 +349,7 @@ class ConfigRepository:
         self._conn = conn
 
     def get(self, key: str) -> str | None:
-        row = self._conn.execute(
-            "SELECT value FROM user_config WHERE key = ?", (key,)
-        ).fetchone()
+        row = self._conn.execute("SELECT value FROM user_config WHERE key = ?", (key,)).fetchone()
         return row["value"] if row else None
 
     def set(self, key: str, value: str) -> None:

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 _VALENCE_MIN = -1.0
 _VALENCE_MAX = 1.0
 _UNIT_MIN = 0.0
@@ -30,14 +29,8 @@ class EmotionalVector:
 
     def __post_init__(self) -> None:
         if not _VALENCE_MIN <= self.valence <= _VALENCE_MAX:
-            raise ValueError(
-                f"valence out of range [-1, 1]: {self.valence!r}"
-            )
+            raise ValueError(f"valence out of range [-1, 1]: {self.valence!r}")
         if not _UNIT_MIN <= self.arousal <= _UNIT_MAX:
-            raise ValueError(
-                f"arousal out of range [0, 1]: {self.arousal!r}"
-            )
+            raise ValueError(f"arousal out of range [0, 1]: {self.arousal!r}")
         if not _UNIT_MIN <= self.dominance <= _UNIT_MAX:
-            raise ValueError(
-                f"dominance out of range [0, 1]: {self.dominance!r}"
-            )
+            raise ValueError(f"dominance out of range [0, 1]: {self.dominance!r}")

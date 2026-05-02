@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -60,7 +61,11 @@ def test_purge_all_clears_data(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "borrado" in captured.out.lower() or "deleted" in captured.out.lower() or "purg" in captured.out.lower()
+    assert (
+        "borrado" in captured.out.lower()
+        or "deleted" in captured.out.lower()
+        or "purg" in captured.out.lower()
+    )
 
 
 def test_help_returns_zero(
@@ -107,7 +112,7 @@ def test_demo_turn_prints_rag_chunks_when_present(
     _common_env(monkeypatch, tmp_path)
 
     # Inyectar un chunk al retriever para que el print de rag_chunks dispare.
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from bootstrap import build_dev_application
     from config import Settings
@@ -120,7 +125,7 @@ def test_demo_turn_prints_rag_chunks_when_present(
     app.orchestrator._retriever = InMemoryRetriever(  # type: ignore[attr-defined]
         [Chunk(id="01#0", text="respira profundo", metadata={})]
     )
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     turn = TurnInput(
         transcript="respira",
         emotion=None,
@@ -148,9 +153,9 @@ def test_demo_turn_prints_rag_chunks_when_present(
     [(8, "mañana"), (15, "tarde"), (23, "noche"), (3, "noche")],
 )
 def test_default_context_time_of_day(hour: int, expected: str) -> None:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime(2026, 5, 1, hour, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 5, 1, hour, 0, tzinfo=UTC)
     ctx = cli_module._default_context(now)
 
     assert ctx.time_of_day == expected

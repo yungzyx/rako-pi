@@ -7,9 +7,7 @@ from db.schema import EXPECTED_TABLES, create_all
 
 
 def _table_names(conn) -> set[str]:
-    rows = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    ).fetchall()
+    rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     return {row["name"] for row in rows}
 
 
@@ -40,8 +38,7 @@ def test_tasks_supports_self_referencing_parent_id() -> None:
     create_all(conn)
 
     conn.execute(
-        "INSERT INTO tasks (id, title, status, created_at, source) "
-        "VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO tasks (id, title, status, created_at, source) VALUES (?, ?, ?, ?, ?)",
         ("p1", "parent", "TODO", "2026-05-01T18:00:00+00:00", "VOICE"),
     )
     conn.execute(

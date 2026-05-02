@@ -12,9 +12,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Union
 
-PrimitiveValue = Union[str, int, float, bool, None]
+PrimitiveValue = str | int | float | bool | None
 
 
 class SyncEventKind(Enum):

@@ -18,33 +18,35 @@ from sync.types import PrimitiveValue
 
 _MAX_STRING_LEN: Final[int] = 500
 
-_DENIED_KEYS: Final[frozenset[str]] = frozenset({
-    "transcript",
-    "transcription_excerpt",
-    "transcription",
-    "audio",
-    "audio_path",
-    "audio_data",
-    "valence",
-    "arousal",
-    "dominance",
-    "emotion",
-    "emotion_vector",
-    "name",
-    "real_name",
-    "full_name",
-    "first_name",
-    "last_name",
-    "email",
-    "phone",
-    "address",
-    "ip_address",
-    "ssn",
-    "rut",
-    "password",
-    "token",
-    "api_key",
-})
+_DENIED_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "transcript",
+        "transcription_excerpt",
+        "transcription",
+        "audio",
+        "audio_path",
+        "audio_data",
+        "valence",
+        "arousal",
+        "dominance",
+        "emotion",
+        "emotion_vector",
+        "name",
+        "real_name",
+        "full_name",
+        "first_name",
+        "last_name",
+        "email",
+        "phone",
+        "address",
+        "ip_address",
+        "ssn",
+        "rut",
+        "password",
+        "token",
+        "api_key",
+    }
+)
 
 
 def sanitize_payload(payload: Mapping[str, object]) -> dict[str, PrimitiveValue]:

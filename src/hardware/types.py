@@ -12,8 +12,8 @@ class LEDState(Enum):
     LISTENING = "LISTENING"
     THINKING = "THINKING"
     SPEAKING = "SPEAKING"
-    PRESENT = "PRESENT"           # estado del protocolo de crisis
-    ALERT_SOFT = "ALERT_SOFT"     # nudge proactivo, pulso lento
+    PRESENT = "PRESENT"  # estado del protocolo de crisis
+    ALERT_SOFT = "ALERT_SOFT"  # nudge proactivo, pulso lento
 
 
 class HardwareEventKind(Enum):

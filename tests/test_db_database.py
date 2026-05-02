@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
-from emotion.types import EmotionalVector
-from safety.types import CrisisLevel, CrisisReason, CrisisSignal
 
 from db.database import Database
 from db.types import (
@@ -18,8 +15,10 @@ from db.types import (
     TaskSource,
     TaskStatus,
 )
+from emotion.types import EmotionalVector
+from safety.types import CrisisLevel, CrisisReason, CrisisSignal
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _now() -> datetime:
@@ -59,9 +58,7 @@ def _seed(db: Database) -> None:
             confidence=0.9,
         )
     )
-    db.achievements.record(
-        Achievement(id="a", type="x", earned_at=_now(), robot_level_after=1)
-    )
+    db.achievements.record(Achievement(id="a", type="x", earned_at=_now(), robot_level_after=1))
     db.config.set("theme", "dark")
     db.crisis_journal.record(
         CrisisSignal(

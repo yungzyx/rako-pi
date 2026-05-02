@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from sync.firebase_client import FakeFirebaseClient, FirebaseClient
 from sync.types import SyncEvent, SyncEventKind
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _event() -> SyncEvent:

@@ -23,9 +23,7 @@ import yaml
 
 from rag.types import Chunk, ParsedNote
 
-_FRONTMATTER_RE: Final = re.compile(
-    r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL
-)
+_FRONTMATTER_RE: Final = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL)
 _WIKILINK_LINE_RE: Final = re.compile(r"^\s*(?:\[\[[^\]\n]+\]\]\s*)+\s*$", re.MULTILINE)
 _HASH_TOKEN_IN_FLOW_RE: Final = re.compile(r"\[([^\]\n]+)\]")
 _H1_RE: Final = re.compile(r"^#\s+.+$", re.MULTILINE)
@@ -108,6 +106,7 @@ def _sanitize_obsidian_yaml(yaml_text: str) -> str:
     PyYAML interpreta `#` como inicio de comentario, lo que rompe
     `tags: [#a, #b]`. Aquí los reescribimos como `["#a", "#b"]`.
     """
+
     def _fix(match: re.Match[str]) -> str:
         inner = match.group(1)
         items = [token.strip() for token in inner.split(",")]

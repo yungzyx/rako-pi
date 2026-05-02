@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from bootstrap import Application, build_dev_application
 from config import Settings
@@ -62,7 +62,7 @@ def cli(argv: list[str] | None = None) -> int:
 
 
 def _run_demo_turn(app: Application, text: str) -> int:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     turn = TurnInput(
         transcript=text,
         emotion=None,
@@ -86,7 +86,7 @@ def _run_demo_turn(app: Application, text: str) -> int:
 
 
 def _run_demo_crisis_panic(app: Application) -> int:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     turn = TurnInput(
         transcript="",
         emotion=None,

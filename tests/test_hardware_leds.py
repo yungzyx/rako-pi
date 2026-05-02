@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from hardware.leds import (
     CrisisLightingAdapter,
     FakeLEDController,

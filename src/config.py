@@ -40,9 +40,7 @@ class Settings(BaseSettings):
     # --- RAG ---
     chroma_db_path: str = "./chroma_db"
     chroma_collection: str = "rako_kb"
-    rag_embedding_model: str = (
-        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-    )
+    rag_embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     rag_top_k: int = 5
     obsidian_vault_path: str = "../Rako-kb"
 

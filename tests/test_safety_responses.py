@@ -6,7 +6,7 @@ el selector prioriza correctamente cuando hay múltiples motivos.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -16,7 +16,7 @@ from safety.responses import (
 )
 from safety.types import CrisisLevel, CrisisReason, CrisisSignal
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _signal(*reasons: CrisisReason, level: CrisisLevel = CrisisLevel.CRISIS) -> CrisisSignal:

@@ -80,12 +80,12 @@ def test_validate_key_format_accepts_hex_keys() -> None:
 @pytest.mark.parametrize(
     "key",
     [
-        "",                       # vacía
-        "abc",                    # muy corta
-        "g" * 64,                 # caracteres no-hex
-        "a" * 63,                 # impar
-        "a" * 30,                 # menor a 16 bytes
-        "abcd-ef" * 8,            # con guiones
+        "",  # vacía
+        "abc",  # muy corta
+        "g" * 64,  # caracteres no-hex
+        "a" * 63,  # impar
+        "a" * 30,  # menor a 16 bytes
+        "abcd-ef" * 8,  # con guiones
     ],
 )
 def test_validate_key_format_rejects_invalid(key: str) -> None:

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from sync.types import SyncEvent, SyncEventKind
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def test_sync_event_kind_only_includes_non_sensitive_events() -> None:

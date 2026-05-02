@@ -40,6 +40,4 @@ class FakeServoController:
 
 def _validate(degrees: float) -> None:
     if not _ANGLE_MIN <= degrees <= _ANGLE_MAX:
-        raise ValueError(
-            f"angle out of range [{_ANGLE_MIN}, {_ANGLE_MAX}]: {degrees}"
-        )
+        raise ValueError(f"angle out of range [{_ANGLE_MIN}, {_ANGLE_MAX}]: {degrees}")

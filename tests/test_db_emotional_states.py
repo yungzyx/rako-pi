@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from db.repositories import EmotionalStateRepository
+from db.types import EmotionalStateRecord
 from emotion.types import EmotionalVector
 from safety.types import EmotionalSample
 
-from db.repositories import EmotionalStateRepository
-from db.types import EmotionalStateRecord
-
-UTC = timezone.utc
+UTC = UTC
 
 
 def _now() -> datetime:

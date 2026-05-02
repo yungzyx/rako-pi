@@ -74,9 +74,7 @@ def _ctx() -> UserContext:
 
 
 def _chunks() -> tuple[Chunk, ...]:
-    return (
-        Chunk(id="01#0", text="Respira profundo.", metadata={"categoria": "respiracion"}),
-    )
+    return (Chunk(id="01#0", text="Respira profundo.", metadata={"categoria": "respiracion"}),)
 
 
 def test_llm_client_satisfies_protocol() -> None:
@@ -94,9 +92,7 @@ def test_llm_client_satisfies_protocol() -> None:
 
 
 def test_generate_returns_text_and_token_counts() -> None:
-    response = _FakeMessage(
-        content=[_FakeBlock(type="text", text="Estoy aquí contigo.")]
-    )
+    response = _FakeMessage(content=[_FakeBlock(type="text", text="Estoy aquí contigo.")])
     fake = _FakeAnthropic(response)
     client = AnthropicLLMClient(
         client=fake,

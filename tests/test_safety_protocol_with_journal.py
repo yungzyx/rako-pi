@@ -7,7 +7,7 @@ disparo de crisis termina con un row persistido.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from db.connection import open_connection
 from db.journal import CrisisJournal
@@ -15,7 +15,7 @@ from db.schema import create_all
 from safety.protocol import CrisisProtocol
 from safety.types import CrisisLevel, CrisisReason, CrisisSignal
 
-UTC = timezone.utc
+UTC = UTC
 
 
 @dataclass

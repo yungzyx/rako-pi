@@ -12,14 +12,13 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Final
 
+from db.types import CrisisJournalEntry
 from safety.types import CrisisLevel, CrisisSignal
 
-from db.types import CrisisJournalEntry
-
-_UTC = timezone.utc
+_UTC = UTC
 _DEFAULT_LIMIT: Final[int] = 50
 
 
@@ -38,9 +37,7 @@ class CrisisJournal:
     ) -> None:
         """Persiste el signal. Solo acepta nivel CRISIS."""
         if signal.level is not CrisisLevel.CRISIS:
-            raise ValueError(
-                f"CrisisJournal only records CRISIS signals, got {signal.level.name}"
-            )
+            raise ValueError(f"CrisisJournal only records CRISIS signals, got {signal.level.name}")
 
         reasons_json = json.dumps([r.name for r in signal.reasons])
         with self._conn:

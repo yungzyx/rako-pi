@@ -37,8 +37,8 @@ from safety.types import (
 _SUSTAINED_LOOKBACK = timedelta(minutes=10)
 _SUSTAINED_MIN_SAMPLES = 4
 _SUSTAINED_MIN_SPAN = timedelta(minutes=6)
-_EXTREME_VALENCE_MAX = -0.7   # valence < este valor cuenta como extremo
-_EXTREME_AROUSAL_MIN = 0.7    # arousal > este valor cuenta como extremo
+_EXTREME_VALENCE_MAX = -0.7  # valence < este valor cuenta como extremo
+_EXTREME_AROUSAL_MIN = 0.7  # arousal > este valor cuenta como extremo
 
 # Elevated (ni neutro ni crisis): promedio reciente bajo este umbral.
 _ELEVATED_LOOKBACK = timedelta(minutes=60)
@@ -178,17 +178,15 @@ def _samples_in_window(
     return [s for s in history if cutoff <= s.at <= now]
 
 
-def _is_sustained_extreme(
-    history: Iterable[EmotionalSample], now: datetime
-) -> bool:
+def _is_sustained_extreme(history: Iterable[EmotionalSample], now: datetime) -> bool:
     samples = _samples_in_window(history, now, _SUSTAINED_LOOKBACK)
     if len(samples) < _SUSTAINED_MIN_SAMPLES:
         return False
 
     extreme = [
-        s for s in samples
-        if s.vector.valence <= _EXTREME_VALENCE_MAX
-        and s.vector.arousal >= _EXTREME_AROUSAL_MIN
+        s
+        for s in samples
+        if s.vector.valence <= _EXTREME_VALENCE_MAX and s.vector.arousal >= _EXTREME_AROUSAL_MIN
     ]
     if len(extreme) < _SUSTAINED_MIN_SAMPLES:
         return False
@@ -197,9 +195,7 @@ def _is_sustained_extreme(
     return span >= _SUSTAINED_MIN_SPAN
 
 
-def _is_emotionally_elevated(
-    history: Iterable[EmotionalSample], now: datetime
-) -> bool:
+def _is_emotionally_elevated(history: Iterable[EmotionalSample], now: datetime) -> bool:
     samples = _samples_in_window(history, now, _ELEVATED_LOOKBACK)
     if len(samples) < _ELEVATED_MIN_SAMPLES:
         return False

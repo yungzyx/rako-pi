@@ -47,9 +47,7 @@ def validate_key_format(key: str) -> None:
     if not key:
         raise KeyFormatError("encryption key is empty")
     if len(key) < _MIN_HEX_KEY_LEN:
-        raise KeyFormatError(
-            f"encryption key too short: need >= {_MIN_HEX_KEY_LEN} hex chars"
-        )
+        raise KeyFormatError(f"encryption key too short: need >= {_MIN_HEX_KEY_LEN} hex chars")
     if len(key) % 2 != 0:
         raise KeyFormatError("encryption key must have even length (hex bytes)")
     if not _HEX_KEY_RE.match(key):
@@ -65,9 +63,7 @@ def open_encrypted(path: str, key: str) -> sqlite3.Connection:
     validate_key_format(key)
 
     if not _SQLCIPHER_AVAILABLE:  # pragma: no cover - solo en prod sin libs
-        raise RuntimeError(
-            "SQLCipher not available. Install pysqlcipher3 + libsqlcipher-dev."
-        )
+        raise RuntimeError("SQLCipher not available. Install pysqlcipher3 + libsqlcipher-dev.")
 
     conn = _sqlcipher.connect(path)  # pragma: no cover
     # Literal hex `x'<hex>'`: SQLCipher trata estos 32 bytes como la

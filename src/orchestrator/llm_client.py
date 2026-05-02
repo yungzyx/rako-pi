@@ -80,9 +80,7 @@ class AnthropicLLMClient:
 
 def _parse_response(response: Any) -> LLMResponse:
     text_parts = [
-        block.text
-        for block in response.content
-        if getattr(block, "type", None) == "text"
+        block.text for block in response.content if getattr(block, "type", None) == "text"
     ]
     text = "".join(text_parts).strip()
     if not text:

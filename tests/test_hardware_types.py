@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -26,7 +26,7 @@ def test_hardware_event_kind_covers_required_inputs() -> None:
 def test_hardware_event_is_immutable() -> None:
     event = HardwareEvent(
         kind=HardwareEventKind.BUTTON_PANIC,
-        at=datetime(2026, 5, 1, 18, 0, tzinfo=timezone.utc),
+        at=datetime(2026, 5, 1, 18, 0, tzinfo=UTC),
     )
 
     with pytest.raises(Exception):

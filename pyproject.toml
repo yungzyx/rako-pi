@@ -37,7 +37,11 @@ select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["B011"]
+# B011: assert False is intentional in tests
+# B017: pytest.raises(Exception) is the correct way to verify
+#       FrozenInstanceError on frozen dataclasses across Python versions
+# F811: re-imports inside test functions for scoping isolation
+"tests/*" = ["B011", "B017", "F811"]
 
 # ---------------------------------------------------------------------------
 # mypy

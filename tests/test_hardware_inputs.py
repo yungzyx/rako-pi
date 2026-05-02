@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Callable
+from datetime import UTC, datetime
 
 from hardware.buttons import FakeButtons
 from hardware.event_bus import InMemoryHardwareEventBus
 from hardware.sensors import FakePIR, FakeTouch
 from hardware.types import HardwareEvent, HardwareEventKind
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _now() -> datetime:

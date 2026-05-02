@@ -14,11 +14,13 @@ colaboradores por construcción y se mantiene determinístico para tests.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
 from emotion.types import EmotionalVector
+from orchestrator.llm_client import LLMClient
+from orchestrator.types import UserContext
 from rag.client import Retriever
 from safety.detector import detect_crisis
 from safety.protocol import CrisisProtocol
@@ -30,9 +32,6 @@ from safety.types import (
     EmotionalSample,
     PanicSource,
 )
-
-from orchestrator.llm_client import LLMClient
-from orchestrator.types import UserContext
 
 _RAG_TOP_K = 5
 _RAG_MAX_QUERY_LEN = 500
@@ -112,9 +111,7 @@ class Orchestrator:
             },
         )
 
-    def _handle_llm_turn(
-        self, input: TurnInput, signal: CrisisSignal
-    ) -> TurnResult:
+    def _handle_llm_turn(self, input: TurnInput, signal: CrisisSignal) -> TurnResult:
         query = input.transcript[:_RAG_MAX_QUERY_LEN]
         chunks = self._retriever.query(query, top_k=_RAG_TOP_K)
         llm_response = self._llm.generate(

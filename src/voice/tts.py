@@ -42,9 +42,7 @@ class GoogleCloudTTS:
         if not cleaned:
             raise ValueError("cannot synthesize empty text")
         if len(cleaned) > self._max_chars:
-            raise ValueError(
-                f"text too long: {len(cleaned)} chars (max {self._max_chars})"
-            )
+            raise ValueError(f"text too long: {len(cleaned)} chars (max {self._max_chars})")
 
         response = self._client.synthesize_speech(
             input={"text": cleaned},
