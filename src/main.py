@@ -113,10 +113,17 @@ def _run_demo_crisis_panic(app: Application) -> int:
 
 
 def _run_reindex_rag(app: Application) -> int:
+    from rag.indexer import index_vault
+
+    settings = app.settings
+    result = index_vault(
+        vault_path=settings.obsidian_vault_path,
+        db_path=settings.chroma_db_path,
+        collection_name=settings.chroma_collection,
+    )
     print(
-        "TODO: reindex con sentence-transformers + ChromaDB cuando se "
-        "instalen las deps en la Pi. Por ahora, "
-        "`python scripts/reindex_rag.py` queda como stub."
+        f"OK: indexados {result.indexed_count} chunks en colección "
+        f"'{result.collection_name}' desde {settings.obsidian_vault_path}."
     )
     return 0
 

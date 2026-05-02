@@ -31,6 +31,7 @@ from orchestrator.llm_client import (
 )
 from orchestrator.orchestrator import Orchestrator
 from orchestrator.prompts import extract_system_prompt
+from rag.chroma_retriever import ChromaRetriever
 from rag.client import InMemoryRetriever, Retriever
 from safety.protocol import CrisisProtocol
 from safety.types import CrisisSignal
@@ -152,8 +153,8 @@ def build_dev_application(settings: Settings) -> Application:
         journal=db.crisis_journal,
     )
 
-    # RAG (in-memory por ahora; ChromaDB real cuando esté el indexer)
-    retriever: Retriever = InMemoryRetriever([])
+    # RAG: si hay índice ChromaDB persistido, usarlo; sino fallback in-memory.
+    retriever = _build_retriever(settings)
 
     # LLM
     llm: LLMClient = _build_llm_client(settings)
@@ -183,6 +184,16 @@ def build_dev_application(settings: Settings) -> Application:
         playback=playback,
         wake_word=wake_word,
         retriever=retriever,
+    )
+
+
+def _build_retriever(settings: Settings) -> Retriever:
+    """Usa ChromaDB si la colección existe, sino InMemoryRetriever vacío."""
+    if not Path(settings.chroma_db_path).exists():
+        return InMemoryRetriever([])
+    return ChromaRetriever(
+        db_path=settings.chroma_db_path,
+        collection_name=settings.chroma_collection,
     )
 
 

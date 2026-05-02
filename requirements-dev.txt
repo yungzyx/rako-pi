@@ -17,3 +17,6 @@ pydantic-settings>=2.5,<3.0
 
 # Imported by rag/chunker for Obsidian frontmatter parsing.
 PyYAML>=6.0,<7.0
+
+# RAG vector store (light, ~150MB; bundled ONNX embedding model).
+chromadb>=1.5,<2.0

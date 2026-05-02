@@ -30,14 +30,14 @@ def _seed(db_path: str) -> None:
             metadata={"source": "12_patrones", "categoria": "patrones"},
         ),
     )
-    index_chunks(chunks=chunks, db_path=db_path, collection_name="kb")
+    index_chunks(chunks=chunks, db_path=db_path, collection_name="rako_kb")
 
 
 def test_satisfies_retriever_protocol(tmp_path: Path) -> None:
     db_path = str(tmp_path / "chroma")
     _seed(db_path)
 
-    retriever: Retriever = ChromaRetriever(db_path=db_path, collection_name="kb")
+    retriever: Retriever = ChromaRetriever(db_path=db_path, collection_name="rako_kb")
 
     assert hasattr(retriever, "query")
 
@@ -45,7 +45,7 @@ def test_satisfies_retriever_protocol(tmp_path: Path) -> None:
 def test_query_returns_chunks_ordered_by_similarity(tmp_path: Path) -> None:
     db_path = str(tmp_path / "chroma")
     _seed(db_path)
-    retriever = ChromaRetriever(db_path=db_path, collection_name="kb")
+    retriever = ChromaRetriever(db_path=db_path, collection_name="rako_kb")
 
     results = retriever.query("respiración para ansiedad", top_k=3)
 
@@ -57,7 +57,7 @@ def test_query_returns_chunks_ordered_by_similarity(tmp_path: Path) -> None:
 def test_query_respects_top_k(tmp_path: Path) -> None:
     db_path = str(tmp_path / "chroma")
     _seed(db_path)
-    retriever = ChromaRetriever(db_path=db_path, collection_name="kb")
+    retriever = ChromaRetriever(db_path=db_path, collection_name="rako_kb")
 
     results = retriever.query("técnica", top_k=2)
 
@@ -67,7 +67,7 @@ def test_query_respects_top_k(tmp_path: Path) -> None:
 def test_query_filters_by_metadata(tmp_path: Path) -> None:
     db_path = str(tmp_path / "chroma")
     _seed(db_path)
-    retriever = ChromaRetriever(db_path=db_path, collection_name="kb")
+    retriever = ChromaRetriever(db_path=db_path, collection_name="rako_kb")
 
     results = retriever.query(
         "técnica",
@@ -81,7 +81,7 @@ def test_query_filters_by_metadata(tmp_path: Path) -> None:
 def test_query_rejects_empty_text(tmp_path: Path) -> None:
     db_path = str(tmp_path / "chroma")
     _seed(db_path)
-    retriever = ChromaRetriever(db_path=db_path, collection_name="kb")
+    retriever = ChromaRetriever(db_path=db_path, collection_name="rako_kb")
 
     with pytest.raises(ValueError):
         retriever.query("   ")
@@ -90,18 +90,30 @@ def test_query_rejects_empty_text(tmp_path: Path) -> None:
 def test_query_rejects_non_positive_top_k(tmp_path: Path) -> None:
     db_path = str(tmp_path / "chroma")
     _seed(db_path)
-    retriever = ChromaRetriever(db_path=db_path, collection_name="kb")
+    retriever = ChromaRetriever(db_path=db_path, collection_name="rako_kb")
 
     for bad in (0, -1):
         with pytest.raises(ValueError):
             retriever.query("x", top_k=bad)
 
 
+def test_query_with_filter_matching_nothing_returns_empty(tmp_path: Path) -> None:
+    db_path = str(tmp_path / "chroma")
+    _seed(db_path)
+    retriever = ChromaRetriever(db_path=db_path, collection_name="rako_kb")
+
+    results = retriever.query(
+        "técnica",
+        top_k=5,
+        where={"categoria": "no-existe-jamás"},
+    )
+
+    assert results == ()
+
+
 def test_query_handles_collection_missing(tmp_path: Path) -> None:
     # Si la colección no existe (no se indexó), query devuelve vacío.
-    retriever = ChromaRetriever(
-        db_path=str(tmp_path / "chroma"), collection_name="never-indexed"
-    )
+    retriever = ChromaRetriever(db_path=str(tmp_path / "chroma"), collection_name="never-indexed")
 
     results = retriever.query("cualquier cosa")
 

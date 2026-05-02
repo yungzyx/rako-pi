@@ -90,18 +90,52 @@ def test_unknown_subcommand_exits_nonzero(
     assert exc.value.code != 0
 
 
-def test_reindex_rag_prints_stub_message(
+def test_reindex_rag_indexes_real_vault(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _common_env(monkeypatch, tmp_path)
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "01.md").write_text("---\ncategoria: test\n---\n\n# t\n\n## A\n\ncuerpo de prueba.\n")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(vault))
+    monkeypatch.setenv("CHROMA_DB_PATH", str(tmp_path / "chroma"))
 
     exit_code = cli_module.cli(["reindex-rag"])
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "TODO" in captured.out or "stub" in captured.out.lower()
+    assert "indexados" in captured.out.lower()
+
+
+def test_bootstrap_uses_chroma_retriever_when_index_present(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from rag.chroma_retriever import ChromaRetriever
+    from rag.indexer import index_chunks
+    from rag.types import Chunk
+
+    db_path = str(tmp_path / "chroma")
+    index_chunks(
+        chunks=(Chunk(id="a#0", text="x", metadata={"source": "a"}),),
+        db_path=db_path,
+        collection_name="rako_kb",
+    )
+
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("CHROMA_DB_PATH", db_path)
+
+    from bootstrap import build_dev_application
+    from config import Settings
+
+    app = build_dev_application(Settings())
+    try:
+        assert isinstance(app.retriever, ChromaRetriever)
+    finally:
+        app.close()
 
 
 def test_demo_turn_prints_rag_chunks_when_present(
