@@ -114,6 +114,13 @@ app móvil ni el contenido del RAG.
 6. **Encriptación:** SQLCipher en disco; HTTPS en todas las llamadas; reglas
    estrictas de Firebase.
 
+   **Estado actual:** `db/connection.py` usa `sqlite3` stdlib en dev (los
+   wheels de SQLCipher para macOS/3.12 no están disponibles). En la Pi se
+   instala `pysqlcipher3` con `libsqlcipher-dev` y `db/encryption.py`
+   intercepta la apertura para aplicar `PRAGMA key`. Los repositorios son
+   agnósticos al backend. **Producción NO debe correr sin SQLCipher activo;
+   el arranque hace self-test y aborta si no está cifrado.**
+
 ### 4.2 Manejo de crisis
 1. **El LLM se BYPASSEA en crisis.** Cero generación. Respuestas pre-curadas
    por profesional, cargadas estáticamente.
