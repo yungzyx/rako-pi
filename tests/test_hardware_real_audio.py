@@ -23,7 +23,7 @@ def test_capture_calls_recorder_with_correct_frame_count() -> None:
     assert isinstance(audio, AudioBuffer)
     assert audio.sample_rate == 16000
     assert audio.encoding == "LINEAR16"
-    assert len(audio.data) == 64000  # 32000 frames × 2 bytes
+    assert len(audio.data) == 64000  # 32000 frames * 2 bytes
 
 
 def test_capture_rejects_non_positive_max_seconds() -> None:

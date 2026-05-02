@@ -1,0 +1,44 @@
+[Unit]
+Description=Rako — Asistente físico de acompañamiento emocional
+Documentation=https://github.com/yungzyx/rako-pi
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rako
+Group=rako
+WorkingDirectory=/home/rako/rako-pi
+Environment="PYTHONPATH=/home/rako/rako-pi/src"
+EnvironmentFile=/home/rako/rako-pi/.env
+
+# Comando principal — el CLI con un futuro `run` continuo.
+# Por ahora, demo-turn no es continuo. Cuando se agregue `run` (loop
+# voz + sensors), reemplazar la línea de abajo por `run`.
+ExecStart=/home/rako/rako-pi/.venv/bin/python -m main demo-crisis-panic
+
+# Reinicio sólido: si falla, esperar 10s y volver a arrancar.
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=15s
+
+# Hardening — limitar superficie de ataque.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/rako/rako-pi/data /home/rako/rako-pi/chroma_db /home/rako/rako-pi/logs
+PrivateTmp=true
+PrivateDevices=false
+DeviceAllow=/dev/gpiomem rw
+DeviceAllow=/dev/i2c-1 rw
+DeviceAllow=/dev/spidev0.0 rw
+DeviceAllow=/dev/snd rw
+DeviceAllow=char-ttyAMA0 rw
+
+# Logs vía journald.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rako
+
+[Install]
+WantedBy=multi-user.target
