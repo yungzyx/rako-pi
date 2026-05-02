@@ -80,6 +80,15 @@ def test_response_activates_trusted_contact_for_severe_reasons() -> None:
     assert response.activates_trusted_contact is True
 
 
+def test_crisis_signal_with_only_elevated_reason_falls_back_safely() -> None:
+    # Defensivo: un signal con CRISIS pero sin razones reconocidas en
+    # la prioridad debe devolver una respuesta segura en vez de crashear.
+    response = pick_response(_signal(CrisisReason.EMOTIONAL_DISTRESS))
+
+    assert isinstance(response, CrisisResponse)
+    assert response.id == "sustained_distress"
+
+
 def test_response_text_contains_no_diagnosis_or_motivation_template() -> None:
     # No promesas vacías, no diagnósticos.
     forbidden = ("todo va a estar bien", "no es para tanto", "diagnóstico")

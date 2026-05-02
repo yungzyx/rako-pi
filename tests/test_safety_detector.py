@@ -249,6 +249,19 @@ def test_recent_distress_with_recent_interaction_does_not_trigger() -> None:
     assert CrisisReason.PROLONGED_INACTIVITY_AFTER_DISTRESS not in signal.reasons
 
 
+def test_distress_without_last_interaction_does_not_trigger() -> None:
+    # Si no tenemos timestamp de última interacción, no podemos calcular
+    # la inactividad — ergo no disparamos el motivo.
+    signal = detect_crisis(
+        _input(
+            last_high_distress_at=_now() - timedelta(hours=3),
+            last_interaction_at=None,
+        )
+    )
+
+    assert CrisisReason.PROLONGED_INACTIVITY_AFTER_DISTRESS not in signal.reasons
+
+
 def test_distress_too_long_ago_does_not_trigger_inactivity_crisis() -> None:
     # Si la angustia fue hace 3 días, ya no aplica este criterio.
     signal = detect_crisis(
