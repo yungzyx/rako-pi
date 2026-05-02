@@ -1,0 +1,70 @@
+"""Configuración tipada de Rako (lee `.env`).
+
+Usa pydantic-settings. Todos los campos opcionales para que el bootstrap
+de dev funcione sin credenciales reales.
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # --- Núcleo ---
+    rako_env: Literal["dev", "staging", "prod"] = "dev"
+    rako_log_level: str = "INFO"
+    rako_device_id: str | None = None
+    rako_mode: Literal["normal", "offline", "private"] = "normal"
+
+    # --- LLM ---
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-haiku-4-5"
+    anthropic_max_tokens: int = 512
+    anthropic_timeout_s: float = 15.0
+
+    # --- Voz ---
+    google_application_credentials: str | None = None
+    google_stt_language: str = "es-CL"
+    google_tts_voice: str = "es-CL-Neural2-A"
+    google_tts_speaking_rate: float = 0.95
+
+    # --- RAG ---
+    chroma_db_path: str = "./chroma_db"
+    chroma_collection: str = "rako_kb"
+    rag_embedding_model: str = (
+        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    )
+    rag_top_k: int = 5
+    obsidian_vault_path: str = "../Rako-kb"
+
+    # --- SER ---
+    ser_model: str = "audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim"
+    ser_device: str = "cpu"
+
+    # --- Estado local ---
+    sqlite_path: str = "./data/rako.db"
+    sqlite_encryption_key: str | None = None
+
+    # --- Wake word ---
+    wake_words: str = "hey rako,hola rako,oye rako"
+
+    # --- Firebase ---
+    firebase_credentials_path: str | None = None
+    firebase_project_id: str | None = None
+
+    # --- DND ---
+    do_not_disturb_start: str = "22:00"
+    do_not_disturb_end: str = "08:00"
+
+    @property
+    def wake_words_tuple(self) -> tuple[str, ...]:
+        return tuple(w.strip() for w in self.wake_words.split(",") if w.strip())

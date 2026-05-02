@@ -83,3 +83,74 @@ def test_unknown_subcommand_exits_nonzero(
         cli_module.cli(["nonexistent-command"])
 
     assert exc.value.code != 0
+
+
+def test_reindex_rag_prints_stub_message(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _common_env(monkeypatch, tmp_path)
+
+    exit_code = cli_module.cli(["reindex-rag"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "TODO" in captured.out or "stub" in captured.out.lower()
+
+
+def test_demo_turn_prints_rag_chunks_when_present(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _common_env(monkeypatch, tmp_path)
+
+    # Inyectar un chunk al retriever para que el print de rag_chunks dispare.
+    from datetime import datetime, timezone
+
+    from bootstrap import build_dev_application
+    from config import Settings
+    from orchestrator.orchestrator import TurnInput
+    from orchestrator.types import UserContext
+    from rag.client import InMemoryRetriever
+    from rag.types import Chunk
+
+    app = build_dev_application(Settings())
+    app.orchestrator._retriever = InMemoryRetriever(  # type: ignore[attr-defined]
+        [Chunk(id="01#0", text="respira profundo", metadata={})]
+    )
+    now = datetime.now(timezone.utc)
+    turn = TurnInput(
+        transcript="respira",
+        emotion=None,
+        panic_button=None,
+        emotion_history=(),
+        last_high_distress_at=None,
+        last_interaction_at=None,
+        user_context=UserContext(
+            pending_task_count=0,
+            recent_completion_count=0,
+            robot_level=1,
+            time_of_day="tarde",
+            recent_mood_summary=None,
+        ),
+        now=now,
+    )
+    result = app.orchestrator.handle_turn(turn)
+    app.close()
+
+    assert "01#0" in result.rag_chunk_ids
+
+
+@pytest.mark.parametrize(
+    "hour,expected",
+    [(8, "mañana"), (15, "tarde"), (23, "noche"), (3, "noche")],
+)
+def test_default_context_time_of_day(hour: int, expected: str) -> None:
+    from datetime import datetime, timezone
+
+    now = datetime(2026, 5, 1, hour, 0, tzinfo=timezone.utc)
+    ctx = cli_module._default_context(now)
+
+    assert ctx.time_of_day == expected

@@ -86,3 +86,77 @@ def test_application_close_is_idempotent(tmp_path: Path) -> None:
 
     app.close()
     app.close()  # no debe levantar
+
+
+def test_build_dev_with_api_key_uses_anthropic_client(tmp_path: Path) -> None:
+    from orchestrator.llm_client import AnthropicLLMClient
+
+    settings = Settings(
+        _env_file=None,
+        rako_env="dev",
+        sqlite_path=str(tmp_path / "rako.db"),
+        anthropic_api_key="test-key-not-used",
+        obsidian_vault_path=str(tmp_path / "missing"),
+    )
+
+    app = build_dev_application(settings)
+    try:
+        assert isinstance(app.orchestrator._llm, AnthropicLLMClient)  # type: ignore[attr-defined]
+    finally:
+        app.close()
+
+
+def test_build_dev_loads_system_prompt_from_vault(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "system_prompt_rako.md").write_text(
+        "# header\n\n## Prompt\n\n```\nEres Rako: prompt cargado desde vault.\n```\n"
+    )
+    settings = Settings(
+        _env_file=None,
+        rako_env="dev",
+        sqlite_path=str(tmp_path / "rako.db"),
+        anthropic_api_key="test-key",
+        obsidian_vault_path=str(vault),
+    )
+
+    app = build_dev_application(settings)
+    try:
+        # El system prompt cargado debe aparecer dentro del cliente real.
+        assert "Eres Rako: prompt cargado" in app.orchestrator._llm._system_prompt  # type: ignore[attr-defined]
+    finally:
+        app.close()
+
+
+def test_build_dev_falls_back_when_vault_yaml_invalid(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "system_prompt_rako.md").write_text("# header\n\nno fenced block here.\n")
+    settings = Settings(
+        _env_file=None,
+        rako_env="dev",
+        sqlite_path=str(tmp_path / "rako.db"),
+        anthropic_api_key="test-key",
+        obsidian_vault_path=str(vault),
+    )
+
+    app = build_dev_application(settings)
+    try:
+        prompt = app.orchestrator._llm._system_prompt  # type: ignore[attr-defined]
+        assert "Eres Rako" in prompt  # el fallback contiene la identidad mínima
+    finally:
+        app.close()
+
+
+def test_build_dev_handles_in_memory_sqlite_path() -> None:
+    settings = Settings(
+        _env_file=None,
+        rako_env="dev",
+        sqlite_path=":memory:",
+    )
+
+    app = build_dev_application(settings)
+    try:
+        assert app.db is not None
+    finally:
+        app.close()
