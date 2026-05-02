@@ -99,3 +99,15 @@ def test_database_close_is_idempotent(tmp_path: Path) -> None:
 
     db.close()
     db.close()  # debe poder cerrarse dos veces sin error
+
+
+def test_database_works_as_context_manager(tmp_path: Path) -> None:
+    path = str(tmp_path / "test.db")
+
+    with Database.open(path) as db:
+        _seed(db)
+
+    # Tras salir del contexto, la conexión queda cerrada y reabrir la
+    # base preserva los datos.
+    with Database.open(path) as db:
+        assert db.tasks.find_by_id("t") is not None
