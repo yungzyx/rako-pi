@@ -191,20 +191,14 @@ def test_ideation_keywords_bypass_llm() -> None:
 
 
 def test_sustained_emotional_extreme_bypasses_llm() -> None:
+    from datetime import timedelta
+
     history = tuple(
         EmotionalSample(
             vector=EmotionalVector(valence=-0.85, arousal=0.85, dominance=0.5),
-            at=_now(),
+            at=_now() - timedelta(minutes=m),
         )
-        for _ in range(5)
-    )
-    # Spread samples in time
-    history = tuple(
-        EmotionalSample(
-            vector=h.vector,
-            at=_now().replace(minute=18 - i * 2),
-        )
-        for i, h in enumerate(history)
+        for m in (8, 6, 4, 2, 0)
     )
 
     orch, _, llm, journal = _build_orchestrator()
