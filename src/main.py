@@ -15,13 +15,23 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 
-from bootstrap import Application, build_dev_application
+from bootstrap import Application, build_dev_application, build_pi_application
 from config import Settings
 from orchestrator.orchestrator import TurnInput, TurnKind
 from orchestrator.types import default_user_context
 from safety.types import PanicSource
+
+
+def _select_builder(settings: Settings) -> Callable[[Settings], Application]:
+    """Elige el factory según el entorno: prod → Pi (hardware real),
+    dev/staging → dev (fakes). El factory de Pi cae a fakes silenciosamente
+    si las libs no están disponibles, así que llamarlo en mac/CI no rompe."""
+    if settings.rako_env == "prod":
+        return build_pi_application
+    return build_dev_application
 
 
 def cli(argv: list[str] | None = None) -> int:
@@ -48,7 +58,8 @@ def cli(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     settings = Settings()
-    app = build_dev_application(settings)
+    builder = _select_builder(settings)
+    app = builder(settings)
     try:
         if args.cmd == "demo-turn":
             return _run_demo_turn(app, args.text)

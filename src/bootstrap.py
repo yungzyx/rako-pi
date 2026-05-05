@@ -43,8 +43,8 @@ from sync.coordinator import SyncCoordinator
 from sync.firebase_client import FakeFirebaseClient, FirebaseClient
 from sync.queue import SyncQueue
 from voice.audio_io import AudioCaptureSource, AudioPlaybackSink
-from voice.stt import STTClient
-from voice.tts import TTSClient
+from voice.stt import GoogleCloudSTT, STTClient
+from voice.tts import GoogleCloudTTS, TTSClient
 from voice.types import AudioBuffer, SynthesisResult, TranscriptResult
 from voice.wake_word import SubstringWakeWordDetector, WakeWordDetector
 
@@ -273,6 +273,9 @@ def build_pi_application(settings: Settings) -> Application:
     firebase: FirebaseClient = FakeFirebaseClient()
     sync_coord = SyncCoordinator(queue=queue, client=firebase)
 
+    stt: STTClient = _try_real_stt(settings) or _CannedSTT()
+    tts: TTSClient = _try_real_tts(settings) or _CannedTTS()
+
     return Application(
         settings=settings,
         db=db,
@@ -286,8 +289,8 @@ def build_pi_application(settings: Settings) -> Application:
         playback=playback,
         wake_word=wake_word,
         retriever=retriever,
-        stt=_CannedSTT(),
-        tts=_CannedTTS(),
+        stt=stt,
+        tts=tts,
     )
 
 
@@ -324,6 +327,40 @@ def _try_real_playback() -> AudioPlaybackSink | None:
 
         return create_pi_playback()
     except Exception:
+        return None
+
+
+def _try_real_stt(settings: Settings) -> STTClient | None:
+    """Construye GoogleCloudSTT si hay credenciales y la lib está
+    disponible. Cae a None para que el caller use el fake — sin crashear
+    si google-cloud-speech no está instalado (CI/dev)."""
+    if not settings.google_application_credentials:
+        return None
+    try:  # pragma: no cover - only with google-cloud-speech installed
+        from google.cloud.speech_v1 import SpeechClient
+
+        client = SpeechClient()
+        return GoogleCloudSTT(client=client, language=settings.google_stt_language)
+    except Exception:  # pragma: no cover - lib missing or auth failure
+        return None
+
+
+def _try_real_tts(settings: Settings) -> TTSClient | None:
+    """Construye GoogleCloudTTS si hay credenciales y la lib está
+    disponible. Mismo contrato que _try_real_stt."""
+    if not settings.google_application_credentials:
+        return None
+    try:  # pragma: no cover - only with google-cloud-texttospeech installed
+        from google.cloud.texttospeech_v1 import TextToSpeechClient
+
+        client = TextToSpeechClient()
+        return GoogleCloudTTS(
+            client=client,
+            voice_name=settings.google_tts_voice,
+            language_code=settings.google_stt_language,
+            speaking_rate=settings.google_tts_speaking_rate,
+        )
+    except Exception:  # pragma: no cover - lib missing or auth failure
         return None
 
 

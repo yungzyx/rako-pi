@@ -12,10 +12,10 @@ WorkingDirectory=/home/rako/rako-pi
 Environment="PYTHONPATH=/home/rako/rako-pi/src"
 EnvironmentFile=/home/rako/rako-pi/.env
 
-# Comando principal — el CLI con un futuro `run` continuo.
-# Por ahora, demo-turn no es continuo. Cuando se agregue `run` (loop
-# voz + sensors), reemplazar la línea de abajo por `run`.
-ExecStart=/home/rako/rako-pi/.venv/bin/python -m main demo-crisis-panic
+# Comando principal — loop continuo reactivo a hardware events.
+# `run` se suscribe al HardwareEventBus y procesa TOUCH / BUTTON_PANIC
+# como turns; drena la cola de sync periódicamente.
+ExecStart=/home/rako/rako-pi/.venv/bin/python -m main run
 
 # Reinicio sólido: si falla, esperar 10s y volver a arrancar.
 Restart=on-failure

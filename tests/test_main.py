@@ -209,3 +209,59 @@ def test_run_subcommand_executes_finite_iterations(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "loop principal" in captured.out.lower()
+
+
+def test_select_builder_returns_pi_when_prod() -> None:
+    from bootstrap import build_pi_application
+    from config import Settings
+    from main import _select_builder
+
+    settings = Settings(_env_file=None, rako_env="prod")
+    assert _select_builder(settings) is build_pi_application
+
+
+def test_select_builder_returns_dev_when_dev() -> None:
+    from bootstrap import build_dev_application
+    from config import Settings
+    from main import _select_builder
+
+    settings = Settings(_env_file=None, rako_env="dev")
+    assert _select_builder(settings) is build_dev_application
+
+
+def test_select_builder_returns_dev_when_staging() -> None:
+    from bootstrap import build_dev_application
+    from config import Settings
+    from main import _select_builder
+
+    settings = Settings(_env_file=None, rako_env="staging")
+    assert _select_builder(settings) is build_dev_application
+
+
+def test_cli_uses_pi_builder_when_rako_env_prod(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """En prod, el CLI debe rutear a build_pi_application aunque las libs
+    Pi no estén instaladas (caída elegante a fakes)."""
+    _common_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("RAKO_ENV", "prod")
+
+    called: list[str] = []
+
+    import bootstrap as bootstrap_module
+
+    real_pi = bootstrap_module.build_pi_application
+
+    def spy_pi(settings):
+        called.append("pi")
+        return real_pi(settings)
+
+    monkeypatch.setattr(cli_module, "build_pi_application", spy_pi, raising=False)
+    monkeypatch.setattr(bootstrap_module, "build_pi_application", spy_pi)
+
+    exit_code = cli_module.cli(["demo-turn", "hola"])
+
+    assert exit_code == 0
+    assert called == ["pi"]

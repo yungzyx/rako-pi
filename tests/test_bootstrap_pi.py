@@ -66,3 +66,37 @@ def test_build_pi_close_is_idempotent(tmp_path: Path) -> None:
     app = build_pi_application(_settings(tmp_path))
     app.close()
     app.close()
+
+
+def test_try_real_stt_returns_none_without_credentials(tmp_path: Path) -> None:
+    from bootstrap import _try_real_stt
+
+    settings = Settings(
+        _env_file=None,
+        rako_env="prod",
+        google_application_credentials=None,
+    )
+    assert _try_real_stt(settings) is None
+
+
+def test_try_real_tts_returns_none_without_credentials(tmp_path: Path) -> None:
+    from bootstrap import _try_real_tts
+
+    settings = Settings(
+        _env_file=None,
+        rako_env="prod",
+        google_application_credentials=None,
+    )
+    assert _try_real_tts(settings) is None
+
+
+def test_build_pi_uses_canned_stt_tts_without_credentials(tmp_path: Path) -> None:
+    from bootstrap import _CannedSTT, _CannedTTS
+
+    app = build_pi_application(_settings(tmp_path))
+    try:
+        # Sin GOOGLE_APPLICATION_CREDENTIALS caemos a canned, no crash.
+        assert isinstance(app.stt, _CannedSTT)
+        assert isinstance(app.tts, _CannedTTS)
+    finally:
+        app.close()
