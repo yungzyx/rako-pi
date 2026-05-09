@@ -104,14 +104,23 @@ def test_open_encrypted_validates_key_before_attempting_connection() -> None:
         open_encrypted(":memory:", "not-hex")
 
 
-def test_open_encrypted_with_valid_key_raises_runtime_error_in_dev() -> None:
-    # En dev (sin sqlcipher), una clave válida pasa validate pero la
-    # apertura debe fallar con RuntimeError (no abrir sin cifrado).
-    from db.encryption import open_encrypted
+def test_open_encrypted_with_valid_key_requires_real_sqlcipher() -> None:
+    # Una clave válida pasa validate. Si SQLCipher no está disponible,
+    # debe fallar cerrado. Si está disponible (por ejemplo en la Pi),
+    # debe abrir una conexión que el boundary reconoce como cifrada.
+    from db.encryption import _SQLCIPHER_AVAILABLE, is_encrypted, open_encrypted
 
     valid_key = "a" * 64
-    with pytest.raises(RuntimeError, match="SQLCipher not available"):
-        open_encrypted(":memory:", valid_key)
+    if not _SQLCIPHER_AVAILABLE:
+        with pytest.raises(RuntimeError, match="SQLCipher not available"):
+            open_encrypted(":memory:", valid_key)
+        return
+
+    conn = open_encrypted(":memory:", valid_key)
+    try:
+        assert is_encrypted(conn) is True
+    finally:
+        conn.close()
 
 
 def test_require_encrypted_raises_in_dev_mode() -> None:

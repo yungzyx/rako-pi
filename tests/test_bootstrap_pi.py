@@ -26,15 +26,18 @@ def _settings(tmp_path: Path) -> Settings:
     )
 
 
-def test_build_pi_falls_back_to_fakes_when_libs_absent(
+def test_build_pi_falls_back_to_fakes_when_real_factories_fail(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Sin gpiozero / neopixel / sounddevice, el bootstrap usa los mismos
-    fakes que dev. Esto permite ejecutar el binario en mac/CI sin
-    crashear en imports inalcanzables."""
-    # Aseguramos que las libs Pi NO están en el path (en mac/CI no lo están).
+    """Si las factories reales fallan, el bootstrap usa los mismos fakes
+    que dev. Esto permite ejecutar el binario en mac/CI sin crashear y
+    mantiene el test estable en una Raspberry que sí tenga algunas libs."""
     for module in ("gpiozero", "neopixel", "board", "sounddevice"):
         monkeypatch.delitem(sys.modules, module, raising=False)
+    monkeypatch.setattr("bootstrap._try_real_leds", lambda: None)
+    monkeypatch.setattr("bootstrap._try_real_servos", lambda: None)
+    monkeypatch.setattr("bootstrap._try_real_capture", lambda: None)
+    monkeypatch.setattr("bootstrap._try_real_playback", lambda: None)
 
     app = build_pi_application(_settings(tmp_path))
     try:
