@@ -16,8 +16,10 @@ externos.
 ## Arquitectura en una línea
 
 `mic → SER local → STT cloud → orquestador (RAG + SQLite) → Claude → TTS cloud
-→ parlante + LEDs + SQLite + sync Firebase`. Detalle completo en el
+→ parlante + LEDs/OLED + SQLite + sync Firebase`. Detalle completo en el
 [doc de arquitectura](../docs/Arquitectura_Tecnica.md).
+
+Hardware actual de la Pi: Raspberry Pi 4 8GB + ReSpeaker 2-Mics Pi HAT + OLED I2C. Por ahora no hay speaker fijo; se usará salida de audio a parlante externo por cable cuando esté conectado. Ver [`HARDWARE.md`](./HARDWARE.md).
 
 ```
 src/

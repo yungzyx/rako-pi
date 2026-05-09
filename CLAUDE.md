@@ -38,6 +38,7 @@ app móvil ni el contenido del RAG.
 ## 2. Stack técnico
 
 ### En la Pi
+- **Hardware actual:** Raspberry Pi 4 8GB + ReSpeaker 2-Mics Pi HAT + pantalla OLED por I2C. No hay speaker fijo todavía; salida temporal por cable a parlante externo cuando esté conectado. Ver `HARDWARE.md`.
 - **OS:** Raspberry Pi OS (Debian 64-bit).
 - **Lenguaje:** Python 3.12 (Pi OS Bookworm). Mantener compat 3.11+.
 - **Frameworks:** FastAPI (servicios internos), LangChain (orquestación RAG+LLM).
