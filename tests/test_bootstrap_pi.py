@@ -86,8 +86,42 @@ def test_try_real_tts_returns_none_without_credentials(tmp_path: Path) -> None:
         _env_file=None,
         rako_env="prod",
         google_application_credentials=None,
+        tts_provider="google",
     )
     assert _try_real_tts(settings) is None
+
+
+def test_try_real_tts_returns_none_when_elevenlabs_selected_without_key() -> None:
+    from bootstrap import _try_real_tts
+
+    settings = Settings(
+        _env_file=None,
+        rako_env="prod",
+        tts_provider="elevenlabs",
+        elevenlabs_api_key=None,
+    )
+
+    assert _try_real_tts(settings) is None
+
+
+def test_try_real_tts_prefers_elevenlabs_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bootstrap import _CannedTTS, _try_real_tts
+
+    eleven = _CannedTTS()
+
+    monkeypatch.setattr("bootstrap._try_elevenlabs_tts", lambda settings: eleven)
+    monkeypatch.setattr("bootstrap._try_google_tts", lambda settings: None)
+
+    settings = Settings(
+        _env_file=None,
+        rako_env="prod",
+        tts_provider="elevenlabs",
+        elevenlabs_api_key="el-test",
+    )
+
+    assert _try_real_tts(settings) is eleven
 
 
 def test_build_pi_uses_canned_stt_tts_without_credentials(tmp_path: Path) -> None:

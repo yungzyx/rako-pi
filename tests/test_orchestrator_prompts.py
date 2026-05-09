@@ -117,6 +117,27 @@ def test_build_user_message_combines_query_chunks_and_context() -> None:
     assert "tarde" in message
 
 
+def test_build_user_message_guides_task_breakdowns_and_suggestions() -> None:
+    ctx = UserContext(
+        pending_task_count=3,
+        recent_completion_count=0,
+        robot_level=1,
+        time_of_day="tarde",
+        recent_mood_summary=None,
+    )
+
+    message = build_user_message(
+        query="No sé cómo empezar el informe",
+        chunks=(),
+        context=ctx,
+    )
+
+    lowered = message.lower()
+    assert "divide" in lowered
+    assert "pasos pequeños" in lowered
+    assert "sugerencia" in lowered
+
+
 def test_build_user_message_handles_empty_chunks() -> None:
     ctx = UserContext(
         pending_task_count=0,

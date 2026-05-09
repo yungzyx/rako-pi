@@ -75,6 +75,10 @@ def build_user_message(
     return (
         "## Contexto del usuario\n"
         f"{format_user_context(context)}\n\n"
+        "## Guía de respuesta\n"
+        "- Si el usuario pide ayuda con una tarea, divide la tarea en pasos pequeños y concretos.\n"
+        "- Da una sugerencia accionable para empezar ahora, evitando listas largas.\n"
+        "- Si falta información importante, pregunta solo una cosa antes de avanzar.\n\n"
         "## Material relevante (curado, no inventar)\n"
         f"{format_chunks_for_prompt(chunks)}\n\n"
         "## Turno actual del usuario\n"

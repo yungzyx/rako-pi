@@ -158,6 +158,22 @@ def test_voice_turn_captures_audio_and_synthesizes_response(tmp_path: Path) -> N
         app.close()
 
 
+def test_wake_word_event_triggers_voice_turn(tmp_path: Path) -> None:
+    loop, app, _ = _make_loop(tmp_path)
+    try:
+        _emit(app.event_bus, HardwareEventKind.WAKE_WORD)  # type: ignore[arg-type]
+        loop.run(max_iterations=1)
+
+        history = app.leds.history  # type: ignore[attr-defined]
+        assert LEDState.LISTENING in history
+        assert LEDState.THINKING in history
+        assert LEDState.SPEAKING in history
+        assert history[-1] is LEDState.OFF
+        assert len(app.playback.played) >= 1  # type: ignore[attr-defined]
+    finally:
+        app.close()
+
+
 # ---------------------------------------------------------------------------
 # Robustez
 # ---------------------------------------------------------------------------

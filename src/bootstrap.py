@@ -44,7 +44,7 @@ from sync.firebase_client import FakeFirebaseClient, FirebaseClient
 from sync.queue import SyncQueue
 from voice.audio_io import AudioCaptureSource, AudioPlaybackSink
 from voice.stt import GoogleCloudSTT, STTClient
-from voice.tts import GoogleCloudTTS, TTSClient
+from voice.tts import ElevenLabsTTS, GoogleCloudTTS, TTSClient
 from voice.types import AudioBuffer, SynthesisResult, TranscriptResult
 from voice.wake_word import SubstringWakeWordDetector, WakeWordDetector
 
@@ -346,8 +346,36 @@ def _try_real_stt(settings: Settings) -> STTClient | None:
 
 
 def _try_real_tts(settings: Settings) -> TTSClient | None:
-    """Construye GoogleCloudTTS si hay credenciales y la lib está
-    disponible. Mismo contrato que _try_real_stt."""
+    """Construye el TTS real seleccionado. ElevenLabs es la voz principal;
+    Google queda como fallback estable cuando se configura explícitamente."""
+    if settings.tts_provider == "elevenlabs":
+        eleven = _try_elevenlabs_tts(settings)
+        if eleven is not None:
+            return eleven
+        return _try_google_tts(settings)
+    return _try_google_tts(settings)
+
+
+def _try_elevenlabs_tts(settings: Settings) -> TTSClient | None:
+    if not settings.elevenlabs_api_key:
+        return None
+    try:  # pragma: no cover - requires httpx at runtime
+        import httpx
+
+        return ElevenLabsTTS(
+            http_client=httpx.Client(),
+            api_key=settings.elevenlabs_api_key,
+            voice_id=settings.elevenlabs_voice_id,
+            model=settings.elevenlabs_model,
+            stability=settings.elevenlabs_stability,
+            similarity_boost=settings.elevenlabs_similarity_boost,
+            timeout_s=settings.anthropic_timeout_s,
+        )
+    except Exception:  # pragma: no cover - lib missing or runtime init failure
+        return None
+
+
+def _try_google_tts(settings: Settings) -> TTSClient | None:
     if not settings.google_application_credentials:
         return None
     try:  # pragma: no cover - only with google-cloud-texttospeech installed

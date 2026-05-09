@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from voice.tts import GoogleCloudTTS, TTSClient
+from voice.tts import ElevenLabsTTS, GoogleCloudTTS, TTSClient
 from voice.types import AudioBuffer, SynthesisResult
 
 
@@ -128,3 +128,112 @@ def test_synthesize_caps_text_length() -> None:
     long_text = "x" * 500
     with pytest.raises(ValueError, match="too long"):
         client.synthesize(long_text)
+
+
+class _FakeElevenLabsHTTPResponse:
+    def __init__(self, *, content: bytes = b"ELEVENMP3") -> None:
+        self.content = content
+        self.raise_for_status_called = False
+
+    def raise_for_status(self) -> None:
+        self.raise_for_status_called = True
+
+
+class _FakeElevenLabsHTTPClient:
+    def __init__(self, response: _FakeElevenLabsHTTPResponse | None = None) -> None:
+        self.response = response or _FakeElevenLabsHTTPResponse()
+        self.calls: list[dict[str, Any]] = []
+
+    def post(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: dict[str, Any],
+        timeout: float,
+    ) -> _FakeElevenLabsHTTPResponse:
+        self.calls.append(
+            {
+                "url": url,
+                "headers": headers,
+                "json": json,
+                "timeout": timeout,
+            }
+        )
+        return self.response
+
+
+def test_elevenlabs_tts_satisfies_protocol() -> None:
+    client = ElevenLabsTTS(
+        http_client=_FakeElevenLabsHTTPClient(),
+        api_key="el-test",
+        voice_id="voice-123",
+        model="eleven_flash_v2_5",
+    )
+
+    assert isinstance(client, TTSClient)
+
+
+def test_elevenlabs_tts_posts_expected_request_shape() -> None:
+    fake = _FakeElevenLabsHTTPClient()
+    client = ElevenLabsTTS(
+        http_client=fake,
+        api_key="el-test",
+        voice_id="voice-123",
+        model="eleven_flash_v2_5",
+        stability=0.55,
+        similarity_boost=0.8,
+    )
+
+    result = client.synthesize(" Estoy contigo. ")
+
+    call = fake.calls[0]
+    assert call["url"].endswith("/v1/text-to-speech/voice-123")
+    assert call["headers"]["xi-api-key"] == "el-test"
+    assert call["headers"]["accept"] == "audio/mpeg"
+    assert call["json"]["text"] == "Estoy contigo."
+    assert call["json"]["model_id"] == "eleven_flash_v2_5"
+    assert call["json"]["voice_settings"]["stability"] == 0.55
+    assert call["json"]["voice_settings"]["similarity_boost"] == 0.8
+    assert result.audio.data == b"ELEVENMP3"
+    assert result.audio.encoding == "MP3"
+    assert result.voice_name == "elevenlabs:voice-123"
+    assert result.text_synthesized == "Estoy contigo."
+
+
+def test_elevenlabs_tts_rejects_empty_text() -> None:
+    client = ElevenLabsTTS(
+        http_client=_FakeElevenLabsHTTPClient(),
+        api_key="el-test",
+        voice_id="voice-123",
+        model="eleven_flash_v2_5",
+    )
+
+    with pytest.raises(ValueError):
+        client.synthesize(" ")
+
+
+def test_elevenlabs_tts_rejects_empty_audio_response() -> None:
+    fake = _FakeElevenLabsHTTPClient(_FakeElevenLabsHTTPResponse(content=b""))
+    client = ElevenLabsTTS(
+        http_client=fake,
+        api_key="el-test",
+        voice_id="voice-123",
+        model="eleven_flash_v2_5",
+    )
+
+    with pytest.raises(ValueError, match="empty"):
+        client.synthesize("hola")
+
+
+def test_elevenlabs_tts_caps_text_length() -> None:
+    client = ElevenLabsTTS(
+        http_client=_FakeElevenLabsHTTPClient(),
+        api_key="el-test",
+        voice_id="voice-123",
+        model="eleven_flash_v2_5",
+        max_chars=100,
+    )
+
+    with pytest.raises(ValueError, match="too long"):
+        client.synthesize("x" * 500)

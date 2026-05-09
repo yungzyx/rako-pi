@@ -7,7 +7,7 @@ con el orquestador.
 
 Eventos soportados:
 - BUTTON_PANIC / BUTTON_EMERGENCY → turn de crisis (bypass LLM).
-- TOUCH                            → voice turn completo
+- TOUCH / WAKE_WORD                → voice turn completo
                                      (LISTENING → THINKING → SPEAKING → OFF).
 - PIR_MOTION                       → ignorado en el path reactivo;
                                      reservado para el detector proactivo.
@@ -104,7 +104,7 @@ class RunLoop:
             or event.kind is HardwareEventKind.BUTTON_EMERGENCY
         ):
             self._handle_panic(PanicSource.PHYSICAL)
-        elif event.kind is HardwareEventKind.TOUCH:
+        elif event.kind is HardwareEventKind.TOUCH or event.kind is HardwareEventKind.WAKE_WORD:
             self._handle_voice_turn()
         # PIR_MOTION: reservado al detector proactivo, no dispara turn.
 

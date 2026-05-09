@@ -19,6 +19,7 @@ class LEDState(Enum):
 class HardwareEventKind(Enum):
     PIR_MOTION = "PIR_MOTION"
     TOUCH = "TOUCH"
+    WAKE_WORD = "WAKE_WORD"
     BUTTON_PANIC = "BUTTON_PANIC"
     BUTTON_EMERGENCY = "BUTTON_EMERGENCY"
 

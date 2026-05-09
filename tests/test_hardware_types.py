@@ -20,7 +20,7 @@ def test_led_state_values_are_unique() -> None:
 def test_hardware_event_kind_covers_required_inputs() -> None:
     kinds = {k.name for k in HardwareEventKind}
 
-    assert {"PIR_MOTION", "TOUCH", "BUTTON_PANIC", "BUTTON_EMERGENCY"} <= kinds
+    assert {"PIR_MOTION", "TOUCH", "WAKE_WORD", "BUTTON_PANIC", "BUTTON_EMERGENCY"} <= kinds
 
 
 def test_hardware_event_is_immutable() -> None:

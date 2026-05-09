@@ -32,10 +32,16 @@ class Settings(BaseSettings):
     anthropic_timeout_s: float = 15.0
 
     # --- Voz ---
+    tts_provider: Literal["elevenlabs", "google"] = "elevenlabs"
     google_application_credentials: str | None = None
     google_stt_language: str = "es-CL"
     google_tts_voice: str = "es-CL-Neural2-A"
     google_tts_speaking_rate: float = 0.95
+    elevenlabs_api_key: str | None = None
+    elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
+    elevenlabs_model: str = "eleven_flash_v2_5"
+    elevenlabs_stability: float = 0.55
+    elevenlabs_similarity_boost: float = 0.8
 
     # --- RAG ---
     chroma_db_path: str = "./chroma_db"
