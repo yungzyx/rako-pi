@@ -63,4 +63,4 @@ def sanitize_payload(payload: Mapping[str, object]) -> dict[str, PrimitiveValue]
 
 
 def _is_primitive(value: object) -> bool:
-    return isinstance(value, (str, int, float, bool)) or value is None
+    return isinstance(value, str | int | float | bool) or value is None

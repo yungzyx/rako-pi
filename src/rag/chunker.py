@@ -153,7 +153,7 @@ def _flatten_metadata(frontmatter: Mapping[str, Any], source: str) -> dict[str, 
     """
     out: dict[str, Any] = {"source": source}
     for key, value in frontmatter.items():
-        if isinstance(value, (str, int, float, bool)):
+        if isinstance(value, str | int | float | bool):
             out[key] = value
         elif isinstance(value, list):
             out[key] = ",".join(str(item) for item in value)
