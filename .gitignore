@@ -42,6 +42,7 @@ service-account*.json
 firebase-credentials*.json
 google-credentials*.json
 anthropic-key*.txt
+secrets/
 
 # --- Datos sensibles del usuario ------------------------------------------
 # Nada de estado del usuario debe entrar al repo.
