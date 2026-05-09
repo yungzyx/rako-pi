@@ -1,9 +1,9 @@
 """Boundary de cifrado para la base local.
 
-Producción usa `pysqlcipher3` con la clave en `SQLITE_ENCRYPTION_KEY`.
-En dev (mac/Python 3.12) los wheels no están disponibles, así que el
-boundary funciona pero `is_encrypted` retorna False y `require_encrypted`
-aborta.
+Producción usa un driver SQLCipher (`pysqlcipher3` o `sqlcipher3`) con
+la clave en `SQLITE_ENCRYPTION_KEY`. En dev (mac/Python 3.12) los wheels
+pueden no estar disponibles, así que el boundary funciona pero
+`is_encrypted` retorna False y `require_encrypted` aborta.
 
 Convención de clave: hex de 32 bytes mínimo (`openssl rand -hex 32`).
 Se aplica a SQLCipher como literal `x'<hex>'`, no como passphrase. Esto
@@ -12,7 +12,7 @@ elimina el riesgo de que la clave aparezca en tracebacks de SQL.
 
 Cuando se aprovisione la Pi:
     sudo apt install libsqlcipher-dev sqlcipher
-    pip install pysqlcipher3
+    pip install sqlcipher3
 """
 
 from __future__ import annotations
@@ -22,12 +22,17 @@ import sqlite3
 from typing import Final
 
 try:  # pragma: no cover - rama dependiente del entorno
-    from pysqlcipher3 import dbapi2 as _sqlcipher  # type: ignore[import-not-found]
+    import sqlcipher3 as _sqlcipher  # type: ignore[import-not-found]
 
     _SQLCIPHER_AVAILABLE = True
 except ImportError:  # pragma: no cover
-    _sqlcipher = None
-    _SQLCIPHER_AVAILABLE = False
+    try:
+        from pysqlcipher3 import dbapi2 as _sqlcipher  # type: ignore[import-not-found]
+
+        _SQLCIPHER_AVAILABLE = True
+    except ImportError:
+        _sqlcipher = None
+        _SQLCIPHER_AVAILABLE = False
 
 
 _HEX_KEY_RE: Final = re.compile(r"^[0-9a-fA-F]+$")
@@ -63,7 +68,7 @@ def open_encrypted(path: str, key: str) -> sqlite3.Connection:
     validate_key_format(key)
 
     if not _SQLCIPHER_AVAILABLE:  # pragma: no cover - solo en prod sin libs
-        raise RuntimeError("SQLCipher not available. Install pysqlcipher3 + libsqlcipher-dev.")
+        raise RuntimeError("SQLCipher not available. Install sqlcipher3 + libsqlcipher-dev.")
 
     conn = _sqlcipher.connect(path)  # pragma: no cover
     # Literal hex `x'<hex>'`: SQLCipher trata estos 32 bytes como la

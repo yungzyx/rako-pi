@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Provisión inicial de la Raspberry Pi 4 para Rako.
 #
-# Uso (en la Pi, como usuario `rako` con sudo configurado):
+# Uso (en la Pi, como usuario con sudo configurado):
 #   git clone <repo> ~/rako-pi
 #   cd ~/rako-pi
 #   ./scripts/setup_pi.sh
@@ -21,7 +21,7 @@ cd "$ROOT"
 echo "==> Actualizando paquetes del sistema..."
 sudo apt update
 sudo apt install -y \
-  python3.12 python3.12-venv python3.12-dev python3-pip \
+  python3 python3-venv python3-dev python3-pip \
   sqlcipher libsqlcipher-dev \
   portaudio19-dev libsndfile1 \
   ffmpeg \
@@ -40,13 +40,29 @@ sudo usermod -a -G gpio,i2c,spi,audio "$USER"
 # ---------------------------------------------------------------------------
 
 echo "==> Creando virtualenv..."
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+PYTHON_VERSION="$($PYTHON_BIN - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)"
+case "$PYTHON_VERSION" in
+  3.11|3.12|3.13)
+    ;;
+  *)
+    echo "ERROR: Python $PYTHON_VERSION no soportado. Requiere 3.11, 3.12 o 3.13." >&2
+    exit 1
+    ;;
+esac
+echo "==> Usando $PYTHON_BIN (Python $PYTHON_VERSION)"
+
 if [[ ! -d ".venv" ]]; then
-  python3.12 -m venv .venv
+  "$PYTHON_BIN" -m venv .venv
 fi
 
 echo "==> Instalando dependencias de la Pi..."
 .venv/bin/pip install --upgrade pip
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -r requirements-pi-lite.txt
 
 # ---------------------------------------------------------------------------
 # 4. Configuración (.env)
@@ -101,9 +117,9 @@ cat <<EOF
 Próximos pasos:
 
   1. Verificar y completar credenciales en .env:
-       ANTHROPIC_API_KEY (Anthropic Console)
+       OPENAI_API_KEY (OpenAI Platform)
+       ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID (ElevenLabs)
        GOOGLE_APPLICATION_CREDENTIALS (Google Cloud service account JSON)
-       FIREBASE_CREDENTIALS_PATH (Firebase service account JSON)
 
   2. Probar el demo:
        ./scripts/rako.sh demo-turn "hola Rako"
