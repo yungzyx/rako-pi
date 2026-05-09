@@ -331,12 +331,24 @@ def _try_real_playback() -> AudioPlaybackSink | None:
         return None
 
 
+def _ensure_google_credentials_env(settings: Settings) -> None:
+    """Propaga la ruta de credenciales al entorno del proceso.
+
+    Las libs de Google leen `GOOGLE_APPLICATION_CREDENTIALS` de `os.environ`,
+    no del objeto `Settings`. Si solo está en `.env`, la auth falla.
+    """
+    path = settings.google_application_credentials
+    if path and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
+
+
 def _try_real_stt(settings: Settings) -> STTClient | None:
     """Construye GoogleCloudSTT si hay credenciales y la lib está
     disponible. Cae a None para que el caller use el fake — sin crashear
     si google-cloud-speech no está instalado (CI/dev)."""
     if not settings.google_application_credentials:
         return None
+    _ensure_google_credentials_env(settings)
     try:  # pragma: no cover - only with google-cloud-speech installed
         from google.cloud.speech_v1 import SpeechClient
 
@@ -379,6 +391,7 @@ def _try_elevenlabs_tts(settings: Settings) -> TTSClient | None:
 def _try_google_tts(settings: Settings) -> TTSClient | None:
     if not settings.google_application_credentials:
         return None
+    _ensure_google_credentials_env(settings)
     try:  # pragma: no cover - only with google-cloud-texttospeech installed
         from google.cloud.texttospeech_v1 import TextToSpeechClient
 
