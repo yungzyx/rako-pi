@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from orchestrator.llm_client import AnthropicLLMClient, LLMClient, LLMResponse
+from orchestrator.llm_client import AnthropicLLMClient, LLMClient, LLMResponse, OpenAILLMClient
 from orchestrator.types import UserContext
 from rag.types import Chunk
 
@@ -239,6 +239,112 @@ def test_generate_with_empty_response_raises() -> None:
     client = AnthropicLLMClient(
         client=fake,
         model="claude-haiku-4-5",
+        max_tokens=128,
+        system_prompt="System.",
+    )
+
+    with pytest.raises(ValueError):
+        client.generate(query="q", chunks=(), context=_ctx())
+
+
+class _FakeOpenAIResponse:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self._payload = payload
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict[str, Any]:
+        return self._payload
+
+
+class _FakeOpenAIHTTPClient:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self._payload = payload
+        self.calls: list[dict[str, Any]] = []
+
+    def post(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: dict[str, Any],
+        timeout: float,
+    ) -> _FakeOpenAIResponse:
+        self.calls.append(
+            {
+                "url": url,
+                "headers": headers,
+                "json": json,
+                "timeout": timeout,
+            }
+        )
+        return _FakeOpenAIResponse(self._payload)
+
+
+def _openai_payload(text: str = "Estoy contigo.") -> dict[str, Any]:
+    return {
+        "output": [
+            {
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": text,
+                    }
+                ]
+            }
+        ],
+        "usage": {
+            "input_tokens": 42,
+            "output_tokens": 12,
+        },
+    }
+
+
+def test_openai_llm_client_satisfies_protocol() -> None:
+    client: LLMClient = OpenAILLMClient(
+        http_client=_FakeOpenAIHTTPClient(_openai_payload()),
+        api_key="openai-test",
+        model="gpt-4o-mini",
+        max_tokens=128,
+        system_prompt="System.",
+    )
+
+    assert hasattr(client, "generate")
+
+
+def test_openai_generate_posts_expected_responses_request() -> None:
+    fake = _FakeOpenAIHTTPClient(_openai_payload("Vamos paso a paso."))
+    client = OpenAILLMClient(
+        http_client=fake,
+        api_key="openai-test",
+        model="gpt-4o-mini",
+        max_tokens=128,
+        system_prompt="System.",
+        timeout_s=11.0,
+    )
+
+    result = client.generate(query="me siento atascado", chunks=_chunks(), context=_ctx())
+
+    call = fake.calls[0]
+    assert call["url"] == "https://api.openai.com/v1/responses"
+    assert call["headers"]["authorization"] == "Bearer openai-test"
+    assert call["json"]["model"] == "gpt-4o-mini"
+    assert call["json"]["max_output_tokens"] == 128
+    assert call["json"]["input"][0]["role"] == "system"
+    assert call["json"]["input"][1]["role"] == "user"
+    assert "me siento atascado" in call["json"]["input"][1]["content"]
+    assert result.text == "Vamos paso a paso."
+    assert result.input_tokens == 42
+    assert result.output_tokens == 12
+
+
+def test_openai_generate_raises_on_empty_text() -> None:
+    fake = _FakeOpenAIHTTPClient(_openai_payload(""))
+    client = OpenAILLMClient(
+        http_client=fake,
+        api_key="openai-test",
+        model="gpt-4o-mini",
         max_tokens=128,
         system_prompt="System.",
     )

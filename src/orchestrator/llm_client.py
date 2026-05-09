@@ -1,15 +1,14 @@
-"""Cliente de Anthropic Claude.
+"""Clientes LLM.
 
-Wrapper sobre `anthropic.Anthropic` con:
-- Modelo y max_tokens configurables (default Haiku 4.5 per arquitectura).
+Wrappers de proveedores cloud con el mismo `LLMClient`:
+- `OpenAILLMClient` usa Responses API y es el default barato/rápido.
+- `AnthropicLLMClient` mantiene Claude como alternativa/fallback.
+- Modelo y max_tokens configurables.
 - `cache_control: ephemeral` en el bloque system para reusar prefix
-  entre turnos. Si el system prompt no alcanza el mínimo cacheable, no
-  cachea silenciosamente — sin error.
-- Reintentos delegados al SDK (`max_retries=2` default).
-- No usa thinking ni effort (no soportados en Haiku 4.5).
+  entre turnos de Anthropic. Si el system prompt no alcanza el mínimo
+  cacheable, no cachea silenciosamente — sin error.
 
-Para tests, el cliente acepta cualquier objeto con un `.messages.create`
-compatible — facilita inyectar fakes sin tocar la API real.
+Para tests, ambos clientes aceptan objetos fake inyectados sin tocar APIs reales.
 """
 
 from __future__ import annotations
@@ -78,6 +77,53 @@ class AnthropicLLMClient:
         return _parse_response(response)
 
 
+class OpenAILLMClient:
+    """Implementación concreta sobre OpenAI Responses API."""
+
+    def __init__(
+        self,
+        http_client: Any,
+        *,
+        api_key: str,
+        model: str,
+        max_tokens: int,
+        system_prompt: str,
+        timeout_s: float = 15.0,
+    ) -> None:
+        self._http = http_client
+        self._api_key = api_key
+        self._model = model
+        self._max_tokens = max_tokens
+        self._system_prompt = system_prompt
+        self._timeout_s = timeout_s
+
+    def generate(
+        self,
+        query: str,
+        chunks: tuple[Chunk, ...],
+        context: UserContext,
+    ) -> LLMResponse:
+        user_message = build_user_message(query, chunks, context)
+        response = self._http.post(
+            "https://api.openai.com/v1/responses",
+            headers={
+                "authorization": f"Bearer {self._api_key}",
+                "content-type": "application/json",
+            },
+            json={
+                "model": self._model,
+                "max_output_tokens": self._max_tokens,
+                "input": [
+                    {"role": "system", "content": self._system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+            },
+            timeout=self._timeout_s,
+        )
+        response.raise_for_status()
+        return _parse_openai_response(response.json())
+
+
 def _parse_response(response: Any) -> LLMResponse:
     text_parts = [
         block.text for block in response.content if getattr(block, "type", None) == "text"
@@ -93,4 +139,25 @@ def _parse_response(response: Any) -> LLMResponse:
         output_tokens=getattr(usage, "output_tokens", 0),
         cache_read_input_tokens=getattr(usage, "cache_read_input_tokens", 0),
         cache_creation_input_tokens=getattr(usage, "cache_creation_input_tokens", 0),
+    )
+
+
+def _parse_openai_response(payload: dict[str, Any]) -> LLMResponse:
+    text_parts: list[str] = []
+    for item in payload.get("output", []):
+        for block in item.get("content", []):
+            if block.get("type") == "output_text":
+                text_parts.append(str(block.get("text", "")))
+
+    text = "".join(text_parts).strip()
+    if not text:
+        raise ValueError("LLM response contained no text blocks")
+
+    usage = payload.get("usage", {})
+    return LLMResponse(
+        text=text,
+        input_tokens=int(usage.get("input_tokens", 0)),
+        output_tokens=int(usage.get("output_tokens", 0)),
+        cache_read_input_tokens=0,
+        cache_creation_input_tokens=0,
     )

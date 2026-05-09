@@ -32,6 +32,7 @@ from orchestrator.llm_client import (
     AnthropicLLMClient,
     LLMClient,
     LLMResponse,
+    OpenAILLMClient,
 )
 from orchestrator.orchestrator import Orchestrator
 from orchestrator.prompts import extract_system_prompt
@@ -403,14 +404,42 @@ def _build_retriever(settings: Settings) -> Retriever:
 
 
 def _build_llm_client(settings: Settings) -> LLMClient:
+    system_prompt = _load_system_prompt(settings.obsidian_vault_path)
+    if settings.llm_provider == "openai":
+        openai = _try_openai_llm(settings, system_prompt)
+        if openai is not None:
+            return openai
+        return _try_anthropic_llm(settings, system_prompt) or _CannedLLMClient()
+
+    return _try_anthropic_llm(settings, system_prompt) or _CannedLLMClient()
+
+
+def _try_openai_llm(settings: Settings, system_prompt: str) -> LLMClient | None:
+    if not settings.openai_api_key:
+        return None
+    try:  # pragma: no cover - requires httpx at runtime
+        import httpx
+
+        return OpenAILLMClient(
+            http_client=httpx.Client(),
+            api_key=settings.openai_api_key,
+            model=settings.openai_model,
+            max_tokens=settings.anthropic_max_tokens,
+            system_prompt=system_prompt,
+            timeout_s=settings.anthropic_timeout_s,
+        )
+    except Exception:  # pragma: no cover - lib missing or runtime init failure
+        return None
+
+
+def _try_anthropic_llm(settings: Settings, system_prompt: str) -> LLMClient | None:
     if not settings.anthropic_api_key:
-        return _CannedLLMClient()
+        return None
 
     anthropic_client = Anthropic(
         api_key=settings.anthropic_api_key,
         timeout=settings.anthropic_timeout_s,
     )
-    system_prompt = _load_system_prompt(settings.obsidian_vault_path)
     return AnthropicLLMClient(
         client=anthropic_client,
         model=settings.anthropic_model,

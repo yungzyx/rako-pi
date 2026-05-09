@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     rako_mode: Literal["normal", "offline", "private"] = "normal"
 
     # --- LLM ---
+    llm_provider: Literal["openai", "anthropic"] = "openai"
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4o-mini"
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-haiku-4-5"
     anthropic_max_tokens: int = 512

@@ -14,7 +14,9 @@ def test_settings_loads_with_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings(_env_file=None)
 
     assert settings.rako_env == "dev"
+    assert settings.llm_provider == "openai"
     assert settings.anthropic_model.startswith("claude-")
+    assert settings.openai_model == "gpt-4o-mini"
     assert settings.rag_top_k == 5
     assert settings.tts_provider == "elevenlabs"
 
@@ -37,6 +39,18 @@ def test_anthropic_api_key_optional(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings(_env_file=None)
 
     assert settings.anthropic_api_key is None
+
+
+def test_openai_settings_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4.1-mini")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.llm_provider == "anthropic"
+    assert settings.openai_api_key == "openai-test"
+    assert settings.openai_model == "gpt-4.1-mini"
 
 
 def test_sqlite_path_defaults_to_data_dir(monkeypatch: pytest.MonkeyPatch) -> None:

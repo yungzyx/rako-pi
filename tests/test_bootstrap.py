@@ -105,6 +105,44 @@ def test_build_dev_with_api_key_uses_anthropic_client(tmp_path: Path) -> None:
         app.close()
 
 
+def test_build_dev_with_anthropic_provider_uses_anthropic_client(tmp_path: Path) -> None:
+    from orchestrator.llm_client import AnthropicLLMClient
+
+    settings = Settings(
+        _env_file=None,
+        rako_env="dev",
+        sqlite_path=str(tmp_path / "rako.db"),
+        llm_provider="anthropic",
+        anthropic_api_key="test-key-not-used",
+        obsidian_vault_path=str(tmp_path / "missing"),
+    )
+
+    app = build_dev_application(settings)
+    try:
+        assert isinstance(app.orchestrator._llm, AnthropicLLMClient)  # type: ignore[attr-defined]
+    finally:
+        app.close()
+
+
+def test_build_dev_with_openai_key_uses_openai_client(tmp_path: Path) -> None:
+    from orchestrator.llm_client import OpenAILLMClient
+
+    settings = Settings(
+        _env_file=None,
+        rako_env="dev",
+        sqlite_path=str(tmp_path / "rako.db"),
+        llm_provider="openai",
+        openai_api_key="test-key-not-used",
+        obsidian_vault_path=str(tmp_path / "missing"),
+    )
+
+    app = build_dev_application(settings)
+    try:
+        assert isinstance(app.orchestrator._llm, OpenAILLMClient)  # type: ignore[attr-defined]
+    finally:
+        app.close()
+
+
 def test_build_dev_loads_system_prompt_from_vault(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     vault.mkdir()

@@ -10,6 +10,7 @@ ruff>=0.6,<1.0
 
 # Imported by orchestrator/llm_client (kept light at v0.97).
 anthropic>=0.39,<1.0
+httpx>=0.27,<1.0
 
 # Imported by config (Settings).
 pydantic>=2.9,<3.0
