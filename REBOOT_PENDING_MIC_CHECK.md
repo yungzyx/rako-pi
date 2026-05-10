@@ -1,11 +1,11 @@
 # Pending after reboot
 
-Reason: Restored the first custom Seeed/WM8960 overlay (`tmp-seeedsound-fix.dts`) that previously produced real signal after reboot. Need clean boot for device-tree overlay to apply.
+Reason: Installed Seeed-named overlay with both known WM8960 MCLK fix and `"Mic Jack", "MICB"` route.
 
-Installed overlay backup before change:
-`/boot/firmware/overlays/seeed-2mic-voicecard.dtbo.before-known-good-20260510-005041`
+Backup before change:
+`/boot/firmware/overlays/seeed-2mic-voicecard.dtbo.before-seeed-micbias-20260510-005959`
 
-After reboot:
-- detect ALSA card name
-- test capture RMS/peak
-- set mixer route and persist ALSA state if working
+Expected:
+- ALSA card: `seeed2micvoicec`
+- During capture, DAPM `MICB` should be On
+- Capture should show nonzero RMS
