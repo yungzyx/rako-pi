@@ -1,0 +1,29 @@
+[Unit]
+Description=Rako physical button chat loop
+Documentation=https://github.com/yungzyx/rako-pi
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=yunglab
+Group=yunglab
+WorkingDirectory=/home/yunglab/rako-pi
+Environment="PYTHONPATH=/home/yunglab/rako-pi/src"
+Environment="RAKO_OLED=1"
+EnvironmentFile=-/home/yunglab/rako-pi/.env
+ExecStart=/home/yunglab/rako-pi/scripts/rako-chat
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+
+# Needs GPIO/I2C/sound access on the Pi. Keep hardening light until hardware is stable.
+NoNewPrivileges=true
+PrivateTmp=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rako-chat
+
+[Install]
+WantedBy=multi-user.target

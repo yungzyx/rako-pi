@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Start the physical Rako chat loop: OLED idle eyes + ReSpeaker button listener.
+# Extra args are passed to scripts/button_conversation.py.
+
+set -euo pipefail
+
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+if command -v readlink >/dev/null 2>&1; then
+  SCRIPT_PATH="$(readlink -f "${SCRIPT_PATH}")"
+fi
+ROOT="$(cd "$(dirname "${SCRIPT_PATH}")/.." && pwd)"
+PYTHON="${ROOT}/.venv/bin/python"
+if [[ ! -x "${PYTHON}" ]]; then
+  PYTHON="python3"
+fi
+
+export PYTHONPATH="${ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}"
+cd "${ROOT}"
+
+EYES_PID=""
+cleanup() {
+  if [[ -n "${EYES_PID}" ]] && kill -0 "${EYES_PID}" 2>/dev/null; then
+    kill "${EYES_PID}" 2>/dev/null || true
+    wait "${EYES_PID}" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+for arg in "$@"; do
+  if [[ "${arg}" == "--help" || "${arg}" == "-h" ]]; then
+    exec "${PYTHON}" -u scripts/button_conversation.py "$@"
+  fi
+done
+
+if [[ "${RAKO_OLED:-1}" != "0" ]]; then
+  "${PYTHON}" eyes.py neutral --loop &
+  EYES_PID="$!"
+  echo "Rako OLED idle eyes started (pid ${EYES_PID}). Set RAKO_OLED=0 to disable."
+fi
+
+echo "Starting Rako button chat. Press Ctrl+C to stop."
+exec "${PYTHON}" -u scripts/button_conversation.py "$@"

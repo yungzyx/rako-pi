@@ -72,6 +72,44 @@ Provisionar GPIO, audio I/O y servicios cloud según `.env.example`.
 `scripts/setup_pi.sh` (vacío) consolidará el flujo cuando arranque la
 implementación.
 
+### Ejecutar Rako físico desde terminal
+
+```bash
+rako-chat
+```
+
+Ese comando enciende los ojos OLED en modo idle y deja escuchando el botón del
+ReSpeaker. Para pasar argumentos al listener:
+
+```bash
+rako-chat --no-playback
+rako-chat --capture-seconds 7 --audio-device hw:2,0
+```
+
+Si quieres apagar OLED para depurar:
+
+```bash
+RAKO_OLED=0 rako-chat --no-playback
+```
+
+### Arranque automático al enchufar/prender la Pi
+
+El repo trae una unit opcional en `systemd/rako-chat.service`. No se habilita
+sola: primero conviene probar audio + OLED manualmente. Para instalarla:
+
+```bash
+sudo cp systemd/rako-chat.service /etc/systemd/system/rako-chat.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now rako-chat.service
+journalctl -u rako-chat.service -f
+```
+
+Para detener/desactivar:
+
+```bash
+sudo systemctl disable --now rako-chat.service
+```
+
 ---
 
 ## Tests
