@@ -24,3 +24,23 @@ Backups:
 Notes:
 - STT may still fail if audio clips or nobody speaks clearly in the capture window.
 - `scripts/button_conversation.py` normalizes PCM16 peak before sending to STT.
+
+## Calibrated capture profile
+
+Applied and persisted with `alsactl store`:
+
+```bash
+scripts/setup_respeaker_audio.sh
+```
+
+Chosen from calibration:
+- `Capture=50`
+- `ADC PCM=210`
+- `Input Boost LINPUT1/RINPUT1=2`
+- `ALC Function=Stereo`
+- `ALC Max Gain=6`
+- `ALC Target=6`
+
+Calibration result:
+- no clipping
+- final test RMS ~10768, peak ~28347, clipped 0
