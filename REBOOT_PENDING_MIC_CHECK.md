@@ -1,27 +1,26 @@
-# ReSpeaker mic check — completed
+# Pending after reboot
 
-Date: 2026-05-09
+Reason: ReSpeaker/WM8960 capture stream was active but `MICB` stayed Off in ASoC DAPM, so onboard electret mics likely had no mic bias/power. Installed custom overlay adding `"Mic Jack", "MICB"` routing plus all L/R input routes.
 
-Issue:
-- ReSpeaker 2-Mics Pi HAT was detected as `seeed-2mic-voicecard`, but capture failed with `wm8960: No MCLK configured`.
+Backups:
+- `/boot/firmware/overlays/seeed-2mic-voicecard.dtbo.pre-wm8960-official-20260510-000402`
+- `/boot/firmware/overlays/seeed-2mic-voicecard.dtbo.pre-micbias-20260510-001744`
 
-Fix applied:
-- Installed corrected `seeed-2mic-voicecard.dtbo` overlay that provides `mclk` to the `wm8960` node.
-- Backup created at:
-  `/boot/firmware/overlays/seeed-2mic-voicecard.dtbo.bak-20260509-195625`
-- Rebooted Raspberry Pi.
+After reboot:
 
-Post-reboot result:
-- `arecord` captures successfully from `hw:seeed2micvoicec,0`.
-- Test file: `/tmp/rako-after-reboot.wav`
-- Capture stats: 2 channels, 48000 Hz, 3 seconds, RMS ~7499.76, nonzero samples 287994/288000.
-- `sounddevice` sees the device:
-  `seeed-2mic-voicecard: ... (hw:3,0), ALSA (2 in, 2 out)`.
-
-Rako audio tests:
-- `pytest tests/test_hardware_audio.py tests/test_voice_audio_io.py -q`
-- Result: 6 passed.
-
-Notes:
-- The mic is working after reboot.
-- The current default ALSA device is `default`/`capture`, but direct hardware is available as `hw:seeed2micvoicec,0` and sounddevice device index 1 at the time of testing.
+```bash
+cd ~/rako-pi
+dtoverlay -l
+arecord -l
+arecord -D hw:wm8960soundcard,0 -f S16_LE -c 2 -r 48000 -d 3 /tmp/rako-after-micbias.wav
+python3 - <<'PY'
+import wave, struct, math
+p='/tmp/rako-after-micbias.wav'
+with wave.open(p,'rb') as w:
+    b=w.readframes(w.getnframes())
+    s=struct.unpack('<'+'h'*(len(b)//2), b) if b else []
+    rms=math.sqrt(sum(x*x for x in s)/len(s)) if s else 0
+    peak=max((abs(x) for x in s), default=0)
+    print('rms', round(rms,2), 'peak', peak, 'nonzero', sum(1 for x in s if x))
+PY
+```

@@ -36,7 +36,7 @@ _DEFAULT_BUTTON_PIN = 17
 _DEFAULT_CAPTURE_SECONDS = 5.0
 _DEFAULT_AUDIO_OUTPUT_DEVICE = "hw:2,0"  # Raspberry Pi headphone jack
 _DEFAULT_GPIO_CHIP = "gpiochip0"
-_DEFAULT_CAPTURE_DEVICE = "plughw:seeed2micvoicec,0"
+_DEFAULT_CAPTURE_DEVICE = "plughw:wm8960soundcard,0"
 _DEFAULT_CAPTURE_RATE = 16000
 
 
