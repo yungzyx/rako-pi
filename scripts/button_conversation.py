@@ -15,8 +15,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import math
 import shutil
+import struct
 import subprocess
+import tempfile
+import wave
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,11 +30,14 @@ from bootstrap import build_pi_application
 from config import Settings
 from orchestrator.orchestrator import TurnInput
 from orchestrator.types import default_user_context
+from voice.types import AudioBuffer
 
 _DEFAULT_BUTTON_PIN = 17
 _DEFAULT_CAPTURE_SECONDS = 5.0
 _DEFAULT_AUDIO_OUTPUT_DEVICE = "hw:2,0"  # Raspberry Pi headphone jack
 _DEFAULT_GPIO_CHIP = "gpiochip0"
+_DEFAULT_CAPTURE_DEVICE = "plughw:seeed2micvoicec,0"
+_DEFAULT_CAPTURE_RATE = 16000
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -59,6 +66,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         help=f"Seconds to listen after button press (default: {_DEFAULT_CAPTURE_SECONDS})",
     )
     parser.add_argument(
+        "--capture-device",
+        default=_DEFAULT_CAPTURE_DEVICE,
+        help=f"ALSA arecord device for mic capture (default: {_DEFAULT_CAPTURE_DEVICE})",
+    )
+    parser.add_argument(
+        "--capture-rate",
+        type=int,
+        default=_DEFAULT_CAPTURE_RATE,
+        help=f"Sample rate for STT capture (default: {_DEFAULT_CAPTURE_RATE})",
+    )
+    parser.add_argument(
         "--audio-device",
         default=_DEFAULT_AUDIO_OUTPUT_DEVICE,
         help=f"ALSA device for mpg123 playback (default: {_DEFAULT_AUDIO_OUTPUT_DEVICE})",
@@ -72,6 +90,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.capture_seconds <= 0:
         parser.error("--capture-seconds must be positive")
+    if args.capture_rate <= 0:
+        parser.error("--capture-rate must be positive")
 
     app_holder: dict[str, Any] = {"app": None}
 
@@ -153,7 +173,11 @@ def _run_gpiomon_loop(*, pin: int, gpio_chip: str, on_press: Callable[[], None])
 def _handle_press(*, app: Any, capture_seconds: float, args: argparse.Namespace) -> None:
     print("\nBotón detectado. Escuchando...", flush=True)
     try:
-        audio = app.capture.capture(capture_seconds)
+        audio = _capture_with_arecord(
+            device=args.capture_device,
+            sample_rate=args.capture_rate,
+            seconds=capture_seconds,
+        )
         transcript = app.stt.transcribe(audio).text.strip()
     except Exception as exc:
         print(f"No pude capturar/transcribir: {exc}", flush=True)
@@ -194,6 +218,44 @@ def _handle_press(*, app: Any, capture_seconds: float, args: argparse.Namespace)
         print("mpg123 no está instalado; no reproduzco audio automáticamente.", flush=True)
         return
     subprocess.run(["mpg123", "-q", "-a", args.audio_device, str(out)], check=False)
+
+
+def _capture_with_arecord(*, device: str, sample_rate: int, seconds: float) -> AudioBuffer:
+    if shutil.which("arecord") is None:
+        raise RuntimeError("arecord is not installed")
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
+        command = [
+            "arecord",
+            "-q",
+            "-D",
+            device,
+            "-f",
+            "S16_LE",
+            "-c",
+            "1",
+            "-r",
+            str(sample_rate),
+            "-d",
+            str(max(1, int(math.ceil(seconds)))),
+            tmp.name,
+        ]
+        subprocess.run(command, check=True)
+        with wave.open(tmp.name, "rb") as wav:
+            data = wav.readframes(wav.getnframes())
+            rate = wav.getframerate()
+            channels = wav.getnchannels()
+
+    samples = struct.unpack("<" + "h" * (len(data) // 2), data) if data else []
+    rms = math.sqrt(sum(sample * sample for sample in samples) / len(samples)) if samples else 0.0
+    peak = max((abs(sample) for sample in samples), default=0)
+    print(
+        f"Audio capturado: {channels}ch {rate}Hz, rms={rms:.1f}, peak={peak}",
+        flush=True,
+    )
+    if peak == 0:
+        print("Aviso: el audio llegó en silencio total desde ALSA.", flush=True)
+    return AudioBuffer(data=data, sample_rate=rate, encoding="LINEAR16")
 
 
 if __name__ == "__main__":
