@@ -296,12 +296,10 @@ def build_pi_application(settings: Settings) -> Application:
 
 
 def _try_real_leds() -> LEDController | None:
-    try:  # pragma: no cover - only loads on Pi
-        from hardware.leds_neopixel import create_pi_neopixel_controller
-
-        return create_pi_neopixel_controller(pin=18, count=12)
-    except Exception:
-        return None
+    # ReSpeaker 2-Mics Pi HAT uses I2S pins, including GPIO18 (PCM_CLK).
+    # Driving NeoPixel/PWM on GPIO18 breaks microphone capture. Keep real LEDs
+    # disabled until Rako has a non-conflicting LED pin/controller configured.
+    return None
 
 
 def _try_real_servos() -> ServoController | None:

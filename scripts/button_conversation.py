@@ -3,7 +3,7 @@
 Default target: ReSpeaker 2-Mics Pi HAT user button, commonly wired to BCM GPIO17.
 
 Flow:
-    button press -> lazy app init -> capture mic audio -> STT -> orchestrator -> TTS -> optional playback
+    button press -> capture mic audio -> lazy app init -> STT -> orchestrator -> TTS -> optional playback
 
 Input audio is never persisted. Only TTS output may be written to /tmp for playback.
 
@@ -99,10 +99,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print("Press the ReSpeaker button, then speak after 'Escuchando...'. Ctrl+C to stop.", flush=True)
 
     def handle_press() -> None:
-        if app_holder["app"] is None:
-            print("Inicializando Rako...", flush=True)
-            app_holder["app"] = build_pi_application(Settings())
-        _handle_press(app=app_holder["app"], capture_seconds=args.capture_seconds, args=args)
+        _handle_press(app_holder=app_holder, capture_seconds=args.capture_seconds, args=args)
 
     try:
         _run_button_loop(
@@ -170,7 +167,9 @@ def _run_gpiomon_loop(*, pin: int, gpio_chip: str, on_press: Callable[[], None])
         on_press()
 
 
-def _handle_press(*, app: Any, capture_seconds: float, args: argparse.Namespace) -> None:
+def _handle_press(
+    *, app_holder: dict[str, Any], capture_seconds: float, args: argparse.Namespace
+) -> None:
     print("\nBotón detectado. Escuchando...", flush=True)
     try:
         audio = _capture_with_arecord(
@@ -178,6 +177,10 @@ def _handle_press(*, app: Any, capture_seconds: float, args: argparse.Namespace)
             sample_rate=args.capture_rate,
             seconds=capture_seconds,
         )
+        if app_holder["app"] is None:
+            print("Inicializando Rako...", flush=True)
+            app_holder["app"] = build_pi_application(Settings())
+        app = app_holder["app"]
         transcript = app.stt.transcribe(audio).text.strip()
     except Exception as exc:
         print(f"No pude capturar/transcribir: {exc}", flush=True)
