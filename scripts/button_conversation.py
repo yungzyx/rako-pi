@@ -34,7 +34,7 @@ from productivity.runtime import maybe_start_focus_from_transcript
 from voice.types import AudioBuffer
 
 _DEFAULT_BUTTON_PIN = 17
-_DEFAULT_CAPTURE_SECONDS = 5.0
+_DEFAULT_CAPTURE_SECONDS = 7.0
 _DEFAULT_AUDIO_OUTPUT_DEVICE = "hw:2,0"  # Raspberry Pi headphone jack
 _DEFAULT_GPIO_CHIP = "gpiochip0"
 _DEFAULT_CAPTURE_DEVICE = "plughw:seeed2micvoicec,0"

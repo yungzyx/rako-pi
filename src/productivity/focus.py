@@ -24,16 +24,30 @@ _START_HINTS = (
     "empezar con",
     "empezar una tarea",
     "hacer un pomodoro",
+    "hazme un pomodoro",
     "pomodoro",
     "focus",
     "foco",
     "estudiar",
     "trabajar en",
 )
+_ASSISTANT_INVOCATION_RE = re.compile(
+    r"^(?:oye|hola|hey)?\s*(?:rako|raco|racko|rackle|raquel)\b[\s,;:.-]*",
+    re.IGNORECASE,
+)
+_LOW_VALUE_TITLES = {"que", "qué", "eso", "algo", "pomodoro", "foco", "tarea"}
 _STOPWORDS = (
     "oye rako",
+    "oye raco",
     "hola rako",
+    "hola raco",
     "hey rako",
+    "hey raco",
+    "rako",
+    "raco",
+    "racko",
+    "rackle",
+    "raquel",
     "por favor",
     "un pomodoro",
     "pomodoro",
@@ -96,7 +110,7 @@ class FocusSession:
 
 
 def parse_focus_intent(transcript: str) -> FocusIntent:
-    text = _normalize(transcript)
+    text = _strip_assistant_invocation(_normalize(transcript))
     should_start = any(hint in text for hint in _START_HINTS)
     minutes = _extract_minutes(text)
     title = _extract_task_title(text) if should_start else None
@@ -148,25 +162,43 @@ def _extract_task_title(text: str) -> str | None:
     title = text
     for prefix in _STOPWORDS:
         title = title.replace(prefix, " ")
+    title = _DURATION_RE.sub(" ", title)
+    para_match = re.search(r"\bpara\s+(?P<title>.+)$", title)
+    if para_match is not None:
+        para_title = _clean_title_words(para_match.group("title"))
+        if para_title:
+            return para_title
     for phrase in (
         "voy a empezar con",
         "voy a empezar",
         "empezar con",
         "trabajar en",
+        "estudiar para",
         "estudiar",
         "hazme",
         "hacer",
         "de",
+        "para",
         "por",
         "durante",
     ):
         title = title.replace(phrase, " ")
-    title = _DURATION_RE.sub(" ", title)
+    return _clean_title_words(title)
+
+
+def _clean_title_words(title: str) -> str | None:
     title = re.sub(r"[^\wáéíóúüñÁÉÍÓÚÜÑ]+", " ", title)
     words = [w for w in title.split() if w]
     if not words:
         return None
-    return " ".join(words[:12]).strip()
+    cleaned = " ".join(words[:12]).strip()
+    if cleaned.lower() in _LOW_VALUE_TITLES:
+        return None
+    return cleaned
+
+
+def _strip_assistant_invocation(text: str) -> str:
+    return _ASSISTANT_INVOCATION_RE.sub("", text).strip()
 
 
 def _normalize(text: str) -> str:

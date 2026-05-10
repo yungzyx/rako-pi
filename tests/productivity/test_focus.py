@@ -26,6 +26,33 @@ def test_parse_focus_intent_defaults_to_25_minutes() -> None:
     assert intent.minutes == 25
 
 
+def test_parse_focus_intent_strips_rako_or_raco_invocation_from_title() -> None:
+    intent = parse_focus_intent("Raco, hazme un pomodoro de 10 minutos para estudiar")
+
+    assert intent.should_start is True
+    assert intent.minutes == 10
+    assert intent.task_title == "estudiar"
+
+
+def test_parse_focus_intent_handles_oye_raco_prefix() -> None:
+    intent = parse_focus_intent("Oye Raco hazme un pomodoro de 15 minutos para cálculo")
+
+    assert intent.task_title == "cálculo"
+
+
+def test_parse_focus_intent_handles_whisper_rako_mishearing() -> None:
+    intent = parse_focus_intent("Rackle, hazme un pomodoro de 10 minutos para estudiar")
+
+    assert intent.task_title == "estudiar"
+
+
+def test_parse_focus_intent_ignores_low_value_task_title() -> None:
+    intent = parse_focus_intent("Rackle, hazme un pomodoro de 10 minutos para que")
+
+    assert intent.should_start is True
+    assert intent.task_title is None
+
+
 def test_parse_focus_intent_ignores_unrelated_text() -> None:
     intent = parse_focus_intent("cómo estuvo mi día")
 
