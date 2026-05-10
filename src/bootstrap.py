@@ -45,6 +45,7 @@ from sync.firebase_client import FakeFirebaseClient, FirebaseClient
 from sync.queue import SyncQueue
 from voice.audio_io import AudioCaptureSource, AudioPlaybackSink
 from voice.stt import GoogleCloudSTT, STTClient
+from voice.stt_openai import OpenAIWhisperSTT
 from voice.tts import ElevenLabsTTS, GoogleCloudTTS, TTSClient
 from voice.types import AudioBuffer, SynthesisResult, TranscriptResult
 from voice.wake_word import SubstringWakeWordDetector, WakeWordDetector
@@ -341,9 +342,19 @@ def _ensure_google_credentials_env(settings: Settings) -> None:
 
 
 def _try_real_stt(settings: Settings) -> STTClient | None:
-    """Construye GoogleCloudSTT si hay credenciales y la lib está
-    disponible. Cae a None para que el caller use el fake — sin crashear
-    si google-cloud-speech no está instalado (CI/dev)."""
+    """Construye el STT real seleccionado.
+
+    `openai_whisper` suele transcribir mejor nombres raros/acentos que Google.
+    Google queda disponible como fallback estable si Whisper no está configurado.
+    """
+    if settings.stt_provider == "openai_whisper":
+        whisper = _try_openai_whisper_stt(settings)
+        if whisper is not None:
+            return whisper
+    return _try_google_stt(settings)
+
+
+def _try_google_stt(settings: Settings) -> STTClient | None:
     if not settings.google_application_credentials:
         return None
     _ensure_google_credentials_env(settings)
@@ -353,6 +364,22 @@ def _try_real_stt(settings: Settings) -> STTClient | None:
         client = SpeechClient()
         return GoogleCloudSTT(client=client, language=settings.google_stt_language)
     except Exception:  # pragma: no cover - lib missing or auth failure
+        return None
+
+
+def _try_openai_whisper_stt(settings: Settings) -> STTClient | None:
+    if not settings.openai_api_key:
+        return None
+    try:  # pragma: no cover - requires openai at runtime
+        from openai import OpenAI
+
+        client = OpenAI(api_key=settings.openai_api_key)
+        return OpenAIWhisperSTT(
+            client=client,
+            model=settings.openai_stt_model,
+            language=settings.google_stt_language,
+        )
+    except Exception:  # pragma: no cover - lib missing or runtime init failure
         return None
 
 

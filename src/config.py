@@ -35,9 +35,11 @@ class Settings(BaseSettings):
     anthropic_timeout_s: float = 15.0
 
     # --- Voz ---
+    stt_provider: Literal["google", "openai_whisper"] = "google"
     tts_provider: Literal["elevenlabs", "google"] = "elevenlabs"
     google_application_credentials: str | None = None
     google_stt_language: str = "es-CL"
+    openai_stt_model: str = "whisper-1"
     google_tts_voice: str = "es-CL-Neural2-A"
     google_tts_speaking_rate: float = 0.95
     elevenlabs_api_key: str | None = None

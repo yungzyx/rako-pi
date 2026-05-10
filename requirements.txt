@@ -14,8 +14,9 @@ langchain-anthropic==0.2.1
 langchain-community==0.3.0
 python-dotenv==1.0.1
 
-# --- LLM cloud -------------------------------------------------------------
+# --- LLM/STT cloud ---------------------------------------------------------
 anthropic==0.39.0
+openai==1.86.0
 
 # --- Voz cloud (STT / TTS) -------------------------------------------------
 google-cloud-speech==2.27.0
