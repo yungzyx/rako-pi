@@ -36,7 +36,7 @@ _DEFAULT_BUTTON_PIN = 17
 _DEFAULT_CAPTURE_SECONDS = 5.0
 _DEFAULT_AUDIO_OUTPUT_DEVICE = "hw:2,0"  # Raspberry Pi headphone jack
 _DEFAULT_GPIO_CHIP = "gpiochip0"
-_DEFAULT_CAPTURE_DEVICE = "plughw:wm8960soundcard,0"
+_DEFAULT_CAPTURE_DEVICE = "plughw:seeed2micvoicec,0"
 _DEFAULT_CAPTURE_RATE = 16000
 
 
@@ -255,7 +255,18 @@ def _capture_with_arecord(*, device: str, sample_rate: int, seconds: float) -> A
     )
     if peak == 0:
         print("Aviso: el audio llegó en silencio total desde ALSA.", flush=True)
+    data = _normalize_pcm16(data, target_peak=24_000)
     return AudioBuffer(data=data, sample_rate=rate, encoding="LINEAR16")
+
+
+def _normalize_pcm16(data: bytes, *, target_peak: int) -> bytes:
+    samples = struct.unpack("<" + "h" * (len(data) // 2), data) if data else []
+    peak = max((abs(sample) for sample in samples), default=0)
+    if peak == 0 or peak <= target_peak:
+        return data
+    scale = target_peak / peak
+    normalized = [max(-32768, min(32767, int(sample * scale))) for sample in samples]
+    return struct.pack("<" + "h" * len(normalized), *normalized)
 
 
 if __name__ == "__main__":

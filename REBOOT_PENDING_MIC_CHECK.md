@@ -1,11 +1,26 @@
-# Pending after reboot
+# ReSpeaker mic status — working
 
-Reason: Installed Seeed-named overlay with both known WM8960 MCLK fix and `"Mic Jack", "MICB"` route.
+Date: 2026-05-10
 
-Backup before change:
-`/boot/firmware/overlays/seeed-2mic-voicecard.dtbo.before-seeed-micbias-20260510-005959`
+Working overlay:
+- `tmp-seeedsound-micbias-fix.dts`
+- Installed as `/boot/firmware/overlays/seeed-2mic-voicecard.dtbo`
 
-Expected:
+Important properties:
 - ALSA card: `seeed2micvoicec`
-- During capture, DAPM `MICB` should be On
-- Capture should show nonzero RMS
+- Capture device for Rako scripts: `plughw:seeed2micvoicec,0`
+- Overlay includes both:
+  - WM8960 `mclk` route
+  - `"Mic Jack", "MICB"` route
+
+Verified after reboot:
+- `MICB: On` during capture
+- Direct capture RMS ~5536, peak ~32250
+- Script capture RMS ~7103, peak ~32757
+
+Backups:
+- `/boot/firmware/overlays/seeed-2mic-voicecard.dtbo.before-seeed-micbias-20260510-005959`
+
+Notes:
+- STT may still fail if audio clips or nobody speaks clearly in the capture window.
+- `scripts/button_conversation.py` normalizes PCM16 peak before sending to STT.
