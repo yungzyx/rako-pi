@@ -154,6 +154,7 @@ def _extract_task_title(text: str) -> str | None:
         "empezar con",
         "trabajar en",
         "estudiar",
+        "hazme",
         "hacer",
         "de",
         "por",

@@ -30,6 +30,7 @@ from bootstrap import build_pi_application
 from config import Settings
 from orchestrator.orchestrator import TurnInput
 from orchestrator.types import default_user_context
+from productivity.runtime import maybe_start_focus_from_transcript
 from voice.types import AudioBuffer
 
 _DEFAULT_BUTTON_PIN = 17
@@ -192,6 +193,12 @@ def _handle_press(
 
     print(f"Tú: {transcript}", flush=True)
     now = datetime.now(UTC)
+    focus = maybe_start_focus_from_transcript(transcript, db=app.db, now=now)
+    if focus is not None:
+        print(f"Rako: {focus.response_text}", flush=True)
+        _synthesize_and_maybe_play(app=app, text=focus.response_text, args=args)
+        return
+
     turn = TurnInput(
         transcript=transcript,
         emotion=None,
@@ -204,9 +211,12 @@ def _handle_press(
     )
     result = app.orchestrator.handle_turn(turn)
     print(f"Rako: {result.text}", flush=True)
+    _synthesize_and_maybe_play(app=app, text=result.text, args=args)
 
+
+def _synthesize_and_maybe_play(*, app: Any, text: str, args: argparse.Namespace) -> None:
     try:
-        synth = app.tts.synthesize(result.text)
+        synth = app.tts.synthesize(text)
     except Exception as exc:
         print(f"No pude sintetizar voz: {exc}", flush=True)
         return
