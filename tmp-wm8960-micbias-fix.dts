@@ -2,18 +2,27 @@
 /plugin/;
 
 / {
-    compatible = "brcm,bcm2711";
+    compatible = "brcm,bcm2835";
 
     fragment@0 {
         target = <&i2s_clk_producer>;
-        frag0: __overlay__ {
-            #clock-cells = <0>;
-            clock-frequency = <12288000>;
+        __overlay__ {
             status = "okay";
         };
     };
 
     fragment@1 {
+        target-path = "/";
+        __overlay__ {
+            wm8960_mclk: wm8960_mclk {
+                compatible = "fixed-clock";
+                #clock-cells = <0>;
+                clock-frequency = <12288000>;
+            };
+        };
+    };
+
+    fragment@2 {
         target = <&i2c1>;
         __overlay__ {
             #address-cells = <1>;
@@ -26,14 +35,13 @@
                 #sound-dai-cells = <0>;
                 AVDD-supply = <&vdd_5v0_reg>;
                 DVDD-supply = <&vdd_3v3_reg>;
-                clocks = <&i2s_clk_producer>;
+                clocks = <&wm8960_mclk>;
                 clock-names = "mclk";
-                wlf,shared-lrclk;
             };
         };
     };
 
-    fragment@2 {
+    fragment@3 {
         target = <&sound>;
         slave_overlay: __overlay__ {
             compatible = "simple-audio-card";
@@ -53,11 +61,9 @@
                 "Speaker", "SPK_LN",
                 "Mic Jack", "MICB",
                 "LINPUT1", "Mic Jack",
-                "LINPUT2", "Mic Jack",
                 "LINPUT3", "Mic Jack",
                 "RINPUT1", "Mic Jack",
-                "RINPUT2", "Mic Jack",
-                "RINPUT3", "Mic Jack";
+                "RINPUT2", "Mic Jack";
 
             simple-audio-card,cpu {
                 sound-dai = <&i2s_clk_producer>;
