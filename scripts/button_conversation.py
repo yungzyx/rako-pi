@@ -3,12 +3,12 @@
 Default target: ReSpeaker 2-Mics Pi HAT user button, commonly wired to BCM GPIO17.
 
 Flow:
-    button press -> capture mic audio -> STT -> orchestrator -> TTS -> optional playback
+    button press -> lazy app init -> capture mic audio -> STT -> orchestrator -> TTS -> optional playback
 
 Input audio is never persisted. Only TTS output may be written to /tmp for playback.
 
 Usage:
-    PYTHONPATH=src .venv/bin/python scripts/button_conversation.py
+    PYTHONPATH=src .venv/bin/python scripts/button_conversation.py --no-playback
     PYTHONPATH=src .venv/bin/python scripts/button_conversation.py --pin 17
 """
 
@@ -20,6 +20,7 @@ import subprocess
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from bootstrap import build_pi_application
 from config import Settings
@@ -43,7 +44,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--gpio-chip",
         default=_DEFAULT_GPIO_CHIP,
-        help=f"GPIO chip for gpiomon fallback (default: {_DEFAULT_GPIO_CHIP})",
+        help=f"GPIO chip for gpiomon backend (default: {_DEFAULT_GPIO_CHIP})",
+    )
+    parser.add_argument(
+        "--backend",
+        choices=("gpiomon", "gpiozero", "auto"),
+        default="gpiomon",
+        help="Button backend. Default is gpiomon because RPi.GPIO edge detection fails on newer kernels.",
     )
     parser.add_argument(
         "--capture-seconds",
@@ -66,29 +73,47 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.capture_seconds <= 0:
         parser.error("--capture-seconds must be positive")
 
-    settings = Settings()
-    app = build_pi_application(settings)
+    app_holder: dict[str, Any] = {"app": None}
 
-    print(f"Rako button listener ready on BCM GPIO{args.pin}.")
-    print("Press the ReSpeaker button, then speak after 'Escuchando...'. Ctrl+C to stop.")
+    print(f"Rako button listener ready on BCM GPIO{args.pin}.", flush=True)
+    print("Press the ReSpeaker button, then speak after 'Escuchando...'. Ctrl+C to stop.", flush=True)
 
     def handle_press() -> None:
-        _handle_press(app=app, capture_seconds=args.capture_seconds, args=args)
+        if app_holder["app"] is None:
+            print("Inicializando Rako...", flush=True)
+            app_holder["app"] = build_pi_application(Settings())
+        _handle_press(app=app_holder["app"], capture_seconds=args.capture_seconds, args=args)
 
     try:
-        _run_button_loop(pin=args.pin, gpio_chip=args.gpio_chip, on_press=handle_press)
+        _run_button_loop(
+            pin=args.pin,
+            gpio_chip=args.gpio_chip,
+            backend=args.backend,
+            on_press=handle_press,
+        )
     except KeyboardInterrupt:
-        print("\nDetenido.")
+        print("\nDetenido.", flush=True)
     finally:
-        app.close()
+        app = app_holder.get("app")
+        if app is not None:
+            app.close()
     return 0
 
 
-def _run_button_loop(*, pin: int, gpio_chip: str, on_press: Callable[[], None]) -> None:
+def _run_button_loop(
+    *, pin: int, gpio_chip: str, backend: str, on_press: Callable[[], None]
+) -> None:
+    if backend == "gpiomon":
+        _run_gpiomon_loop(pin=pin, gpio_chip=gpio_chip, on_press=on_press)
+        return
+    if backend == "gpiozero":
+        _run_gpiozero_loop(pin=pin, on_press=on_press)
+        return
+
     try:
         _run_gpiozero_loop(pin=pin, on_press=on_press)
     except Exception as exc:
-        print(f"gpiozero button backend failed ({exc}); falling back to gpiomon.")
+        print(f"gpiozero button backend failed ({exc}); falling back to gpiomon.", flush=True)
         _run_gpiomon_loop(pin=pin, gpio_chip=gpio_chip, on_press=on_press)
 
 
@@ -103,8 +128,9 @@ def _run_gpiozero_loop(*, pin: int, on_press: Callable[[], None]) -> None:
 
 def _run_gpiomon_loop(*, pin: int, gpio_chip: str, on_press: Callable[[], None]) -> None:
     if shutil.which("gpiomon") is None:
-        raise RuntimeError("gpiomon is not installed and gpiozero backend failed")
+        raise RuntimeError("gpiomon is not installed")
 
+    print(f"Waiting with gpiomon on {gpio_chip} line {pin} (falling edge).", flush=True)
     while True:
         command = [
             "gpiomon",
@@ -124,20 +150,20 @@ def _run_gpiomon_loop(*, pin: int, gpio_chip: str, on_press: Callable[[], None])
         on_press()
 
 
-def _handle_press(*, app, capture_seconds: float, args: argparse.Namespace) -> None:
-    print("\nBotón detectado. Escuchando...")
+def _handle_press(*, app: Any, capture_seconds: float, args: argparse.Namespace) -> None:
+    print("\nBotón detectado. Escuchando...", flush=True)
     try:
         audio = app.capture.capture(capture_seconds)
         transcript = app.stt.transcribe(audio).text.strip()
     except Exception as exc:
-        print(f"No pude capturar/transcribir: {exc}")
+        print(f"No pude capturar/transcribir: {exc}", flush=True)
         return
 
     if not transcript:
-        print("No escuché una frase clara.")
+        print("No escuché una frase clara.", flush=True)
         return
 
-    print(f"Tú: {transcript}")
+    print(f"Tú: {transcript}", flush=True)
     now = datetime.now(UTC)
     turn = TurnInput(
         transcript=transcript,
@@ -150,22 +176,22 @@ def _handle_press(*, app, capture_seconds: float, args: argparse.Namespace) -> N
         now=now,
     )
     result = app.orchestrator.handle_turn(turn)
-    print(f"Rako: {result.text}")
+    print(f"Rako: {result.text}", flush=True)
 
     try:
         synth = app.tts.synthesize(result.text)
     except Exception as exc:
-        print(f"No pude sintetizar voz: {exc}")
+        print(f"No pude sintetizar voz: {exc}", flush=True)
         return
 
     out = Path("/tmp/rako-button-reply.mp3")
     out.write_bytes(synth.audio.data)
-    print(f"Audio TTS guardado en {out}")
+    print(f"Audio TTS guardado en {out}", flush=True)
 
     if args.no_playback:
         return
     if shutil.which("mpg123") is None:
-        print("mpg123 no está instalado; no reproduzco audio automáticamente.")
+        print("mpg123 no está instalado; no reproduzco audio automáticamente.", flush=True)
         return
     subprocess.run(["mpg123", "-q", "-a", args.audio_device, str(out)], check=False)
 
