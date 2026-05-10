@@ -62,7 +62,13 @@ class Settings(BaseSettings):
     sqlite_encryption_key: str | None = None
 
     # --- Wake word ---
+    # `text_stt` es fallback dev: transcribe audio con STT y busca texto.
+    # Para producto, preferir `porcupine` con keyword custom entrenada para Rako.
+    wake_word_engine: Literal["text_stt", "porcupine"] = "text_stt"
     wake_words: str = "hey rako,hola rako,oye rako"
+    porcupine_access_key: str | None = None
+    porcupine_keyword_path: str | None = None
+    porcupine_sensitivity: float = 0.65
 
     # --- Firebase ---
     firebase_credentials_path: str | None = None

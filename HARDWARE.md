@@ -36,6 +36,29 @@ Fecha de actualización: 2026-05-09
   - confirmar modelo/resolución/controlador exacto, por ejemplo SSD1306 128x64 o similar;
   - confirmar dirección I2C con `i2cdetect -y 1` cuando se haga prueba física.
 
+## Activadores de conversación
+
+### Botón físico
+
+- El botón superior del ReSpeaker 2-Mics Pi HAT se usará como activador confiable inmediato.
+- Pin esperado: BCM GPIO17.
+- Script de prueba:
+
+```bash
+cd ~/rako-pi
+source .venv/bin/activate
+PYTHONPATH=src python scripts/button_conversation.py --no-playback
+```
+
+### Wake word acústico
+
+- No usar Google STT como activador principal: confunde “Rako” con palabras como “gato”, “flaco” o “chato”.
+- Motor recomendado: Porcupine con keyword custom entrenada para “Oye Rako” / “Hola Rako”.
+- Config esperada:
+  - `WAKE_WORD_ENGINE=porcupine`
+  - `PORCUPINE_ACCESS_KEY=...`
+  - `PORCUPINE_KEYWORD_PATH=./models/oye-rako.ppn`
+
 ## Reglas de implementación
 
 - Mantener interfaces mockeables para hardware.

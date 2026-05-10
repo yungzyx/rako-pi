@@ -38,8 +38,10 @@ librosa==0.10.2.post1
 chromadb==0.5.15
 sentence-transformers==3.1.1
 
-# --- Wake word (placeholder, ajustar según motor elegido) -----------------
-# pvporcupine==3.0.2   # requiere licencia; alternativas: openWakeWord, snowboy
+# --- Wake word -------------------------------------------------------------
+# Producto: Porcupine con keyword custom .ppn para "Oye Rako".
+# Requiere access key de Picovoice Console y archivo en PORCUPINE_KEYWORD_PATH.
+pvporcupine==3.0.2
 
 # --- Estado local (SQLite + SQLCipher) ------------------------------------
 # pysqlcipher3 requiere build con sqlcipher en la Pi; en dev usar sqlite3 estándar.
