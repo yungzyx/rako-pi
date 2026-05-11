@@ -8,9 +8,13 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import math
 import shutil
+import struct
 import subprocess
 import sys
+import tempfile
+import wave
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -31,15 +35,25 @@ class CheckResult:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check Rako Pi readiness")
+    parser.add_argument("--full", action="store_true", help="Run OLED, record, and sound checks")
+    parser.add_argument("--calibrate", action="store_true", help="Apply the ReSpeaker capture profile first")
     parser.add_argument("--oled", action="store_true", help="Flash OLED eyes briefly")
-    parser.add_argument("--record", action="store_true", help="Record 1s from ReSpeaker and report levels")
+    parser.add_argument("--record", action="store_true", help="Record 2s from ReSpeaker and report levels")
     parser.add_argument("--sound", action="store_true", help="Play Rako cue sounds on audio output")
     parser.add_argument("--audio-device", default="hw:2,0")
     parser.add_argument("--capture-device", default="plughw:seeed2micvoicec,0")
     args = parser.parse_args()
 
+    if args.full:
+        args.oled = True
+        args.record = True
+        args.sound = True
+
     settings = Settings()
-    results = [
+    results = []
+    if args.calibrate:
+        results.append(_check_calibrate())
+    results.extend([
         _check_python(),
         _check_file(Path(".env"), "env file"),
         _check_command("arecord"),
@@ -50,7 +64,7 @@ def main() -> int:
         _check_stt(settings),
         _check_tts(settings),
         _check_database_parent(settings),
-    ]
+    ])
     if args.oled:
         results.append(_check_oled())
     if args.record:
@@ -86,6 +100,16 @@ def _check_command(command: str) -> CheckResult:
     if path is None:
         return CheckResult(command, "fail", "no está instalado o no está en PATH")
     return CheckResult(command, "ok", path)
+
+
+def _check_calibrate() -> CheckResult:
+    script = Path("scripts/setup_respeaker_audio.sh")
+    if not script.exists():
+        return CheckResult("audio calibration", "warn", "no existe scripts/setup_respeaker_audio.sh")
+    code = subprocess.run([str(script)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False)
+    if code.returncode == 0:
+        return CheckResult("audio calibration", "ok", "perfil ReSpeaker aplicado")
+    return CheckResult("audio calibration", "warn", code.stdout.strip() or f"exit {code.returncode}")
 
 
 def _check_alsa_capture_card() -> CheckResult:
@@ -151,13 +175,30 @@ def _check_oled() -> CheckResult:
 
 def _check_record(device: str) -> CheckResult:
     try:
-        capture, _ = _button_tools()
-        audio = capture(device=device, sample_rate=16000, seconds=1)
+        metrics = _record_metrics(device=device, sample_rate=16000, seconds=2)
     except Exception as exc:
         return CheckResult("record", "fail", str(exc))
-    if not audio.data:
-        return CheckResult("record", "fail", "captura vacía")
-    return CheckResult("record", "ok", f"{len(audio.data)} bytes desde {device}")
+    if metrics["peak"] == 0:
+        return CheckResult("record", "fail", "silencio total desde ALSA")
+    peak_ratio = metrics["peak"] / 32768
+    rms_ratio = metrics["rms"] / 32768
+    advice = "nivel sano"
+    status: Status = "ok"
+    if peak_ratio > 0.92:
+        status = "warn"
+        advice = "muy cerca de clipping; baja ganancia o habla más lejos"
+    elif rms_ratio < 0.015:
+        status = "warn"
+        advice = "señal baja; habla más cerca o sube ganancia"
+    return CheckResult(
+        "record",
+        status,
+        (
+            f"{metrics['bytes']} bytes desde {device}; "
+            f"rms={metrics['rms']:.0f} ({rms_ratio:.1%}), "
+            f"peak={metrics['peak']} ({peak_ratio:.1%}) — {advice}"
+        ),
+    )
 
 
 def _check_sound(device: str) -> CheckResult:
@@ -175,6 +216,36 @@ def _check_sound(device: str) -> CheckResult:
     except Exception as exc:
         return CheckResult("sound", "fail", str(exc))
     return CheckResult("sound", "ok", f"cues enviados a {device}")
+
+
+def _record_metrics(*, device: str, sample_rate: int, seconds: int) -> dict[str, float | int]:
+    if shutil.which("arecord") is None:
+        raise RuntimeError("arecord is not installed")
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
+        subprocess.run(
+            [
+                "arecord",
+                "-q",
+                "-D",
+                device,
+                "-f",
+                "S16_LE",
+                "-c",
+                "1",
+                "-r",
+                str(sample_rate),
+                "-d",
+                str(seconds),
+                tmp.name,
+            ],
+            check=True,
+        )
+        with wave.open(tmp.name, "rb") as wav:
+            data = wav.readframes(wav.getnframes())
+    samples = struct.unpack("<" + "h" * (len(data) // 2), data) if data else []
+    rms = math.sqrt(sum(sample * sample for sample in samples) / len(samples)) if samples else 0
+    peak = max((abs(sample) for sample in samples), default=0)
+    return {"bytes": len(data), "rms": rms, "peak": peak}
 
 
 def _button_tools():

@@ -78,12 +78,14 @@ implementación.
 rako-chat
 ```
 
-Ese comando enciende los ojos OLED en modo idle y deja escuchando el botón del
-ReSpeaker. Para pasar argumentos al listener:
+Ese comando aplica el perfil de audio del ReSpeaker, corre un diagnóstico rápido,
+enciende los ojos OLED y deja escuchando el botón del ReSpeaker. Para pasar
+argumentos al listener:
 
 ```bash
 rako-chat --no-playback
 rako-chat --capture-seconds 7 --audio-device hw:2,0
+rako-chat --cue-volume 0.14 --playback-warmup-seconds 0.55
 ```
 
 Si quieres apagar OLED para depurar:
@@ -102,8 +104,19 @@ Chequea Python, `.env`, comandos de audio/GPIO, ReSpeaker, STT, TTS y ruta de
 SQLite. Para pruebas físicas opcionales:
 
 ```bash
-rako-doctor --oled --record --sound
+rako-doctor --full
+rako-doctor --calibrate --full
 ```
+
+### Demo guiada sin botón
+
+```bash
+rako-demo
+```
+
+Muestra ojos, sonidos y una respuesta hablada simulando una sesión de foco. Útil
+para verificar la experiencia completa sin depender del botón ni de una frase
+perfecta.
 
 ### Arranque automático al enchufar/prender la Pi
 

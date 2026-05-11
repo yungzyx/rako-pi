@@ -42,8 +42,8 @@ _DEFAULT_AUDIO_OUTPUT_DEVICE = "hw:2,0"  # Raspberry Pi headphone jack
 _DEFAULT_GPIO_CHIP = "gpiochip0"
 _DEFAULT_CAPTURE_DEVICE = "plughw:seeed2micvoicec,0"
 _DEFAULT_CAPTURE_RATE = 16000
-_DEFAULT_PLAYBACK_WARMUP_SECONDS = 0.35
-_DEFAULT_CUE_VOLUME = 0.18
+_DEFAULT_PLAYBACK_WARMUP_SECONDS = 0.55
+_DEFAULT_CUE_VOLUME = 0.14
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -291,8 +291,8 @@ def _synthesize_and_maybe_play(
     if shutil.which("mpg123") is None:
         print("mpg123 no está instalado; no reproduzco audio automáticamente.", flush=True)
         return
-    _warm_up_audio_device(device=args.audio_device, seconds=args.playback_warmup_seconds)
     _play_cue(kind="reply_start", args=args)
+    _warm_up_audio_device(device=args.audio_device, seconds=args.playback_warmup_seconds)
     if eyes is not None:
         eyes.set_state(RakoVisualState.SPEAKING)
     subprocess.run(["mpg123", "-q", "-a", args.audio_device, str(out)], check=False)
@@ -312,11 +312,11 @@ def _cue_path(*, kind: str, volume: float) -> Path:
     if path.exists():
         return path
     if kind == "listen_start":
-        tones = ((660.0, 0.08), (880.0, 0.11))
+        tones = ((700.0, 0.055), (940.0, 0.08))
     elif kind == "listen_end":
-        tones = ((520.0, 0.08),)
+        tones = ((560.0, 0.055),)
     elif kind == "reply_start":
-        tones = ((740.0, 0.06), (980.0, 0.08), (740.0, 0.06))
+        tones = ((820.0, 0.045), (1040.0, 0.055))
     else:
         raise ValueError(f"unknown cue kind: {kind}")
     _write_tone_sequence(path=path, tones=tones, volume=volume)

@@ -17,20 +17,25 @@ fi
 export PYTHONPATH="${ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}"
 cd "${ROOT}"
 
-EYES_PID=""
-cleanup() {
-  if [[ -n "${EYES_PID}" ]] && kill -0 "${EYES_PID}" 2>/dev/null; then
-    kill "${EYES_PID}" 2>/dev/null || true
-    wait "${EYES_PID}" 2>/dev/null || true
-  fi
-}
-trap cleanup EXIT INT TERM
-
 for arg in "$@"; do
   if [[ "${arg}" == "--help" || "${arg}" == "-h" ]]; then
     exec "${PYTHON}" -u scripts/button_conversation.py "$@"
   fi
 done
+
+if [[ "${RAKO_AUDIO_SETUP:-1}" != "0" && -x scripts/setup_respeaker_audio.sh ]]; then
+  scripts/setup_respeaker_audio.sh >/tmp/rako-audio-setup.log 2>&1 || {
+    echo "Warning: ReSpeaker audio setup failed. See /tmp/rako-audio-setup.log"
+  }
+fi
+
+if [[ "${RAKO_DOCTOR:-1}" != "0" ]]; then
+  echo "Checking Rako readiness..."
+  if ! scripts/rako-doctor; then
+    echo "Rako readiness check failed. Fix blockers or run RAKO_DOCTOR=0 rako-chat to bypass."
+    exit 1
+  fi
+fi
 
 OLED_ARGS=()
 if [[ "${RAKO_OLED:-1}" != "0" ]]; then
