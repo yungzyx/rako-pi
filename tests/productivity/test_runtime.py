@@ -24,6 +24,7 @@ def test_maybe_start_focus_from_transcript_creates_task_and_response(db) -> None
     )
 
     assert result is not None
+    assert result.session is not None
     task = db.tasks.find_by_id(result.session.task_id)
     assert task is not None
     assert task.status is TaskStatus.IN_PROGRESS
@@ -42,6 +43,19 @@ def test_maybe_start_focus_from_transcript_returns_none_for_general_turn(db) -> 
     assert db.tasks.list_pending() == []
 
 
+def test_maybe_start_focus_asks_duration_when_missing(db) -> None:
+    now = datetime(2026, 5, 10, 17, 30, tzinfo=UTC)
+
+    result = maybe_start_focus_from_transcript("Rako, voy a limpiar mi pieza", db=db, now=now)
+
+    assert result is not None
+    assert result.session is None
+    assert result.needs_duration is True
+    assert result.suggested_title == "mi pieza"
+    assert "Por cuántos minutos" in result.response_text
+    assert db.tasks.list_pending() == []
+
+
 def test_maybe_start_focus_mentions_whatsapp_only_when_enabled(db) -> None:
     now = datetime(2026, 5, 10, 17, 30, tzinfo=UTC)
 
@@ -53,5 +67,6 @@ def test_maybe_start_focus_mentions_whatsapp_only_when_enabled(db) -> None:
     )
 
     assert result is not None
+    assert result.session is not None
     assert "WhatsApp" in result.response_text
     assert "Sesión de foco" in result.session.task_title

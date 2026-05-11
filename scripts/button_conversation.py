@@ -262,6 +262,12 @@ def _handle_press(
 
     focus = maybe_start_focus_from_transcript(transcript, db=app.db, now=now)
     if focus is not None:
+        if focus.needs_duration or focus.session is None:
+            eyes.set_state(RakoVisualState.THINKING)
+            print(f"Rako: {focus.response_text}", flush=True)
+            _synthesize_and_maybe_play(app=app, text=focus.response_text, eyes=eyes, args=args)
+            eyes.set_state(RakoVisualState.READY)
+            return
         eyes.set_state(RakoVisualState.FOCUS_RUNNING)
         print(f"Rako: {focus.response_text}", flush=True)
         _synthesize_and_maybe_play(app=app, text=focus.response_text, eyes=eyes, args=args)

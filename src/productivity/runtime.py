@@ -23,9 +23,11 @@ from sync.notification_policy import ExternalNotification, focus_started_notific
 
 @dataclass(frozen=True, slots=True)
 class FocusStartResult:
-    session: FocusSession
+    session: FocusSession | None
     response_text: str
-    notification: ExternalNotification
+    notification: ExternalNotification | None
+    needs_duration: bool = False
+    suggested_title: str | None = None
 
 
 def maybe_start_focus_from_transcript(
@@ -38,6 +40,19 @@ def maybe_start_focus_from_transcript(
     intent = parse_focus_intent(transcript)
     if not intent.should_start:
         return None
+
+    if not intent.duration_was_explicit:
+        title = intent.task_title or "esa actividad"
+        return FocusStartResult(
+            session=None,
+            response_text=(
+                f"Dale. ¿Por cuántos minutos quieres hacer {title}? "
+                "Si quieres, te recomiendo 25 minutos para partir."
+            ),
+            notification=None,
+            needs_duration=True,
+            suggested_title=title,
+        )
 
     title = intent.task_title or "Sesión de foco"
     task = db.tasks.create(create_focus_task(title, now))

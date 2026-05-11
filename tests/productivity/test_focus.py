@@ -31,6 +31,7 @@ def test_parse_focus_intent_understands_natural_activity_duration() -> None:
 
     assert intent.should_start is True
     assert intent.minutes == 30
+    assert intent.duration_was_explicit is True
     assert intent.task_title == "estudiar cálculo"
 
 
@@ -67,6 +68,22 @@ def test_parse_focus_intent_ignores_low_value_task_title() -> None:
 
     assert intent.should_start is True
     assert intent.task_title is None
+
+
+def test_parse_focus_intent_detects_activity_without_duration() -> None:
+    intent = parse_focus_intent("Rako, voy a limpiar mi pieza")
+
+    assert intent.should_start is True
+    assert intent.duration_was_explicit is False
+    assert intent.task_title == "mi pieza"
+
+
+def test_parse_focus_intent_accepts_general_activities() -> None:
+    intent = parse_focus_intent("quiero programar el proyecto 40 minutos")
+
+    assert intent.should_start is True
+    assert intent.duration_was_explicit is True
+    assert intent.task_title == "proyecto"
 
 
 def test_parse_focus_intent_ignores_unrelated_text() -> None:

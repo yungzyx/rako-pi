@@ -28,6 +28,16 @@ _START_HINTS = (
     "empezar con",
     "empezar una tarea",
     "hacer un pomodoro",
+    "hacer",
+    "avanzar",
+    "ordenar",
+    "limpiar",
+    "leer",
+    "escribir",
+    "programar",
+    "practicar",
+    "preparar",
+    "repasar",
     "hazme un pomodoro",
     "pomodoro",
     "focus",
@@ -76,6 +86,7 @@ class FocusIntent:
     should_start: bool
     task_title: str | None
     minutes: int
+    duration_was_explicit: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,10 +129,16 @@ class FocusSession:
 
 def parse_focus_intent(transcript: str) -> FocusIntent:
     text = _strip_assistant_invocation(_normalize(transcript))
+    explicit_duration = _DURATION_RE.search(text) is not None
     should_start = any(hint in text for hint in _START_HINTS)
     minutes = _extract_minutes(text)
     title = _extract_task_title(text) if should_start else None
-    return FocusIntent(should_start=should_start, task_title=title, minutes=minutes)
+    return FocusIntent(
+        should_start=should_start,
+        task_title=title,
+        minutes=minutes,
+        duration_was_explicit=explicit_duration,
+    )
 
 
 def create_focus_task(title: str, now: datetime, *, source: TaskSource = TaskSource.VOICE) -> Task:
@@ -187,6 +204,16 @@ def _extract_task_title(text: str) -> str | None:
         "quiero",
         "necesito",
         "tengo que",
+        "avanzar en",
+        "avanzar",
+        "ordenar",
+        "limpiar",
+        "leer",
+        "escribir",
+        "programar",
+        "practicar",
+        "preparar",
+        "repasar",
         "empezar con",
         "trabajar en",
         "estudiar para",
@@ -207,10 +234,25 @@ def _clean_natural_activity_title(title: str) -> str | None:
     if clean is None:
         return None
     original = clean
-    for prefix in ("empezar con ", "empezar "):
+    remove_action_prefixes = not original.startswith(("leer ", "escribir "))
+    for prefix in (
+        "empezar con ",
+        "empezar ",
+        "programar ",
+        "limpiar ",
+        "ordenar ",
+        "leer ",
+        "escribir ",
+        "practicar ",
+        "preparar ",
+        "repasar ",
+    ):
         if clean.startswith(prefix):
+            if prefix in {"leer ", "escribir "} and not remove_action_prefixes:
+                continue
             clean = clean.removeprefix(prefix).strip()
             break
+    clean = clean.removeprefix("el ").removeprefix("la ").strip()
     if original != clean and clean.startswith("estudiar "):
         clean = clean.removeprefix("estudiar ").strip()
     if clean.lower() in _LOW_VALUE_TITLES:
