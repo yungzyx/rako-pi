@@ -92,6 +92,19 @@ Si quieres apagar OLED para depurar:
 RAKO_OLED=0 rako-chat --no-playback
 ```
 
+### Diagnóstico rápido de producto
+
+```bash
+rako-doctor
+```
+
+Chequea Python, `.env`, comandos de audio/GPIO, ReSpeaker, STT, TTS y ruta de
+SQLite. Para pruebas físicas opcionales:
+
+```bash
+rako-doctor --oled --record --sound
+```
+
 ### Arranque automático al enchufar/prender la Pi
 
 El repo trae una unit opcional en `systemd/rako-chat.service`. No se habilita

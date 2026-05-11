@@ -1,0 +1,194 @@
+"""Rako hardware/config smoke checker.
+
+Run this before demos or after reboots to catch the common product blockers:
+missing commands, wrong STT/TTS config, ReSpeaker capture, OLED, and playback.
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
+
+from config import Settings
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+Status = Literal["ok", "warn", "fail"]
+
+
+@dataclass(frozen=True, slots=True)
+class CheckResult:
+    name: str
+    status: Status
+    detail: str
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Check Rako Pi readiness")
+    parser.add_argument("--oled", action="store_true", help="Flash OLED eyes briefly")
+    parser.add_argument("--record", action="store_true", help="Record 1s from ReSpeaker and report levels")
+    parser.add_argument("--sound", action="store_true", help="Play Rako cue sounds on audio output")
+    parser.add_argument("--audio-device", default="hw:2,0")
+    parser.add_argument("--capture-device", default="plughw:seeed2micvoicec,0")
+    args = parser.parse_args()
+
+    settings = Settings()
+    results = [
+        _check_python(),
+        _check_file(Path(".env"), "env file"),
+        _check_command("arecord"),
+        _check_command("aplay"),
+        _check_command("mpg123"),
+        _check_command("gpiomon"),
+        _check_alsa_capture_card(),
+        _check_stt(settings),
+        _check_tts(settings),
+        _check_database_parent(settings),
+    ]
+    if args.oled:
+        results.append(_check_oled())
+    if args.record:
+        results.append(_check_record(args.capture_device))
+    if args.sound:
+        results.append(_check_sound(args.audio_device))
+
+    for result in results:
+        icon = {"ok": "✅", "warn": "⚠️", "fail": "❌"}[result.status]
+        print(f"{icon} {result.name}: {result.detail}")
+
+    failed = [result for result in results if result.status == "fail"]
+    if failed:
+        print("\nRako doctor found blockers.")
+        return 1
+    print("\nRako doctor: listo para probar.")
+    return 0
+
+
+def _check_python() -> CheckResult:
+    version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    return CheckResult("python", "ok", f"Python {version}")
+
+
+def _check_file(path: Path, name: str) -> CheckResult:
+    if path.exists():
+        return CheckResult(name, "ok", str(path))
+    return CheckResult(name, "warn", f"no existe {path}; se usarán defaults/env shell")
+
+
+def _check_command(command: str) -> CheckResult:
+    path = shutil.which(command)
+    if path is None:
+        return CheckResult(command, "fail", "no está instalado o no está en PATH")
+    return CheckResult(command, "ok", path)
+
+
+def _check_alsa_capture_card() -> CheckResult:
+    if shutil.which("arecord") is None:
+        return CheckResult("ReSpeaker ALSA", "fail", "arecord no disponible")
+    output = _run_text(["arecord", "-L"])
+    if "seeed2micvoicec" in output:
+        return CheckResult("ReSpeaker ALSA", "ok", "capture card seeed2micvoicec visible")
+    return CheckResult("ReSpeaker ALSA", "warn", "no veo seeed2micvoicec en arecord -L")
+
+
+def _check_stt(settings: Settings) -> CheckResult:
+    if settings.stt_provider == "openai_whisper":
+        if not settings.openai_api_key:
+            return CheckResult("STT", "fail", "openai_whisper seleccionado pero falta OPENAI_API_KEY")
+        if importlib.util.find_spec("openai") is None:
+            return CheckResult("STT", "fail", "falta paquete openai")
+        return CheckResult("STT", "ok", f"OpenAI Whisper ({settings.openai_stt_model})")
+    if settings.stt_provider == "google":
+        if not settings.google_application_credentials:
+            return CheckResult("STT", "warn", "Google STT sin GOOGLE_APPLICATION_CREDENTIALS")
+        return CheckResult("STT", "ok", f"Google STT ({settings.google_stt_language})")
+    return CheckResult("STT", "warn", f"proveedor desconocido: {settings.stt_provider}")
+
+
+def _check_tts(settings: Settings) -> CheckResult:
+    if settings.tts_provider == "elevenlabs":
+        if not settings.elevenlabs_api_key:
+            return CheckResult("TTS", "fail", "ElevenLabs seleccionado pero falta ELEVENLABS_API_KEY")
+        return CheckResult("TTS", "ok", f"ElevenLabs voice {settings.elevenlabs_voice_id}")
+    if settings.tts_provider == "google":
+        if not settings.google_application_credentials:
+            return CheckResult("TTS", "warn", "Google TTS sin GOOGLE_APPLICATION_CREDENTIALS")
+        return CheckResult("TTS", "ok", f"Google TTS {settings.google_tts_voice}")
+    return CheckResult("TTS", "warn", f"proveedor desconocido: {settings.tts_provider}")
+
+
+def _check_database_parent(settings: Settings) -> CheckResult:
+    path = Path(settings.sqlite_path)
+    parent = path.parent
+    try:
+        parent.mkdir(parents=True, exist_ok=True)
+        probe = parent / ".rako-doctor-write-test"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+    except Exception as exc:
+        return CheckResult("SQLite path", "fail", f"{parent} no escribible: {exc}")
+    return CheckResult("SQLite path", "ok", str(path))
+
+
+def _check_oled() -> CheckResult:
+    code = subprocess.run(
+        [sys.executable, "eyes.py", "wink", "--seconds", "1"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if code.returncode == 0:
+        return CheckResult("OLED", "ok", "wink render OK")
+    return CheckResult("OLED", "fail", code.stderr.strip() or f"exit {code.returncode}")
+
+
+def _check_record(device: str) -> CheckResult:
+    try:
+        capture, _ = _button_tools()
+        audio = capture(device=device, sample_rate=16000, seconds=1)
+    except Exception as exc:
+        return CheckResult("record", "fail", str(exc))
+    if not audio.data:
+        return CheckResult("record", "fail", "captura vacía")
+    return CheckResult("record", "ok", f"{len(audio.data)} bytes desde {device}")
+
+
+def _check_sound(device: str) -> CheckResult:
+    try:
+        ns = argparse.Namespace(
+            no_playback=False,
+            no_cues=False,
+            audio_device=device,
+            cue_volume=0.18,
+        )
+        _, play_cue = _button_tools()
+        play_cue(kind="listen_start", args=ns)
+        play_cue(kind="listen_end", args=ns)
+        play_cue(kind="reply_start", args=ns)
+    except Exception as exc:
+        return CheckResult("sound", "fail", str(exc))
+    return CheckResult("sound", "ok", f"cues enviados a {device}")
+
+
+def _button_tools():
+    if str(SCRIPT_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPT_DIR))
+    from button_conversation import _capture_with_arecord, _play_cue
+
+    return _capture_with_arecord, _play_cue
+
+
+def _run_text(command: list[str]) -> str:
+    completed = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False)
+    return completed.stdout
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
