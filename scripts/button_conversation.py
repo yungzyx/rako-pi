@@ -20,6 +20,7 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import time
 import wave
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
@@ -28,6 +29,8 @@ from typing import Any
 
 from bootstrap import build_pi_application
 from config import Settings
+from hardware.oled_runtime import OledEyeController
+from hardware.oled_states import RakoVisualState
 from orchestrator.orchestrator import TurnInput
 from orchestrator.types import default_user_context
 from productivity.runtime import maybe_start_focus_from_transcript
@@ -39,6 +42,8 @@ _DEFAULT_AUDIO_OUTPUT_DEVICE = "hw:2,0"  # Raspberry Pi headphone jack
 _DEFAULT_GPIO_CHIP = "gpiochip0"
 _DEFAULT_CAPTURE_DEVICE = "plughw:seeed2micvoicec,0"
 _DEFAULT_CAPTURE_RATE = 16000
+_DEFAULT_PLAYBACK_WARMUP_SECONDS = 0.35
+_DEFAULT_CUE_VOLUME = 0.18
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -83,6 +88,31 @@ def main(argv: Sequence[str] | None = None) -> int:
         help=f"ALSA device for mpg123 playback (default: {_DEFAULT_AUDIO_OUTPUT_DEVICE})",
     )
     parser.add_argument(
+        "--oled",
+        action="store_true",
+        help="Drive OLED eye expressions during the turn",
+    )
+    parser.add_argument(
+        "--no-cues",
+        action="store_true",
+        help="Disable short start/end sounds around a button turn",
+    )
+    parser.add_argument(
+        "--cue-volume",
+        type=float,
+        default=_DEFAULT_CUE_VOLUME,
+        help=f"Cue sound volume from 0.0 to 1.0 (default: {_DEFAULT_CUE_VOLUME})",
+    )
+    parser.add_argument(
+        "--playback-warmup-seconds",
+        type=float,
+        default=_DEFAULT_PLAYBACK_WARMUP_SECONDS,
+        help=(
+            "Seconds of silence to play before TTS so the audio device does not cut "
+            f"the first syllable (default: {_DEFAULT_PLAYBACK_WARMUP_SECONDS})"
+        ),
+    )
+    parser.add_argument(
         "--no-playback",
         action="store_true",
         help="Do not try speaker playback; only print and save TTS output",
@@ -93,14 +123,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--capture-seconds must be positive")
     if args.capture_rate <= 0:
         parser.error("--capture-rate must be positive")
+    if args.playback_warmup_seconds < 0:
+        parser.error("--playback-warmup-seconds cannot be negative")
+    if not 0 <= args.cue_volume <= 1:
+        parser.error("--cue-volume must be between 0.0 and 1.0")
 
     app_holder: dict[str, Any] = {"app": None}
+    eyes = OledEyeController(enabled=args.oled, project_root=Path(__file__).resolve().parents[1])
+    eyes.set_state(RakoVisualState.READY)
 
     print(f"Rako button listener ready on BCM GPIO{args.pin}.", flush=True)
     print("Press the ReSpeaker button, then speak after 'Escuchando...'. Ctrl+C to stop.", flush=True)
 
     def handle_press() -> None:
-        _handle_press(app_holder=app_holder, capture_seconds=args.capture_seconds, args=args)
+        _handle_press(app_holder=app_holder, eyes=eyes, capture_seconds=args.capture_seconds, args=args)
 
     try:
         _run_button_loop(
@@ -112,6 +148,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\nDetenido.", flush=True)
     finally:
+        eyes.close()
         app = app_holder.get("app")
         if app is not None:
             app.close()
@@ -169,34 +206,53 @@ def _run_gpiomon_loop(*, pin: int, gpio_chip: str, on_press: Callable[[], None])
 
 
 def _handle_press(
-    *, app_holder: dict[str, Any], capture_seconds: float, args: argparse.Namespace
+    *,
+    app_holder: dict[str, Any],
+    eyes: OledEyeController,
+    capture_seconds: float,
+    args: argparse.Namespace,
 ) -> None:
     print("\nBotón detectado. Escuchando...", flush=True)
+    eyes.set_state(RakoVisualState.LISTENING)
+    _play_cue(kind="listen_start", args=args)
     try:
         audio = _capture_with_arecord(
             device=args.capture_device,
             sample_rate=args.capture_rate,
             seconds=capture_seconds,
         )
+        eyes.set_state(RakoVisualState.CAPTURED)
+        _play_cue(kind="listen_end", args=args)
         if app_holder["app"] is None:
+            eyes.set_state(RakoVisualState.STARTING)
             print("Inicializando Rako...", flush=True)
             app_holder["app"] = build_pi_application(Settings())
         app = app_holder["app"]
+        eyes.set_state(RakoVisualState.TRANSCRIBING)
         transcript = app.stt.transcribe(audio).text.strip()
     except Exception as exc:
+        eyes.set_state(RakoVisualState.ERROR)
         print(f"No pude capturar/transcribir: {exc}", flush=True)
+        time.sleep(1)
+        eyes.set_state(RakoVisualState.READY)
         return
 
     if not transcript:
+        eyes.set_state(RakoVisualState.ERROR)
         print("No escuché una frase clara.", flush=True)
+        time.sleep(1)
+        eyes.set_state(RakoVisualState.READY)
         return
 
     print(f"Tú: {transcript}", flush=True)
     now = datetime.now(UTC)
+    eyes.set_state(RakoVisualState.THINKING)
     focus = maybe_start_focus_from_transcript(transcript, db=app.db, now=now)
     if focus is not None:
+        eyes.set_state(RakoVisualState.FOCUS_RUNNING)
         print(f"Rako: {focus.response_text}", flush=True)
-        _synthesize_and_maybe_play(app=app, text=focus.response_text, args=args)
+        _synthesize_and_maybe_play(app=app, text=focus.response_text, eyes=eyes, args=args)
+        eyes.set_state(RakoVisualState.READY)
         return
 
     turn = TurnInput(
@@ -211,13 +267,18 @@ def _handle_press(
     )
     result = app.orchestrator.handle_turn(turn)
     print(f"Rako: {result.text}", flush=True)
-    _synthesize_and_maybe_play(app=app, text=result.text, args=args)
+    _synthesize_and_maybe_play(app=app, text=result.text, eyes=eyes, args=args)
+    eyes.set_state(RakoVisualState.READY)
 
 
-def _synthesize_and_maybe_play(*, app: Any, text: str, args: argparse.Namespace) -> None:
+def _synthesize_and_maybe_play(
+    *, app: Any, text: str, eyes: OledEyeController | None = None, args: argparse.Namespace
+) -> None:
     try:
         synth = app.tts.synthesize(text)
     except Exception as exc:
+        if eyes is not None:
+            eyes.set_state(RakoVisualState.ERROR)
         print(f"No pude sintetizar voz: {exc}", flush=True)
         return
 
@@ -230,7 +291,73 @@ def _synthesize_and_maybe_play(*, app: Any, text: str, args: argparse.Namespace)
     if shutil.which("mpg123") is None:
         print("mpg123 no está instalado; no reproduzco audio automáticamente.", flush=True)
         return
+    _warm_up_audio_device(device=args.audio_device, seconds=args.playback_warmup_seconds)
+    _play_cue(kind="reply_start", args=args)
+    if eyes is not None:
+        eyes.set_state(RakoVisualState.SPEAKING)
     subprocess.run(["mpg123", "-q", "-a", args.audio_device, str(out)], check=False)
+
+
+def _play_cue(*, kind: str, args: argparse.Namespace) -> None:
+    if args.no_playback or args.no_cues:
+        return
+    if shutil.which("aplay") is None:
+        return
+    path = _cue_path(kind=kind, volume=args.cue_volume)
+    subprocess.run(["aplay", "-q", "-D", args.audio_device, str(path)], check=False)
+
+
+def _cue_path(*, kind: str, volume: float) -> Path:
+    path = Path(f"/tmp/rako-cue-{kind}-{volume:.2f}.wav")
+    if path.exists():
+        return path
+    if kind == "listen_start":
+        tones = ((660.0, 0.08), (880.0, 0.11))
+    elif kind == "listen_end":
+        tones = ((520.0, 0.08),)
+    elif kind == "reply_start":
+        tones = ((740.0, 0.06), (980.0, 0.08), (740.0, 0.06))
+    else:
+        raise ValueError(f"unknown cue kind: {kind}")
+    _write_tone_sequence(path=path, tones=tones, volume=volume)
+    return path
+
+
+def _write_tone_sequence(*, path: Path, tones: Sequence[tuple[float, float]], volume: float) -> None:
+    sample_rate = 44100
+    frames = bytearray()
+    amplitude = int(32767 * volume)
+    for frequency, seconds in tones:
+        frame_count = int(sample_rate * seconds)
+        for i in range(frame_count):
+            envelope = min(i / max(1, sample_rate * 0.01), 1.0)
+            tail = min((frame_count - i) / max(1, sample_rate * 0.02), 1.0)
+            sample = int(amplitude * envelope * tail * math.sin(2 * math.pi * frequency * i / sample_rate))
+            frames.extend(struct.pack("<h", sample))
+        frames.extend(b"\x00\x00" * int(sample_rate * 0.035))
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(bytes(frames))
+
+
+def _warm_up_audio_device(*, device: str, seconds: float) -> None:
+    if seconds <= 0:
+        return
+    if shutil.which("aplay") is None:
+        time.sleep(min(seconds, 0.5))
+        return
+    path = Path("/tmp/rako-playback-warmup.wav")
+    sample_rate = 44100
+    frame_count = max(1, int(sample_rate * seconds))
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(b"\x00\x00" * frame_count)
+    subprocess.run(["aplay", "-q", "-D", device, str(path)], check=False)
+    time.sleep(0.05)
 
 
 def _capture_with_arecord(*, device: str, sample_rate: int, seconds: float) -> AudioBuffer:

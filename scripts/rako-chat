@@ -32,11 +32,11 @@ for arg in "$@"; do
   fi
 done
 
+OLED_ARGS=()
 if [[ "${RAKO_OLED:-1}" != "0" ]]; then
-  "${PYTHON}" eyes.py neutral --loop &
-  EYES_PID="$!"
-  echo "Rako OLED idle eyes started (pid ${EYES_PID}). Set RAKO_OLED=0 to disable."
+  OLED_ARGS=("--oled")
+  echo "Rako OLED expressions enabled. Set RAKO_OLED=0 to disable."
 fi
 
 echo "Starting Rako button chat. Press Ctrl+C to stop."
-exec "${PYTHON}" -u scripts/button_conversation.py "$@"
+exec "${PYTHON}" -u scripts/button_conversation.py "${OLED_ARGS[@]}" "$@"
