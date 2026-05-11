@@ -19,6 +19,7 @@ import math
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import time
 import wave
@@ -111,6 +112,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "Seconds of silence to play before TTS so the audio device does not cut "
             f"the first syllable (default: {_DEFAULT_PLAYBACK_WARMUP_SECONDS})"
         ),
+    )
+    parser.add_argument(
+        "--no-focus-countdown",
+        action="store_true",
+        help="Do not launch the OLED/spoken countdown after focus intents",
     )
     parser.add_argument(
         "--no-playback",
@@ -247,12 +253,23 @@ def _handle_press(
     print(f"Tú: {transcript}", flush=True)
     now = datetime.now(UTC)
     eyes.set_state(RakoVisualState.THINKING)
+    music_response = _handle_music_intent(transcript, args=args)
+    if music_response is not None:
+        print(f"Rako: {music_response}", flush=True)
+        _synthesize_and_maybe_play(app=app, text=music_response, eyes=eyes, args=args)
+        eyes.set_state(RakoVisualState.READY)
+        return
+
     focus = maybe_start_focus_from_transcript(transcript, db=app.db, now=now)
     if focus is not None:
         eyes.set_state(RakoVisualState.FOCUS_RUNNING)
         print(f"Rako: {focus.response_text}", flush=True)
         _synthesize_and_maybe_play(app=app, text=focus.response_text, eyes=eyes, args=args)
-        eyes.set_state(RakoVisualState.READY)
+        if not args.no_focus_countdown:
+            eyes.close()
+            _launch_focus_countdown(focus=focus, args=args)
+        else:
+            eyes.set_state(RakoVisualState.READY)
         return
 
     turn = TurnInput(
@@ -269,6 +286,44 @@ def _handle_press(
     print(f"Rako: {result.text}", flush=True)
     _synthesize_and_maybe_play(app=app, text=result.text, eyes=eyes, args=args)
     eyes.set_state(RakoVisualState.READY)
+
+
+def _handle_music_intent(transcript: str, *, args: argparse.Namespace) -> str | None:
+    text = transcript.lower()
+    mentions_music = any(word in text for word in ("música", "musica", "chill", "relajante", "lofi"))
+    if not mentions_music:
+        return None
+    command = [sys.executable, str(Path(__file__).resolve().parent / "music_mode.py")]
+    if any(phrase in text for phrase in ("para la música", "detén la música", "apaga la música", "stop music", "sin música")):
+        subprocess.run([*command, "stop"], check=False)
+        return "Listo, apagué la música."
+    subprocess.run([*command, "start", "--audio-device", args.audio_device], check=False)
+    return "Listo, puse un ambiente chill suave para estudiar. Si quieres que lo apague, dime: Rako, para la música."
+
+
+def _launch_focus_countdown(*, focus: Any, args: argparse.Namespace) -> None:
+    minutes = max(1, int(focus.session.duration.total_seconds() // 60))
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve().parent / "focus_countdown.py"),
+        "--title",
+        focus.session.task_title,
+        "--minutes",
+        str(minutes),
+        "--audio-device",
+        args.audio_device,
+        "--cue-volume",
+        str(args.cue_volume),
+        "--playback-warmup-seconds",
+        str(args.playback_warmup_seconds),
+    ]
+    if args.no_playback:
+        command.append("--no-playback")
+    if args.no_cues:
+        command.append("--no-cues")
+    if not args.oled:
+        command.append("--no-oled")
+    subprocess.Popen(command, cwd=str(Path(__file__).resolve().parents[1]))
 
 
 def _synthesize_and_maybe_play(

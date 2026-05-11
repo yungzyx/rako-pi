@@ -108,6 +108,32 @@ rako-doctor --full
 rako-doctor --calibrate --full
 ```
 
+### Foco con countdown en OLED
+
+Desde `rako-chat`, frases como estas crean un bloque de foco y lanzan un
+countdown visual en la OLED:
+
+```text
+Rako, voy a estudiar cálculo 30 minutos
+Rako, hazme un pomodoro de 10 minutos para leer papers
+```
+
+Al terminar, Rako avisa por voz y sugiere una pausa breve. Para probar el timer
+sin esperar minutos reales:
+
+```bash
+PYTHONPATH=src python scripts/focus_countdown.py --title "estudiar cálculo" --minutes 1 --seconds 5 --no-oled --no-playback
+```
+
+### Música chill local
+
+```text
+Rako, pon música chill
+Rako, para la música
+```
+
+Por ahora es un ambiente local generado por Rako, sin Spotify/YouTube.
+
 ### Demo guiada sin botón
 
 ```bash

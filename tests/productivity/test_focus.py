@@ -26,6 +26,22 @@ def test_parse_focus_intent_defaults_to_25_minutes() -> None:
     assert intent.minutes == 25
 
 
+def test_parse_focus_intent_understands_natural_activity_duration() -> None:
+    intent = parse_focus_intent("Rako, voy a estudiar cálculo 30 minutos")
+
+    assert intent.should_start is True
+    assert intent.minutes == 30
+    assert intent.task_title == "estudiar cálculo"
+
+
+def test_parse_focus_intent_understands_need_to_activity_duration() -> None:
+    intent = parse_focus_intent("necesito leer papers por 45 minutos")
+
+    assert intent.should_start is True
+    assert intent.minutes == 45
+    assert intent.task_title == "leer papers"
+
+
 def test_parse_focus_intent_strips_rako_or_raco_invocation_from_title() -> None:
     intent = parse_focus_intent("Raco, hazme un pomodoro de 10 minutos para estudiar")
 

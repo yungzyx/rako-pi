@@ -19,6 +19,10 @@ _DEFAULT_FOCUS_MINUTES = 25
 _MIN_FOCUS_MINUTES = 1
 _MAX_FOCUS_MINUTES = 180
 _DURATION_RE = re.compile(r"(?P<minutes>\d{1,3})\s*(?:minutos?|mins?|m)\b", re.IGNORECASE)
+_NATURAL_ACTIVITY_RE = re.compile(
+    r"\b(?:voy a|quiero|necesito|tengo que)\s+(?P<title>[\wáéíóúüñÁÉÍÓÚÜÑ ]+?)\s+(?:por\s+|durante\s+)?\d{1,3}\s*(?:minutos?|mins?|m)\b",
+    re.IGNORECASE,
+)
 _START_HINTS = (
     "voy a empezar",
     "empezar con",
@@ -30,6 +34,9 @@ _START_HINTS = (
     "foco",
     "estudiar",
     "trabajar en",
+    "necesito",
+    "tengo que",
+    "quiero",
 )
 _ASSISTANT_INVOCATION_RE = re.compile(
     r"^(?:oye|hola|hey)?\s*(?:rako|raco|racko|rackle|raquel)\b[\s,;:.-]*",
@@ -162,6 +169,11 @@ def _extract_task_title(text: str) -> str | None:
     title = text
     for prefix in _STOPWORDS:
         title = title.replace(prefix, " ")
+    natural_match = _NATURAL_ACTIVITY_RE.search(title)
+    if natural_match is not None:
+        natural_title = _clean_natural_activity_title(natural_match.group("title"))
+        if natural_title:
+            return natural_title
     title = _DURATION_RE.sub(" ", title)
     para_match = re.search(r"\bpara\s+(?P<title>.+)$", title)
     if para_match is not None:
@@ -171,6 +183,10 @@ def _extract_task_title(text: str) -> str | None:
     for phrase in (
         "voy a empezar con",
         "voy a empezar",
+        "voy a",
+        "quiero",
+        "necesito",
+        "tengo que",
         "empezar con",
         "trabajar en",
         "estudiar para",
@@ -184,6 +200,22 @@ def _extract_task_title(text: str) -> str | None:
     ):
         title = title.replace(phrase, " ")
     return _clean_title_words(title)
+
+
+def _clean_natural_activity_title(title: str) -> str | None:
+    clean = _clean_title_words(title)
+    if clean is None:
+        return None
+    original = clean
+    for prefix in ("empezar con ", "empezar "):
+        if clean.startswith(prefix):
+            clean = clean.removeprefix(prefix).strip()
+            break
+    if original != clean and clean.startswith("estudiar "):
+        clean = clean.removeprefix("estudiar ").strip()
+    if clean.lower() in _LOW_VALUE_TITLES:
+        return None
+    return clean or None
 
 
 def _clean_title_words(title: str) -> str | None:
