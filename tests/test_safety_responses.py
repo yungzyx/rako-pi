@@ -34,6 +34,10 @@ def _signal(*reasons: CrisisReason, level: CrisisLevel = CrisisLevel.CRISIS) -> 
         CrisisReason.PANIC_BUTTON_APP,
         CrisisReason.KEYWORDS_IDEATION,
         CrisisReason.KEYWORDS_SELFHARM,
+        CrisisReason.KEYWORDS_GOODBYE,
+        CrisisReason.KEYWORDS_ABUSE_SEXUAL,
+        CrisisReason.KEYWORDS_HARM_OTHERS,
+        CrisisReason.KEYWORDS_DANGEROUS_ACCESS,
         CrisisReason.SUSTAINED_EMOTIONAL_EXTREME,
         CrisisReason.PROLONGED_INACTIVITY_AFTER_DISTRESS,
     ],
@@ -91,9 +95,17 @@ def test_crisis_signal_with_only_elevated_reason_falls_back_safely() -> None:
 
 def test_response_text_contains_no_diagnosis_or_motivation_template() -> None:
     # No promesas vacías, no diagnósticos.
-    forbidden = ("todo va a estar bien", "no es para tanto", "diagnóstico")
+    forbidden = ("todo va a estar bien", "no es para tanto", "diagnóstico", "eres fuerte")
     response = pick_response(_signal(CrisisReason.KEYWORDS_IDEATION))
 
     text = response.text.lower()
     for phrase in forbidden:
         assert phrase not in text, f"forbidden phrase present: {phrase}"
+
+
+def test_crisis_response_contains_udd_resources_and_confirmation() -> None:
+    response = pick_response(_signal(CrisisReason.KEYWORDS_IDEATION))
+
+    assert "+56 2 2820 3419" in response.text
+    assert "800 200 125" in response.text
+    assert "¿Puedes decirme que vas a contactar a alguno de estos?" in response.text

@@ -206,7 +206,7 @@ def test_sustained_emotional_extreme_bypasses_llm() -> None:
     assert len(journal.entries) == 1
 
 
-def test_elevated_emotional_state_does_not_bypass_but_is_noted() -> None:
+def test_elevated_emotional_state_uses_curated_support_not_llm() -> None:
     from datetime import timedelta
 
     history = tuple(
@@ -220,9 +220,22 @@ def test_elevated_emotional_state_does_not_bypass_but_is_noted() -> None:
 
     result = orch.handle_turn(_input(emotion_history=history))
 
-    assert result.kind is TurnKind.LLM_RESPONSE
-    assert len(llm.calls) == 1
+    assert result.kind is TurnKind.ELEVATED_SUPPORT
+    assert len(llm.calls) == 0
     assert result.metadata.get("elevated") is True
+    assert "Bienestar UDD" in result.text
+
+
+def test_mental_health_topic_redirects_without_llm() -> None:
+    orch, retriever, llm, _ = _build_orchestrator()
+
+    result = orch.handle_turn(_input(transcript="creo que tengo ansiedad"))
+
+    assert result.kind is TurnKind.SCOPE_REDIRECT
+    assert llm.calls == []
+    assert retriever.queries == []
+    assert "supera mi rol" in result.text
+    assert "+56 2 2820 3419" in result.text
 
 
 def test_turn_result_carries_chunk_ids_for_traceability() -> None:

@@ -25,6 +25,11 @@ from rag.client import Retriever
 from safety.detector import detect_crisis
 from safety.protocol import CrisisProtocol
 from safety.responses import pick_response
+from safety.scope import (
+    build_elevated_support_response,
+    build_scope_redirect_response,
+    mentions_mental_health_topic,
+)
 from safety.types import (
     CrisisInput,
     CrisisLevel,
@@ -40,6 +45,8 @@ _RAG_MAX_QUERY_LEN = 500
 class TurnKind(Enum):
     LLM_RESPONSE = "LLM_RESPONSE"
     CRISIS_PROTOCOL = "CRISIS_PROTOCOL"
+    SCOPE_REDIRECT = "SCOPE_REDIRECT"
+    ELEVATED_SUPPORT = "ELEVATED_SUPPORT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +88,10 @@ class Orchestrator:
 
         if signal.should_bypass_llm:
             return self._handle_crisis(signal)
+        if mentions_mental_health_topic(input.transcript):
+            return self._handle_scope_redirect()
+        if signal.level is CrisisLevel.ELEVATED:
+            return self._handle_elevated_support()
 
         return self._handle_llm_turn(input, signal)
 
@@ -109,6 +120,28 @@ class Orchestrator:
                 "reasons": tuple(r.name for r in signal.reasons),
                 "response_id": outcome.response_id,
             },
+        )
+
+    def _handle_scope_redirect(self) -> TurnResult:
+        return TurnResult(
+            kind=TurnKind.SCOPE_REDIRECT,
+            text=build_scope_redirect_response(),
+            audio_path=None,
+            rag_chunk_ids=(),
+            notify_contact=False,
+            show_resources=True,
+            metadata={"reason": "mental_health_scope"},
+        )
+
+    def _handle_elevated_support(self) -> TurnResult:
+        return TurnResult(
+            kind=TurnKind.ELEVATED_SUPPORT,
+            text=build_elevated_support_response(),
+            audio_path=None,
+            rag_chunk_ids=(),
+            notify_contact=False,
+            show_resources=True,
+            metadata={"elevated": True},
         )
 
     def _handle_llm_turn(self, input: TurnInput, signal: CrisisSignal) -> TurnResult:

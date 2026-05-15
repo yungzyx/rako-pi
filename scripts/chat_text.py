@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from bootstrap import build_pi_application
@@ -33,7 +33,7 @@ def main() -> int:
             if not text:
                 continue
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             turn_in = TurnInput(
                 transcript=text,
                 emotion=None,

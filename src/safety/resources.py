@@ -1,7 +1,6 @@
-"""Recursos de derivación profesional (Chile).
+"""Recursos de derivación profesional (UDD + Chile).
 
-Datos públicos. Mantener actualizado. Cuando se valide con profesional
-y se sumen líneas regionales, extender la tupla.
+Datos públicos. Mantener actualizado y visible sin depender de clicks.
 """
 
 from __future__ import annotations
@@ -17,29 +16,81 @@ class HelpResource:
     available: str
 
 
+UDD_RESOURCES: tuple[HelpResource, ...] = (
+    HelpResource(
+        name="Unidad de Convivencia y Salud Mental — Dirección de Bienestar UDD",
+        contact="+56 2 2820 3419 | bienestar.apoyoestudiantil@udd.cl | www.bienestarestudiantil.udd.cl",
+        description="Orientación y emergencias psicológicas 24/7 para estudiantes.",
+        available="24 horas",
+    ),
+    HelpResource(
+        name="CADA UDD — Centro de Apoyo al Desempeño Académico",
+        contact="800 200 125 / 800 718 700 | cada.udd.cl",
+        description="Apoyo psicopedagógico, gestión del tiempo y bienestar universitario.",
+        available="Horario institucional",
+    ),
+    HelpResource(
+        name="SPI — Servicio de Psicología Integral UDD",
+        contact=(
+            "(56 2) 2327 9278 / (56 2) 2327 9170 | WhatsApp +56 9 8821 9885 | "
+            "spi.santiago@udd.cl | psicologia.udd.cl/servicio-de-psicologia-integral"
+        ),
+        description="Atención psicológica individual.",
+        available="Lunes a viernes, 09:00 a 19:00",
+    ),
+    HelpResource(
+        name="VIVE UDD",
+        contact="vive.udd.cl/santiago",
+        description="Actividades, comunidad, deporte, cultura y liderazgo estudiantil.",
+        available="Según calendario UDD",
+    ),
+)
+
+
 CHILE_HELPLINES: tuple[HelpResource, ...] = (
     HelpResource(
         name="Salud Responde",
         contact="600 360 7777",
-        description="Línea pública del Ministerio de Salud, atención en salud mental.",
-        available="24 horas",
-    ),
-    HelpResource(
-        name="*4141 Salud Mental",
-        contact="*4141",
-        description="Línea de prevención del suicidio desde teléfonos móviles.",
+        description="Línea pública del Ministerio de Salud.",
         available="24 horas",
     ),
     HelpResource(
         name="Línea Libre",
-        contact="1515",
-        description="Apoyo psicológico para niños, niñas y jóvenes (4-24 años).",
-        available="Lun-Dom 11:00-23:00",
+        contact="800 200 818",
+        description="Apoyo para jóvenes.",
+        available="Gratuito",
     ),
     HelpResource(
-        name="Fono Drogas y Alcohol",
-        contact="1412",
-        description="Orientación frente a consumo problemático.",
+        name="Hablemos de Todo",
+        contact="hablemosdetodo.minsal.cl",
+        description="Orientación pública para jóvenes.",
+        available="Web",
+    ),
+    HelpResource(
+        name="SAMU",
+        contact="131",
+        description="Emergencia médica inmediata.",
         available="24 horas",
     ),
 )
+
+
+def render_crisis_resources() -> str:
+    return (
+        "Recursos disponibles ahora:\n"
+        "- Unidad de Convivencia y Salud Mental — Bienestar UDD: +56 2 2820 3419, "
+        "bienestar.apoyoestudiantil@udd.cl, www.bienestarestudiantil.udd.cl\n"
+        "- CADA UDD: 800 200 125 / 800 718 700, cada.udd.cl\n"
+        "- SPI UDD: (56 2) 2327 9278 / (56 2) 2327 9170, WhatsApp +56 9 8821 9885, "
+        "spi.santiago@udd.cl\n"
+        "- Salud Responde: 600 360 7777, 24/7\n"
+        "- Línea Libre: 800 200 818\n"
+        "- SAMU: 131 si hay emergencia médica inmediata"
+    )
+
+
+def render_soft_udd_resources() -> str:
+    return (
+        "Si necesitas hablar con alguien de la UDD, Bienestar UDD está en "
+        "+56 2 2820 3419 y CADA UDD en 800 200 125 / 800 718 700."
+    )

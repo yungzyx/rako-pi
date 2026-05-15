@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from safety.resources import render_crisis_resources
 from safety.types import CrisisLevel, CrisisReason, CrisisSignal
 
 
@@ -32,14 +33,15 @@ def _prerecorded(id_: str) -> str:
     return f"{_PRERECORDED_DIR}/{id_}.wav"
 
 
+_CRISIS_RESOURCES = render_crisis_resources()
+_CONFIRMATION = "¿Puedes decirme que vas a contactar a alguno de estos?"
+
 _RESPONSES: dict[str, CrisisResponse] = {
     "ideation": CrisisResponse(
         id="ideation",
         text=(
-            "Estoy aquí contigo. Lo que estás sintiendo es real y no "
-            "tienes que estar solo en esto. Voy a avisar a tu persona "
-            "de confianza para que esté contigo, y te dejo a la mano una "
-            "línea de ayuda. ¿Puedes quedarte conmigo un momento?"
+            "Eso que dijiste me importa. No tienes que estar solo en esto.\n"
+            f"{_CRISIS_RESOURCES}\n{_CONFIRMATION}"
         ),
         audio_path=_prerecorded("ideation"),
         activates_trusted_contact=True,
@@ -47,10 +49,8 @@ _RESPONSES: dict[str, CrisisResponse] = {
     "selfharm": CrisisResponse(
         id="selfharm",
         text=(
-            "Te escucho. Lo que sientes ahora es muy difícil. Estoy aquí "
-            "contigo. Voy a avisar a tu persona de confianza para que "
-            "esté contigo, y te muestro recursos para que no estés solo "
-            "en este momento."
+            "Escuché que hablaste de hacerte daño. No tienes que estar solo en esto.\n"
+            f"{_CRISIS_RESOURCES}\n{_CONFIRMATION}"
         ),
         audio_path=_prerecorded("selfharm"),
         activates_trusted_contact=True,
@@ -58,9 +58,8 @@ _RESPONSES: dict[str, CrisisResponse] = {
     "panic": CrisisResponse(
         id="panic",
         text=(
-            "Estoy contigo. Respira a tu ritmo. Voy a avisar a tu "
-            "persona de confianza ahora mismo. No te tienes que ir a "
-            "ningún lado, yo me quedo aquí."
+            "Activaste ayuda inmediata. No tienes que estar solo en esto.\n"
+            f"{_CRISIS_RESOURCES}\n{_CONFIRMATION}"
         ),
         audio_path=_prerecorded("panic"),
         activates_trusted_contact=True,
@@ -68,9 +67,8 @@ _RESPONSES: dict[str, CrisisResponse] = {
     "sustained_distress": CrisisResponse(
         id="sustained_distress",
         text=(
-            "Te he sentido muy cargado este rato. No tienes que "
-            "explicarme nada. Estoy aquí. Si quieres, le aviso a tu "
-            "persona de confianza para que te acompañe."
+            "Estoy detectando que esto puede necesitar apoyo humano. No tienes que estar solo en esto.\n"
+            f"{_CRISIS_RESOURCES}\n{_CONFIRMATION}"
         ),
         audio_path=_prerecorded("sustained_distress"),
         activates_trusted_contact=True,
@@ -78,9 +76,8 @@ _RESPONSES: dict[str, CrisisResponse] = {
     "inactivity_followup": CrisisResponse(
         id="inactivity_followup",
         text=(
-            "Hola. Hace un rato te sentí mal y desde entonces ha estado "
-            "todo en silencio. Solo quería estar acá por si me "
-            "necesitas. No tienes que responder ahora."
+            "Hace un rato noté una señal importante y luego silencio. No tienes que estar solo en esto.\n"
+            f"{_CRISIS_RESOURCES}\n{_CONFIRMATION}"
         ),
         audio_path=_prerecorded("inactivity_followup"),
         activates_trusted_contact=False,
@@ -92,6 +89,10 @@ _RESPONSES: dict[str, CrisisResponse] = {
 _REASON_PRIORITY: tuple[tuple[CrisisReason, str], ...] = (
     (CrisisReason.KEYWORDS_IDEATION, "ideation"),
     (CrisisReason.KEYWORDS_SELFHARM, "selfharm"),
+    (CrisisReason.KEYWORDS_GOODBYE, "ideation"),
+    (CrisisReason.KEYWORDS_ABUSE_SEXUAL, "sustained_distress"),
+    (CrisisReason.KEYWORDS_HARM_OTHERS, "sustained_distress"),
+    (CrisisReason.KEYWORDS_DANGEROUS_ACCESS, "selfharm"),
     (CrisisReason.PANIC_BUTTON_PHYSICAL, "panic"),
     (CrisisReason.PANIC_BUTTON_APP, "panic"),
     (CrisisReason.SUSTAINED_EMOTIONAL_EXTREME, "sustained_distress"),

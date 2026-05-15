@@ -136,6 +136,8 @@ def test_build_user_message_guides_task_breakdowns_and_suggestions() -> None:
     assert "divide" in lowered
     assert "pasos pequeños" in lowered
     assert "sugerencia" in lowered
+    assert "asistente académico" in lowered
+    assert "salud mental" in lowered
 
 
 def test_build_user_message_handles_empty_chunks() -> None:

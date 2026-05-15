@@ -151,6 +151,23 @@ def test_selfharm_does_not_trigger_on_clearly_unrelated(phrase: str) -> None:
     assert isinstance(signal.level, CrisisLevel)
 
 
+@pytest.mark.parametrize(
+    ("phrase", "reason"),
+    [
+        ("quiero desaparecer", CrisisReason.KEYWORDS_GOODBYE),
+        ("quiero tomar café con cloro", CrisisReason.KEYWORDS_DANGEROUS_ACCESS),
+        ("qué pasaría si alguien tomara cloro", CrisisReason.KEYWORDS_DANGEROUS_ACCESS),
+        ("me violaron", CrisisReason.KEYWORDS_ABUSE_SEXUAL),
+        ("voy a matar a alguien", CrisisReason.KEYWORDS_HARM_OTHERS),
+    ],
+)
+def test_red_flag_language_triggers_crisis(phrase: str, reason: CrisisReason) -> None:
+    signal = detect_crisis(_input(transcript=phrase))
+
+    assert signal.level is CrisisLevel.CRISIS
+    assert reason in signal.reasons
+
+
 # ---------------------------------------------------------------------------
 # Sustained emotional extreme
 # ---------------------------------------------------------------------------

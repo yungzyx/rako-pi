@@ -32,9 +32,12 @@ from bootstrap import build_pi_application
 from config import Settings
 from hardware.oled_runtime import OledEyeController
 from hardware.oled_states import RakoVisualState
-from orchestrator.orchestrator import TurnInput
+from orchestrator.orchestrator import TurnInput, TurnKind
 from orchestrator.types import default_user_context
 from productivity.runtime import maybe_start_focus_from_transcript
+from safety.detector import detect_crisis
+from safety.scope import mentions_mental_health_topic
+from safety.types import CrisisInput
 from voice.types import AudioBuffer
 
 _DEFAULT_BUTTON_PIN = 17
@@ -45,6 +48,9 @@ _DEFAULT_CAPTURE_DEVICE = "plughw:seeed2micvoicec,0"
 _DEFAULT_CAPTURE_RATE = 16000
 _DEFAULT_PLAYBACK_WARMUP_SECONDS = 0.55
 _DEFAULT_CUE_VOLUME = 0.14
+_DEFAULT_END_SILENCE_SECONDS = 1.5
+_DEFAULT_VAD_THRESHOLD = 350
+_DEFAULT_VAD_FRAME_MS = 100
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -114,6 +120,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--end-silence-seconds",
+        type=float,
+        default=_DEFAULT_END_SILENCE_SECONDS,
+        help=(
+            "Silence required after the last detected word before sending audio to STT "
+            f"(default: {_DEFAULT_END_SILENCE_SECONDS})"
+        ),
+    )
+    parser.add_argument(
+        "--vad-threshold",
+        type=int,
+        default=_DEFAULT_VAD_THRESHOLD,
+        help=f"PCM16 RMS threshold used for speech/silence trimming (default: {_DEFAULT_VAD_THRESHOLD})",
+    )
+    parser.add_argument(
+        "--no-vad-trim",
+        action="store_true",
+        help="Disable end-of-turn VAD trimming before STT",
+    )
+    parser.add_argument(
         "--no-focus-countdown",
         action="store_true",
         help="Do not launch the OLED/spoken countdown after focus intents",
@@ -131,6 +157,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--capture-rate must be positive")
     if args.playback_warmup_seconds < 0:
         parser.error("--playback-warmup-seconds cannot be negative")
+    if args.end_silence_seconds < 0:
+        parser.error("--end-silence-seconds cannot be negative")
+    if args.vad_threshold < 0:
+        parser.error("--vad-threshold cannot be negative")
     if not 0 <= args.cue_volume <= 1:
         parser.error("--cue-volume must be between 0.0 and 1.0")
 
@@ -226,6 +256,9 @@ def _handle_press(
             device=args.capture_device,
             sample_rate=args.capture_rate,
             seconds=capture_seconds,
+            end_silence_seconds=args.end_silence_seconds,
+            vad_threshold=args.vad_threshold,
+            vad_trim=not args.no_vad_trim,
         )
         eyes.set_state(RakoVisualState.CAPTURED)
         _play_cue(kind="listen_end", args=args)
@@ -253,6 +286,14 @@ def _handle_press(
     print(f"Tú: {transcript}", flush=True)
     now = datetime.now(UTC)
     eyes.set_state(RakoVisualState.THINKING)
+
+    guardrail_result = _guardrail_result_for_transcript(app=app, transcript=transcript, now=now)
+    if guardrail_result is not None:
+        print(f"Rako: {guardrail_result.text}", flush=True)
+        _synthesize_and_maybe_play(app=app, text=guardrail_result.text, eyes=eyes, args=args)
+        eyes.set_state(RakoVisualState.READY)
+        return
+
     music_response = _handle_music_intent(transcript, args=args)
     if music_response is not None:
         print(f"Rako: {music_response}", flush=True)
@@ -292,6 +333,36 @@ def _handle_press(
     print(f"Rako: {result.text}", flush=True)
     _synthesize_and_maybe_play(app=app, text=result.text, eyes=eyes, args=args)
     eyes.set_state(RakoVisualState.READY)
+
+
+def _guardrail_result_for_transcript(*, app: Any, transcript: str, now: datetime) -> Any | None:
+    signal = detect_crisis(
+        CrisisInput(
+            transcript=transcript,
+            emotion_history=(),
+            panic_button=None,
+            last_high_distress_at=None,
+            last_interaction_at=None,
+            now=now,
+        )
+    )
+    if not signal.should_bypass_llm and not mentions_mental_health_topic(transcript):
+        return None
+
+    turn = TurnInput(
+        transcript=transcript,
+        emotion=None,
+        panic_button=None,
+        emotion_history=(),
+        last_high_distress_at=None,
+        last_interaction_at=None,
+        user_context=default_user_context(now),
+        now=now,
+    )
+    result = app.orchestrator.handle_turn(turn)
+    if result.kind in {TurnKind.CRISIS_PROTOCOL, TurnKind.SCOPE_REDIRECT}:
+        return result
+    return None
 
 
 def _handle_music_intent(transcript: str, *, args: argparse.Namespace) -> str | None:
@@ -421,7 +492,15 @@ def _warm_up_audio_device(*, device: str, seconds: float) -> None:
     time.sleep(0.05)
 
 
-def _capture_with_arecord(*, device: str, sample_rate: int, seconds: float) -> AudioBuffer:
+def _capture_with_arecord(
+    *,
+    device: str,
+    sample_rate: int,
+    seconds: float,
+    end_silence_seconds: float = _DEFAULT_END_SILENCE_SECONDS,
+    vad_threshold: int = _DEFAULT_VAD_THRESHOLD,
+    vad_trim: bool = True,
+) -> AudioBuffer:
     if shutil.which("arecord") is None:
         raise RuntimeError("arecord is not installed")
 
@@ -456,8 +535,61 @@ def _capture_with_arecord(*, device: str, sample_rate: int, seconds: float) -> A
     )
     if peak == 0:
         print("Aviso: el audio llegó en silencio total desde ALSA.", flush=True)
+    if vad_trim:
+        trimmed = _trim_after_end_of_turn_pcm16(
+            data,
+            sample_rate=rate,
+            end_silence_seconds=end_silence_seconds,
+            threshold=vad_threshold,
+        )
+        if len(trimmed) != len(data):
+            print(
+                "End-of-turn detectado: "
+                f"{len(data) / max(1, rate * 2):.2f}s -> {len(trimmed) / max(1, rate * 2):.2f}s "
+                f"(silencio ≥ {end_silence_seconds:.1f}s)",
+                flush=True,
+            )
+        data = trimmed
     data = _normalize_pcm16(data, target_peak=24_000)
     return AudioBuffer(data=data, sample_rate=rate, encoding="LINEAR16")
+
+
+def _trim_after_end_of_turn_pcm16(
+    data: bytes,
+    *,
+    sample_rate: int,
+    end_silence_seconds: float = _DEFAULT_END_SILENCE_SECONDS,
+    threshold: int = _DEFAULT_VAD_THRESHOLD,
+    frame_ms: int = _DEFAULT_VAD_FRAME_MS,
+) -> bytes:
+    """Trim audio after the user's full turn.
+
+    Whisper returns only final transcripts in this app, so the remaining risk is
+    answering before the user has really stopped. We keep audio through the last
+    speech frame plus the configured silence tail (default 1.5s) and never cut
+    inside speech. If no speech is detected, return the original buffer so STT
+    can decide whether it is empty/noisy.
+    """
+    if not data or sample_rate <= 0 or end_silence_seconds <= 0 or frame_ms <= 0:
+        return data
+    sample_count = len(data) // 2
+    if sample_count == 0:
+        return data
+    samples = struct.unpack("<" + "h" * sample_count, data)
+    frame_samples = max(1, int(sample_rate * frame_ms / 1000))
+    last_voice_sample: int | None = None
+    for start in range(0, sample_count, frame_samples):
+        frame = samples[start : start + frame_samples]
+        if not frame:
+            continue
+        rms = math.sqrt(sum(sample * sample for sample in frame) / len(frame))
+        if rms >= threshold:
+            last_voice_sample = min(sample_count, start + len(frame))
+    if last_voice_sample is None:
+        return data
+    silence_tail_samples = int(sample_rate * end_silence_seconds)
+    keep_samples = min(sample_count, last_voice_sample + silence_tail_samples)
+    return data[: keep_samples * 2]
 
 
 def _normalize_pcm16(data: bytes, *, target_peak: int) -> bytes:

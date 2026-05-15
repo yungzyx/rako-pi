@@ -83,11 +83,49 @@ _IDEATION_PATTERNS: tuple[_Pattern, ...] = (
 
 _SELFHARM_PATTERNS: tuple[_Pattern, ...] = (
     _Pattern("cortarme"),
+    _Pattern("me cortaria"),
     _Pattern("me corte"),
     _Pattern("hacerme dano"),
     _Pattern("me hice dano"),
     _Pattern("lastimarme"),
     _Pattern("autolesionarme"),
+    _Pattern("quemarme"),
+    _Pattern("golpearme"),
+    _Pattern("dejar de comer"),
+)
+
+_GOODBYE_PATTERNS: tuple[_Pattern, ...] = (
+    _Pattern("quiero desaparecer"),
+    _Pattern("ya no quiero estar"),
+    _Pattern("dormir para siempre"),
+    _Pattern("no tiene sentido seguir"),
+    _Pattern("les haria un favor a todos"),
+    _Pattern("ya para que"),
+)
+
+_ABUSE_SEXUAL_PATTERNS: tuple[_Pattern, ...] = (
+    _Pattern("abuso sexual"),
+    _Pattern("abusaron de mi"),
+    _Pattern("me abusaron"),
+    _Pattern("violacion"),
+    _Pattern("me violaron"),
+)
+
+_HARM_OTHERS_PATTERNS: tuple[_Pattern, ...] = (
+    _Pattern("quiero matar a"),
+    _Pattern("voy a matar a"),
+    _Pattern("quiero herir a"),
+    _Pattern("voy a herir a"),
+    _Pattern("hacerle dano a"),
+)
+
+_DANGEROUS_ACCESS_PATTERNS: tuple[_Pattern, ...] = (
+    _Pattern("cafe con cloro"),
+    _Pattern("tomar cloro"),
+    _Pattern("que pasa si uno toma"),
+    _Pattern("que pasaria si alguien tomara"),
+    _Pattern("conseguir un arma"),
+    _Pattern("preparar veneno"),
 )
 
 
@@ -114,6 +152,14 @@ def detect_crisis(input: CrisisInput) -> CrisisSignal:
             reasons.append(CrisisReason.KEYWORDS_IDEATION)
         if _matches_any(normalized, _SELFHARM_PATTERNS):
             reasons.append(CrisisReason.KEYWORDS_SELFHARM)
+        if _matches_any(normalized, _GOODBYE_PATTERNS):
+            reasons.append(CrisisReason.KEYWORDS_GOODBYE)
+        if _matches_any(normalized, _ABUSE_SEXUAL_PATTERNS):
+            reasons.append(CrisisReason.KEYWORDS_ABUSE_SEXUAL)
+        if _matches_any(normalized, _HARM_OTHERS_PATTERNS):
+            reasons.append(CrisisReason.KEYWORDS_HARM_OTHERS)
+        if _matches_any(normalized, _DANGEROUS_ACCESS_PATTERNS):
+            reasons.append(CrisisReason.KEYWORDS_DANGEROUS_ACCESS)
 
     if _is_sustained_extreme(input.emotion_history, input.now):
         reasons.append(CrisisReason.SUSTAINED_EMOTIONAL_EXTREME)

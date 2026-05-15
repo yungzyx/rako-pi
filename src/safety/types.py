@@ -29,6 +29,10 @@ class CrisisReason(Enum):
     PANIC_BUTTON_APP = auto()
     KEYWORDS_IDEATION = auto()
     KEYWORDS_SELFHARM = auto()
+    KEYWORDS_GOODBYE = auto()
+    KEYWORDS_ABUSE_SEXUAL = auto()
+    KEYWORDS_HARM_OTHERS = auto()
+    KEYWORDS_DANGEROUS_ACCESS = auto()
     SUSTAINED_EMOTIONAL_EXTREME = auto()
     PROLONGED_INACTIVITY_AFTER_DISTRESS = auto()
     EMOTIONAL_DISTRESS = auto()  # solo para nivel ELEVATED
