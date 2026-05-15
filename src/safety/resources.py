@@ -77,15 +77,9 @@ CHILE_HELPLINES: tuple[HelpResource, ...] = (
 
 def render_crisis_resources() -> str:
     return (
-        "Recursos disponibles ahora:\n"
-        "- Unidad de Convivencia y Salud Mental — Bienestar UDD: +56 2 2820 3419, "
-        "bienestar.apoyoestudiantil@udd.cl, www.bienestarestudiantil.udd.cl\n"
-        "- CADA UDD: 800 200 125 / 800 718 700, cada.udd.cl\n"
-        "- SPI UDD: (56 2) 2327 9278 / (56 2) 2327 9170, WhatsApp +56 9 8821 9885, "
-        "spi.santiago@udd.cl\n"
-        "- Salud Responde: 600 360 7777, 24/7\n"
-        "- Línea Libre: 800 200 818\n"
-        "- SAMU: 131 si hay emergencia médica inmediata"
+        "Contacta ahora a Bienestar UDD: +56 2 2820 3419. "
+        "Si hay emergencia inmediata, llama al SAMU: 131. "
+        "Te envío la información completa al WhatsApp."
     )
 
 

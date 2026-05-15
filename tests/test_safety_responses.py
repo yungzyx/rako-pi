@@ -103,9 +103,12 @@ def test_response_text_contains_no_diagnosis_or_motivation_template() -> None:
         assert phrase not in text, f"forbidden phrase present: {phrase}"
 
 
-def test_crisis_response_contains_udd_resources_and_confirmation() -> None:
+def test_crisis_response_contains_short_udd_resources_and_confirmation() -> None:
     response = pick_response(_signal(CrisisReason.KEYWORDS_IDEATION))
 
+    assert "Bienestar UDD" in response.text
     assert "+56 2 2820 3419" in response.text
-    assert "800 200 125" in response.text
+    assert "SAMU: 131" in response.text
+    assert "Te envío la información completa al WhatsApp" in response.text
+    assert "800 200 125" not in response.text
     assert "¿Puedes decirme que vas a contactar a alguno de estos?" in response.text

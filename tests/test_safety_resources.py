@@ -23,13 +23,15 @@ def test_salud_responde_is_present() -> None:
     assert any("salud responde" in n for n in names)
 
 
-def test_udd_resources_include_required_contacts() -> None:
+def test_crisis_resources_are_short_for_voice() -> None:
     rendered = render_crisis_resources()
 
     assert "+56 2 2820 3419" in rendered
-    assert "800 200 125" in rendered
-    assert "+56 9 8821 9885" in rendered
-    assert "600 360 7777" in rendered
+    assert "SAMU: 131" in rendered
+    assert "WhatsApp" in rendered
+    assert "800 200 125" not in rendered
+    assert "+56 9 8821 9885" not in rendered
+    assert len(rendered) < 180
 
 
 def test_resources_are_immutable() -> None:
