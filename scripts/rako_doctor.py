@@ -36,9 +36,13 @@ class CheckResult:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check Rako Pi readiness")
     parser.add_argument("--full", action="store_true", help="Run OLED, record, and sound checks")
-    parser.add_argument("--calibrate", action="store_true", help="Apply the ReSpeaker capture profile first")
+    parser.add_argument(
+        "--calibrate", action="store_true", help="Apply the ReSpeaker capture profile first"
+    )
     parser.add_argument("--oled", action="store_true", help="Flash OLED eyes briefly")
-    parser.add_argument("--record", action="store_true", help="Record 2s from ReSpeaker and report levels")
+    parser.add_argument(
+        "--record", action="store_true", help="Record 2s from ReSpeaker and report levels"
+    )
     parser.add_argument("--sound", action="store_true", help="Play Rako cue sounds on audio output")
     parser.add_argument("--audio-device", default="hw:2,0")
     parser.add_argument("--capture-device", default="plughw:seeed2micvoicec,0")
@@ -53,18 +57,20 @@ def main() -> int:
     results = []
     if args.calibrate:
         results.append(_check_calibrate())
-    results.extend([
-        _check_python(),
-        _check_file(Path(".env"), "env file"),
-        _check_command("arecord"),
-        _check_command("aplay"),
-        _check_command("mpg123"),
-        _check_command("gpiomon"),
-        _check_alsa_capture_card(),
-        _check_stt(settings),
-        _check_tts(settings),
-        _check_database_parent(settings),
-    ])
+    results.extend(
+        [
+            _check_python(),
+            _check_file(Path(".env"), "env file"),
+            _check_command("arecord"),
+            _check_command("aplay"),
+            _check_command("mpg123"),
+            _check_command("gpiomon"),
+            _check_alsa_capture_card(),
+            _check_stt(settings),
+            _check_tts(settings),
+            _check_database_parent(settings),
+        ]
+    )
     if args.oled:
         results.append(_check_oled())
     if args.record:
@@ -105,11 +111,17 @@ def _check_command(command: str) -> CheckResult:
 def _check_calibrate() -> CheckResult:
     script = Path("scripts/setup_respeaker_audio.sh")
     if not script.exists():
-        return CheckResult("audio calibration", "warn", "no existe scripts/setup_respeaker_audio.sh")
-    code = subprocess.run([str(script)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False)
+        return CheckResult(
+            "audio calibration", "warn", "no existe scripts/setup_respeaker_audio.sh"
+        )
+    code = subprocess.run(
+        [str(script)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False
+    )
     if code.returncode == 0:
         return CheckResult("audio calibration", "ok", "perfil ReSpeaker aplicado")
-    return CheckResult("audio calibration", "warn", code.stdout.strip() or f"exit {code.returncode}")
+    return CheckResult(
+        "audio calibration", "warn", code.stdout.strip() or f"exit {code.returncode}"
+    )
 
 
 def _check_alsa_capture_card() -> CheckResult:
@@ -124,7 +136,9 @@ def _check_alsa_capture_card() -> CheckResult:
 def _check_stt(settings: Settings) -> CheckResult:
     if settings.stt_provider == "openai_whisper":
         if not settings.openai_api_key:
-            return CheckResult("STT", "fail", "openai_whisper seleccionado pero falta OPENAI_API_KEY")
+            return CheckResult(
+                "STT", "fail", "openai_whisper seleccionado pero falta OPENAI_API_KEY"
+            )
         if importlib.util.find_spec("openai") is None:
             return CheckResult("STT", "fail", "falta paquete openai")
         return CheckResult("STT", "ok", f"OpenAI Whisper ({settings.openai_stt_model})")
@@ -138,7 +152,9 @@ def _check_stt(settings: Settings) -> CheckResult:
 def _check_tts(settings: Settings) -> CheckResult:
     if settings.tts_provider == "elevenlabs":
         if not settings.elevenlabs_api_key:
-            return CheckResult("TTS", "fail", "ElevenLabs seleccionado pero falta ELEVENLABS_API_KEY")
+            return CheckResult(
+                "TTS", "fail", "ElevenLabs seleccionado pero falta ELEVENLABS_API_KEY"
+            )
         return CheckResult("TTS", "ok", f"ElevenLabs voice {settings.elevenlabs_voice_id}")
     if settings.tts_provider == "google":
         if not settings.google_application_credentials:
@@ -257,7 +273,9 @@ def _button_tools():
 
 
 def _run_text(command: list[str]) -> str:
-    completed = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False)
+    completed = subprocess.run(
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False
+    )
     return completed.stdout
 
 

@@ -22,7 +22,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Start a Rako focus countdown")
     parser.add_argument("title", help="Task title")
     parser.add_argument("--minutes", type=int, default=25)
-    parser.add_argument("--seconds", type=int, default=None, help="Override duration for quick tests")
+    parser.add_argument(
+        "--seconds", type=int, default=None, help="Override duration for quick tests"
+    )
     parser.add_argument("--db", default="data/rako.db")
     parser.add_argument("--oled", action="store_true", help="Show OLED eyes while timer runs")
     parser.add_argument("--tick-seconds", type=float, default=60.0)
@@ -44,12 +46,17 @@ def main() -> int:
                 duration=timedelta(seconds=args.seconds),
                 status=session.status,
             )
-        print(f"Rako focus started: {session.task_title} ({_format_duration(session.duration)})", flush=True)
+        print(
+            f"Rako focus started: {session.task_title} ({_format_duration(session.duration)})",
+            flush=True,
+        )
         if args.oled:
             eyes = _start_eyes("neutral")
         runner = CountdownRunner(config=CountdownConfig(tick_seconds=args.tick_seconds))
         completed = runner.run(session, on_tick=_print_tick, on_done=_print_done)
-        db.tasks.update_status(completed.task_id, status=TaskStatus.DONE, completed_at=completed.ends_at)
+        db.tasks.update_status(
+            completed.task_id, status=TaskStatus.DONE, completed_at=completed.ends_at
+        )
         if eyes is not None:
             _stop_process(eyes)
             _start_eyes_once("happy", seconds=3)

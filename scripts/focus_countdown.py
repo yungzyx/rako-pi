@@ -33,7 +33,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run Rako focus countdown")
     parser.add_argument("--title", required=True)
     parser.add_argument("--minutes", type=int, required=True)
-    parser.add_argument("--seconds", type=int, default=None, help="Override duration for quick tests")
+    parser.add_argument(
+        "--seconds", type=int, default=None, help="Override duration for quick tests"
+    )
     parser.add_argument("--audio-device", default="hw:2,0")
     parser.add_argument("--cue-volume", type=float, default=0.14)
     parser.add_argument("--playback-warmup-seconds", type=float, default=0.55)

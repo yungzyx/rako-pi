@@ -169,10 +169,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     eyes.set_state(RakoVisualState.READY)
 
     print(f"Rako button listener ready on BCM GPIO{args.pin}.", flush=True)
-    print("Press the ReSpeaker button, then speak after 'Escuchando...'. Ctrl+C to stop.", flush=True)
+    print(
+        "Press the ReSpeaker button, then speak after 'Escuchando...'. Ctrl+C to stop.", flush=True
+    )
 
     def handle_press() -> None:
-        _handle_press(app_holder=app_holder, eyes=eyes, capture_seconds=args.capture_seconds, args=args)
+        _handle_press(
+            app_holder=app_holder, eyes=eyes, capture_seconds=args.capture_seconds, args=args
+        )
 
     try:
         _run_button_loop(
@@ -367,11 +371,22 @@ def _guardrail_result_for_transcript(*, app: Any, transcript: str, now: datetime
 
 def _handle_music_intent(transcript: str, *, args: argparse.Namespace) -> str | None:
     text = transcript.lower()
-    mentions_music = any(word in text for word in ("música", "musica", "chill", "relajante", "lofi"))
+    mentions_music = any(
+        word in text for word in ("música", "musica", "chill", "relajante", "lofi")
+    )
     if not mentions_music:
         return None
     command = [sys.executable, str(Path(__file__).resolve().parent / "music_mode.py")]
-    if any(phrase in text for phrase in ("para la música", "detén la música", "apaga la música", "stop music", "sin música")):
+    if any(
+        phrase in text
+        for phrase in (
+            "para la música",
+            "detén la música",
+            "apaga la música",
+            "stop music",
+            "sin música",
+        )
+    ):
         subprocess.run([*command, "stop"], check=False)
         return "Listo, apagué la música."
     subprocess.run([*command, "start", "--audio-device", args.audio_device], check=False)
@@ -455,7 +470,9 @@ def _cue_path(*, kind: str, volume: float) -> Path:
     return path
 
 
-def _write_tone_sequence(*, path: Path, tones: Sequence[tuple[float, float]], volume: float) -> None:
+def _write_tone_sequence(
+    *, path: Path, tones: Sequence[tuple[float, float]], volume: float
+) -> None:
     sample_rate = 44100
     frames = bytearray()
     amplitude = int(32767 * volume)
@@ -464,7 +481,9 @@ def _write_tone_sequence(*, path: Path, tones: Sequence[tuple[float, float]], vo
         for i in range(frame_count):
             envelope = min(i / max(1, sample_rate * 0.01), 1.0)
             tail = min((frame_count - i) / max(1, sample_rate * 0.02), 1.0)
-            sample = int(amplitude * envelope * tail * math.sin(2 * math.pi * frequency * i / sample_rate))
+            sample = int(
+                amplitude * envelope * tail * math.sin(2 * math.pi * frequency * i / sample_rate)
+            )
             frames.extend(struct.pack("<h", sample))
         frames.extend(b"\x00\x00" * int(sample_rate * 0.035))
     with wave.open(str(path), "wb") as wav:

@@ -33,7 +33,9 @@ _HEALTH_TOPIC_PATTERNS = (
 
 def mentions_mental_health_topic(text: str) -> bool:
     normalized = _normalize(text)
-    return any(re.search(rf"\b{re.escape(pattern)}\b", normalized) for pattern in _HEALTH_TOPIC_PATTERNS)
+    return any(
+        re.search(rf"\b{re.escape(pattern)}\b", normalized) for pattern in _HEALTH_TOPIC_PATTERNS
+    )
 
 
 def build_scope_redirect_response() -> str:

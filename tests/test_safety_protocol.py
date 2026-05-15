@@ -61,9 +61,9 @@ def _signal(*reasons: CrisisReason, level: CrisisLevel = CrisisLevel.CRISIS) -> 
     )
 
 
-def _build_protocol() -> tuple[
-    CrisisProtocol, _FakeVoice, _FakeLighting, _FakeNotifier, _FakeJournal
-]:
+def _build_protocol() -> (
+    tuple[CrisisProtocol, _FakeVoice, _FakeLighting, _FakeNotifier, _FakeJournal]
+):
     voice, lighting, notifier, journal = (
         _FakeVoice(),
         _FakeLighting(),
