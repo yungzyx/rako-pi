@@ -24,6 +24,7 @@ def test_parse_focus_intent_defaults_to_25_minutes() -> None:
 
     assert intent.should_start is True
     assert intent.minutes == 25
+    assert intent.task_title is None
 
 
 def test_parse_focus_intent_understands_natural_activity_duration() -> None:
@@ -91,6 +92,19 @@ def test_parse_focus_intent_ignores_unrelated_text() -> None:
 
     assert intent.should_start is False
     assert intent.task_title is None
+
+
+def test_parse_focus_intent_sends_help_seeking_study_turns_to_chat() -> None:
+    phrases = (
+        "No sé qué hacer ahora.",
+        "No sé cómo empezar a estudiar con una tarea.",
+        "Rako, por dónde empiezo a estudiar?",
+    )
+    for phrase in phrases:
+        intent = parse_focus_intent(phrase)
+
+        assert intent.should_start is False
+        assert intent.task_title is None
 
 
 def test_parse_focus_intent_never_turns_crisis_or_clinical_language_into_timer() -> None:

@@ -8,6 +8,7 @@ queue safe sync/WhatsApp notifications.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
@@ -28,7 +29,6 @@ _START_HINTS = (
     "empezar con",
     "empezar una tarea",
     "hacer un pomodoro",
-    "hacer",
     "avanzar",
     "ordenar",
     "limpiar",
@@ -51,7 +51,20 @@ _ASSISTANT_INVOCATION_RE = re.compile(
     r"^(?:oye|hola|hey)?\s*(?:rako|raco|racko|rackle|raquel)\b[\s,;:.-]*",
     re.IGNORECASE,
 )
-_LOW_VALUE_TITLES = {"que", "qué", "eso", "algo", "pomodoro", "foco", "tarea"}
+_LOW_VALUE_TITLES = {"a", "que", "qué", "eso", "algo", "pomodoro", "foco", "tarea"}
+_HELP_SEEKING_FOCUS_BLOCKERS = (
+    "ayuda para empezar",
+    "ayudame a empezar",
+    "como empiezo",
+    "como empezar",
+    "como partir",
+    "no se como",
+    "no se que hacer",
+    "no se por donde empezar",
+    "por donde empiezo",
+    "por donde empezar",
+)
+
 _UNSAFE_FOCUS_PATTERNS = (
     # Crisis / violence / dangerous access.
     "abuso sexual",
@@ -177,7 +190,7 @@ class FocusSession:
 
 def parse_focus_intent(transcript: str) -> FocusIntent:
     text = _strip_assistant_invocation(_normalize(transcript))
-    if _contains_unsafe_focus_language(text):
+    if _contains_unsafe_focus_language(text) or _contains_help_seeking_language(text):
         return FocusIntent(should_start=False, task_title=None, minutes=_DEFAULT_FOCUS_MINUTES)
     explicit_duration = _DURATION_RE.search(text) is not None
     should_start = any(hint in text for hint in _START_HINTS)
@@ -265,6 +278,7 @@ def _extract_task_title(text: str) -> str | None:
         "preparar",
         "repasar",
         "empezar con",
+        "empezar a",
         "trabajar en",
         "estudiar para",
         "estudiar",
@@ -326,8 +340,19 @@ def _strip_assistant_invocation(text: str) -> str:
 
 
 def _contains_unsafe_focus_language(text: str) -> bool:
-    return any(pattern in text for pattern in _UNSAFE_FOCUS_PATTERNS)
+    plain = _strip_accents(text)
+    return any(pattern in plain for pattern in _UNSAFE_FOCUS_PATTERNS)
+
+
+def _contains_help_seeking_language(text: str) -> bool:
+    plain = _strip_accents(text)
+    return any(pattern in plain for pattern in _HELP_SEEKING_FOCUS_BLOCKERS)
 
 
 def _normalize(text: str) -> str:
     return " ".join(text.lower().strip().split())
+
+
+def _strip_accents(text: str) -> str:
+    decomposed = unicodedata.normalize("NFD", text)
+    return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")

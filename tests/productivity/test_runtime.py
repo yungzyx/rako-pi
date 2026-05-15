@@ -43,6 +43,19 @@ def test_maybe_start_focus_from_transcript_returns_none_for_general_turn(db) -> 
     assert db.tasks.list_pending() == []
 
 
+def test_maybe_start_focus_returns_none_for_help_seeking_study_turn(db) -> None:
+    now = datetime(2026, 5, 10, 17, 30, tzinfo=UTC)
+
+    result = maybe_start_focus_from_transcript(
+        "No sé cómo empezar a estudiar con una tarea.",
+        db=db,
+        now=now,
+    )
+
+    assert result is None
+    assert db.tasks.list_pending() == []
+
+
 def test_maybe_start_focus_asks_duration_when_missing(db) -> None:
     now = datetime(2026, 5, 10, 17, 30, tzinfo=UTC)
 
