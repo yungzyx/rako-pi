@@ -162,6 +162,7 @@ def test_selfharm_does_not_trigger_on_clearly_unrelated(phrase: str) -> None:
         ("qué pasaría si alguien tomara cloro", CrisisReason.KEYWORDS_DANGEROUS_ACCESS),
         ("me violaron", CrisisReason.KEYWORDS_ABUSE_SEXUAL),
         ("voy a matar a alguien", CrisisReason.KEYWORDS_HARM_OTHERS),
+        ("Quiero hacer daño a un compañero.", CrisisReason.KEYWORDS_HARM_OTHERS),
     ],
 )
 def test_red_flag_language_triggers_crisis(phrase: str, reason: CrisisReason) -> None:

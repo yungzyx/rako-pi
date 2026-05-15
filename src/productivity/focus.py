@@ -52,6 +52,32 @@ _ASSISTANT_INVOCATION_RE = re.compile(
     re.IGNORECASE,
 )
 _LOW_VALUE_TITLES = {"que", "qué", "eso", "algo", "pomodoro", "foco", "tarea"}
+_UNSAFE_FOCUS_PATTERNS = (
+    "matar",
+    "matarme",
+    "suicidar",
+    "suicidarme",
+    "morir",
+    "morirme",
+    "hacer dano",
+    "hacer daño",
+    "hacerme dano",
+    "hacerme daño",
+    "hacerle dano",
+    "hacerle daño",
+    "lastimar",
+    "lastimarme",
+    "herir",
+    "cortar",
+    "cortarme",
+    "quemar",
+    "quemarme",
+    "cloro",
+    "veneno",
+    "arma",
+    "violaron",
+    "abuso sexual",
+)
 _STOPWORDS = (
     "oye rako",
     "oye raco",
@@ -128,6 +154,8 @@ class FocusSession:
 
 def parse_focus_intent(transcript: str) -> FocusIntent:
     text = _strip_assistant_invocation(_normalize(transcript))
+    if _contains_unsafe_focus_language(text):
+        return FocusIntent(should_start=False, task_title=None, minutes=_DEFAULT_FOCUS_MINUTES)
     explicit_duration = _DURATION_RE.search(text) is not None
     should_start = any(hint in text for hint in _START_HINTS)
     minutes = _extract_minutes(text)
@@ -272,6 +300,10 @@ def _clean_title_words(title: str) -> str | None:
 
 def _strip_assistant_invocation(text: str) -> str:
     return _ASSISTANT_INVOCATION_RE.sub("", text).strip()
+
+
+def _contains_unsafe_focus_language(text: str) -> bool:
+    return any(pattern in text for pattern in _UNSAFE_FOCUS_PATTERNS)
 
 
 def _normalize(text: str) -> str:

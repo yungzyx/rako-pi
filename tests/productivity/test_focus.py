@@ -94,10 +94,11 @@ def test_parse_focus_intent_ignores_unrelated_text() -> None:
 
 
 def test_parse_focus_intent_never_turns_crisis_language_into_timer() -> None:
-    intent = parse_focus_intent("Me quiero matar.")
+    for phrase in ("Me quiero matar.", "Quiero hacer daño a un compañero."):
+        intent = parse_focus_intent(phrase)
 
-    assert intent.should_start is False
-    assert intent.task_title is None
+        assert intent.should_start is False
+        assert intent.task_title is None
 
 
 def test_create_focus_task_marks_in_progress() -> None:

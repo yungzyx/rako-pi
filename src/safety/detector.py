@@ -120,6 +120,10 @@ _HARM_OTHERS_PATTERNS: tuple[_Pattern, ...] = (
     _Pattern("quiero herir a"),
     _Pattern("voy a herir a"),
     _Pattern("hacerle dano a"),
+    _Pattern("hacer dano a"),
+    _Pattern("hacer dano al"),
+    _Pattern("hacer dano a un"),
+    _Pattern("hacer dano a una"),
 )
 
 _DANGEROUS_ACCESS_PATTERNS: tuple[_Pattern, ...] = (
