@@ -85,13 +85,19 @@ _IDEATION_PATTERNS: tuple[_Pattern, ...] = (
 )
 
 _SELFHARM_PATTERNS: tuple[_Pattern, ...] = (
+    _Pattern("autolesion"),
+    _Pattern("autolesionarme"),
     _Pattern("cortarme"),
     _Pattern("me cortaria"),
     _Pattern("me corte"),
     _Pattern("hacerme dano"),
+    _Pattern("hacerme daño"),
+    _Pattern("hacer dano a mi"),
+    _Pattern("hacer daño a mi"),
     _Pattern("me hice dano"),
+    _Pattern("me hice daño"),
     _Pattern("lastimarme"),
-    _Pattern("autolesionarme"),
+    _Pattern("lesionarme"),
     _Pattern("quemarme"),
     _Pattern("golpearme"),
     _Pattern("dejar de comer"),
@@ -99,9 +105,12 @@ _SELFHARM_PATTERNS: tuple[_Pattern, ...] = (
 
 _GOODBYE_PATTERNS: tuple[_Pattern, ...] = (
     _Pattern("quiero desaparecer"),
+    _Pattern("desaparecer para siempre"),
     _Pattern("ya no quiero estar"),
     _Pattern("dormir para siempre"),
     _Pattern("no tiene sentido seguir"),
+    _Pattern("no aguanto mas"),
+    _Pattern("no puedo mas"),
     _Pattern("les haria un favor a todos"),
     _Pattern("ya para que"),
 )
@@ -117,22 +126,38 @@ _ABUSE_SEXUAL_PATTERNS: tuple[_Pattern, ...] = (
 _HARM_OTHERS_PATTERNS: tuple[_Pattern, ...] = (
     _Pattern("quiero matar a"),
     _Pattern("voy a matar a"),
+    _Pattern("matar a un"),
+    _Pattern("matar a una"),
     _Pattern("quiero herir a"),
     _Pattern("voy a herir a"),
+    _Pattern("herir a un"),
+    _Pattern("herir a una"),
+    _Pattern("lastimar a un"),
+    _Pattern("lastimar a una"),
     _Pattern("hacerle dano a"),
+    _Pattern("hacerle daño a"),
     _Pattern("hacer dano a"),
+    _Pattern("hacer daño a"),
     _Pattern("hacer dano al"),
+    _Pattern("hacer daño al"),
     _Pattern("hacer dano a un"),
+    _Pattern("hacer daño a un"),
     _Pattern("hacer dano a una"),
+    _Pattern("hacer daño a una"),
 )
 
 _DANGEROUS_ACCESS_PATTERNS: tuple[_Pattern, ...] = (
     _Pattern("cafe con cloro"),
     _Pattern("tomar cloro"),
+    _Pattern("tomar veneno"),
+    _Pattern("mezclar pastillas"),
+    _Pattern("sobredosis"),
     _Pattern("que pasa si uno toma"),
     _Pattern("que pasaria si alguien tomara"),
     _Pattern("conseguir un arma"),
+    _Pattern("usar un arma"),
     _Pattern("preparar veneno"),
+    _Pattern("hacer veneno"),
 )
 
 

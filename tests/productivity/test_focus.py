@@ -93,8 +93,16 @@ def test_parse_focus_intent_ignores_unrelated_text() -> None:
     assert intent.task_title is None
 
 
-def test_parse_focus_intent_never_turns_crisis_language_into_timer() -> None:
-    for phrase in ("Me quiero matar.", "Quiero hacer daño a un compañero."):
+def test_parse_focus_intent_never_turns_crisis_or_clinical_language_into_timer() -> None:
+    phrases = (
+        "Me quiero matar.",
+        "Quiero hacer daño a un compañero.",
+        "quiero hablar de ansiedad 25 minutos",
+        "necesito terapia 20 minutos",
+        "quiero revisar mi diagnóstico 30 minutos",
+        "tengo que mezclar pastillas 10 minutos",
+    )
+    for phrase in phrases:
         intent = parse_focus_intent(phrase)
 
         assert intent.should_start is False

@@ -238,6 +238,16 @@ def test_mental_health_topic_redirects_without_llm() -> None:
     assert "+56 2 2820 3419" in result.text
 
 
+def test_clinical_vocab_redirects_without_llm() -> None:
+    orch, retriever, llm, _ = _build_orchestrator()
+
+    result = orch.handle_turn(_input(transcript="necesito terapia por trauma"))
+
+    assert result.kind is TurnKind.SCOPE_REDIRECT
+    assert llm.calls == []
+    assert retriever.queries == []
+
+
 def test_turn_result_carries_chunk_ids_for_traceability() -> None:
     chunks = (
         Chunk(id="01#0", text="x", metadata={}),
