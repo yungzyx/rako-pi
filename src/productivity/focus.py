@@ -44,9 +44,8 @@ _START_HINTS = (
     "foco",
     "estudiar",
     "trabajar en",
-    "necesito",
-    "tengo que",
-    "quiero",
+    # Avoid broad verbs like "quiero", "necesito" or "tengo que" as
+    # stand-alone focus triggers; crisis/scope text must never become a timer.
 )
 _ASSISTANT_INVOCATION_RE = re.compile(
     r"^(?:oye|hola|hey)?\s*(?:rako|raco|racko|rackle|raquel)\b[\s,;:.-]*",

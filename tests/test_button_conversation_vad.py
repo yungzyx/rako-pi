@@ -30,6 +30,22 @@ class _FakeOrchestrator:
         return SimpleNamespace(kind=self.kind, text="respuesta curada")
 
 
+def test_guardrail_result_catches_exact_reported_ideation_phrase() -> None:
+    app = SimpleNamespace(
+        orchestrator=_FakeOrchestrator(button_conversation.TurnKind.CRISIS_PROTOCOL)
+    )
+
+    result = button_conversation._guardrail_result_for_transcript(
+        app=app,
+        transcript="Me quiero matar.",
+        now=datetime(2026, 5, 14, 22, 58, tzinfo=UTC),
+    )
+
+    assert result is not None
+    assert result.kind is button_conversation.TurnKind.CRISIS_PROTOCOL
+    assert app.orchestrator.calls == 1
+
+
 def test_guardrail_result_takes_priority_over_local_intents() -> None:
     app = SimpleNamespace(
         orchestrator=_FakeOrchestrator(button_conversation.TurnKind.CRISIS_PROTOCOL)

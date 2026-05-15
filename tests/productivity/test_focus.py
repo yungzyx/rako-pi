@@ -93,6 +93,13 @@ def test_parse_focus_intent_ignores_unrelated_text() -> None:
     assert intent.task_title is None
 
 
+def test_parse_focus_intent_never_turns_crisis_language_into_timer() -> None:
+    intent = parse_focus_intent("Me quiero matar.")
+
+    assert intent.should_start is False
+    assert intent.task_title is None
+
+
 def test_create_focus_task_marks_in_progress() -> None:
     now = datetime(2026, 5, 10, 17, 0, tzinfo=UTC)
 
