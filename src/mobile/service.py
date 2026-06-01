@@ -51,12 +51,12 @@ class MobileService:
             pending_task_count=len(self._db.tasks.list_pending()),
         )
 
-    def start_focus(self, *, title: str | None, minutes: int, now: datetime | None = None) -> MobileFocusStart:
+    def start_focus(
+        self, *, title: str | None, minutes: int, now: datetime | None = None
+    ) -> MobileFocusStart:
         now = _ensure_aware(now or datetime.now(UTC))
         clean_title = _clean_title(title)
-        task = self._db.tasks.create(
-            create_focus_task(clean_title, now, source=TaskSource.APP)
-        )
+        task = self._db.tasks.create(create_focus_task(clean_title, now, source=TaskSource.APP))
         session = start_focus_session(task, now, minutes=minutes)
         self._store_active_focus(session)
         return MobileFocusStart(

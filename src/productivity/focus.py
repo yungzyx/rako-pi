@@ -260,9 +260,7 @@ def first_step_suggestion(title: str) -> str:
         )
     if title.lower().startswith("estudiar "):
         return f"Abre tus apuntes o ejercicios de {title.removeprefix('estudiar ').strip()} y parte por el primer ítem."
-    return (
-        f"Deja abierto solo lo necesario para {title} y avanza por el primer paso."
-    )
+    return f"Deja abierto solo lo necesario para {title} y avanza por el primer paso."
 
 
 def _extract_minutes(text: str) -> int:

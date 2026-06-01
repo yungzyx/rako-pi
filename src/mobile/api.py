@@ -37,6 +37,7 @@ def create_app() -> Any:
             yield MobileService(db)
         finally:
             db.close()
+
     service_dep = Depends(build_service)
 
     @app.get("/health")
@@ -52,7 +53,9 @@ def create_app() -> Any:
         request: StartFocusRequest,
         service: MobileService = service_dep,
     ) -> dict[str, Any]:
-        return focus_start_to_dict(service.start_focus(title=request.title, minutes=request.minutes))
+        return focus_start_to_dict(
+            service.start_focus(title=request.title, minutes=request.minutes)
+        )
 
     @app.post("/focus/cancel")
     async def cancel_focus(service: MobileService = service_dep) -> dict[str, bool]:

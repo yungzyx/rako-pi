@@ -62,4 +62,3 @@ def test_cancel_focus_clears_state_and_marks_task_cancelled(db_conn) -> None:
     assert status.state == "ready"
     assert task is not None
     assert task.status is TaskStatus.CANCELLED
-
