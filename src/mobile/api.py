@@ -12,6 +12,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from channels.whatsapp.client import InMemoryWhatsAppClient
+from channels.whatsapp.service import (
+    WhatsAppService,
+    inbound_result_to_dict,
+    outbound_message_to_dict,
+)
 from config import Settings
 from db.database import Database
 from mobile.service import MobileService, focus_start_to_dict, status_to_dict, task_list_to_dict
@@ -20,6 +26,15 @@ from mobile.service import MobileService, focus_start_to_dict, status_to_dict, t
 class StartFocusRequest(BaseModel):
     title: str | None = Field(default=None, max_length=120)
     minutes: int = Field(default=25, ge=1, le=180)
+
+
+class WhatsAppCheckinRequest(BaseModel):
+    to: str = Field(min_length=3, max_length=32)
+
+
+class WhatsAppInboundRequest(BaseModel):
+    from_number: str = Field(min_length=3, max_length=32)
+    text: str = Field(min_length=0, max_length=1000)
 
 
 def create_app() -> Any:
@@ -58,8 +73,16 @@ def create_app() -> Any:
         finally:
             db.close()
 
+    async def build_whatsapp_service() -> AsyncIterator[WhatsAppService]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            yield WhatsAppService(db, InMemoryWhatsAppClient())
+        finally:
+            db.close()
+
     auth_dep = Depends(require_api_token)
     service_dep = Depends(build_service)
+    whatsapp_dep = Depends(build_whatsapp_service)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -97,5 +120,23 @@ def create_app() -> Any:
         service: MobileService = service_dep,
     ) -> dict[str, bool]:
         return {"cancelled": service.cancel_focus()}
+
+    @app.post("/whatsapp/checkin")
+    async def whatsapp_checkin(
+        request: WhatsAppCheckinRequest,
+        _: None = auth_dep,
+        service: WhatsAppService = whatsapp_dep,
+    ) -> dict[str, Any]:
+        return outbound_message_to_dict(service.send_checkin(to=request.to))
+
+    @app.post("/whatsapp/inbound")
+    async def whatsapp_inbound(
+        request: WhatsAppInboundRequest,
+        _: None = auth_dep,
+        service: WhatsAppService = whatsapp_dep,
+    ) -> dict[str, Any]:
+        return inbound_result_to_dict(
+            service.handle_inbound(from_number=request.from_number, text=request.text)
+        )
 
     return app

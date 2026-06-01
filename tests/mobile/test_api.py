@@ -41,3 +41,30 @@ def test_tasks_endpoint_lists_mobile_focus_tasks(monkeypatch, tmp_path) -> None:
     assert tasks.status_code == 200
     assert tasks.json()["tasks"][0]["title"] == "cálculo"
     assert tasks.json()["tasks"][0]["status"] == "IN_PROGRESS"
+
+
+def test_whatsapp_checkin_endpoint_returns_outbound_message(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.post("/whatsapp/checkin", json={"to": "+56912345678"})
+
+    assert response.status_code == 200
+    assert response.json()["kind"] == "CHECKIN"
+    assert "¿cómo te sientes" in response.json()["text"]
+
+
+def test_whatsapp_inbound_endpoint_records_mood(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/whatsapp/inbound",
+        json={"from_number": "+56912345678", "text": "estoy bien"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["action"] == "MOOD_RECORDED"
+    assert response.json()["stored_mood"] == "good"
