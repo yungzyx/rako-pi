@@ -42,14 +42,14 @@ from voice.types import AudioBuffer
 
 _DEFAULT_BUTTON_PIN = 17
 _DEFAULT_CAPTURE_SECONDS = 7.0
-_DEFAULT_AUDIO_OUTPUT_DEVICE = "hw:2,0"  # Raspberry Pi headphone jack
+_DEFAULT_AUDIO_OUTPUT_DEVICE = "plughw:seeed2micvoicec,0"
 _DEFAULT_GPIO_CHIP = "gpiochip0"
 _DEFAULT_CAPTURE_DEVICE = "plughw:seeed2micvoicec,0"
 _DEFAULT_CAPTURE_RATE = 16000
-_DEFAULT_PLAYBACK_WARMUP_SECONDS = 0.55
+_DEFAULT_PLAYBACK_WARMUP_SECONDS = 0.15
 _DEFAULT_CUE_VOLUME = 0.14
-_DEFAULT_END_SILENCE_SECONDS = 1.5
-_DEFAULT_VAD_THRESHOLD = 350
+_DEFAULT_END_SILENCE_SECONDS = 0.8
+_DEFAULT_VAD_THRESHOLD = 1400
 _DEFAULT_VAD_FRAME_MS = 100
 
 
@@ -132,7 +132,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--vad-threshold",
         type=int,
         default=_DEFAULT_VAD_THRESHOLD,
-        help=f"PCM16 RMS threshold used for speech/silence trimming (default: {_DEFAULT_VAD_THRESHOLD})",
+        help=f"PCM16 RMS threshold used for speech detection (default: {_DEFAULT_VAD_THRESHOLD})",
     )
     parser.add_argument(
         "--no-vad-trim",
@@ -252,10 +252,12 @@ def _handle_press(
     capture_seconds: float,
     args: argparse.Namespace,
 ) -> None:
+    turn_started = time.monotonic()
     print("\nBotón detectado. Escuchando...", flush=True)
     eyes.set_state(RakoVisualState.LISTENING)
     _play_cue(kind="listen_start", args=args)
     try:
+        capture_started = time.monotonic()
         audio = _capture_with_arecord(
             device=args.capture_device,
             sample_rate=args.capture_rate,
@@ -264,15 +266,20 @@ def _handle_press(
             vad_threshold=args.vad_threshold,
             vad_trim=not args.no_vad_trim,
         )
+        print(f"Tiempo captura: {time.monotonic() - capture_started:.2f}s", flush=True)
         eyes.set_state(RakoVisualState.CAPTURED)
         _play_cue(kind="listen_end", args=args)
         if app_holder["app"] is None:
             eyes.set_state(RakoVisualState.STARTING)
             print("Inicializando Rako...", flush=True)
+            init_started = time.monotonic()
             app_holder["app"] = build_pi_application(Settings())
+            print(f"Tiempo inicialización: {time.monotonic() - init_started:.2f}s", flush=True)
         app = app_holder["app"]
         eyes.set_state(RakoVisualState.TRANSCRIBING)
+        stt_started = time.monotonic()
         transcript = app.stt.transcribe(audio).text.strip()
+        print(f"Tiempo STT: {time.monotonic() - stt_started:.2f}s", flush=True)
     except Exception as exc:
         eyes.set_state(RakoVisualState.ERROR)
         print(f"No pude capturar/transcribir: {exc}", flush=True)
@@ -333,7 +340,10 @@ def _handle_press(
         user_context=default_user_context(now),
         now=now,
     )
+    llm_started = time.monotonic()
     result = app.orchestrator.handle_turn(turn)
+    print(f"Tiempo orquestador/LLM: {time.monotonic() - llm_started:.2f}s", flush=True)
+    print(f"Tiempo total antes de responder: {time.monotonic() - turn_started:.2f}s", flush=True)
     print(f"Rako: {result.text}", flush=True)
     _synthesize_and_maybe_play(app=app, text=result.text, eyes=eyes, args=args)
     eyes.set_state(RakoVisualState.READY)
@@ -422,7 +432,9 @@ def _synthesize_and_maybe_play(
     *, app: Any, text: str, eyes: OledEyeController | None = None, args: argparse.Namespace
 ) -> None:
     try:
+        tts_started = time.monotonic()
         synth = app.tts.synthesize(text)
+        print(f"Tiempo TTS: {time.monotonic() - tts_started:.2f}s", flush=True)
     except Exception as exc:
         if eyes is not None:
             eyes.set_state(RakoVisualState.ERROR)
@@ -442,7 +454,7 @@ def _synthesize_and_maybe_play(
     _warm_up_audio_device(device=args.audio_device, seconds=args.playback_warmup_seconds)
     if eyes is not None:
         eyes.set_state(RakoVisualState.SPEAKING)
-    subprocess.run(["mpg123", "-q", "-a", args.audio_device, str(out)], check=False)
+    subprocess.run(["mpg123", "-q", "-o", "alsa", "-a", args.audio_device, str(out)], check=False)
 
 
 def _play_cue(*, kind: str, args: argparse.Namespace) -> None:
@@ -523,6 +535,38 @@ def _capture_with_arecord(
     if shutil.which("arecord") is None:
         raise RuntimeError("arecord is not installed")
 
+    if vad_trim:
+        data, rate, channels = _capture_until_end_of_turn_with_arecord(
+            device=device,
+            sample_rate=sample_rate,
+            max_seconds=seconds,
+            end_silence_seconds=end_silence_seconds,
+            threshold=vad_threshold,
+            frame_ms=_DEFAULT_VAD_FRAME_MS,
+        )
+    else:
+        data, rate, channels = _capture_fixed_duration_with_arecord(
+            device=device,
+            sample_rate=sample_rate,
+            seconds=seconds,
+        )
+
+    samples = struct.unpack("<" + "h" * (len(data) // 2), data) if data else []
+    rms = math.sqrt(sum(sample * sample for sample in samples) / len(samples)) if samples else 0.0
+    peak = max((abs(sample) for sample in samples), default=0)
+    print(
+        f"Audio capturado: {channels}ch {rate}Hz, rms={rms:.1f}, peak={peak}",
+        flush=True,
+    )
+    if peak == 0:
+        print("Aviso: el audio llegó en silencio total desde ALSA.", flush=True)
+    data = _normalize_pcm16(data, target_peak=24_000)
+    return AudioBuffer(data=data, sample_rate=rate, encoding="LINEAR16")
+
+
+def _capture_fixed_duration_with_arecord(
+    *, device: str, sample_rate: int, seconds: float
+) -> tuple[bytes, int, int]:
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
         command = [
             "arecord",
@@ -536,7 +580,7 @@ def _capture_with_arecord(
             "-r",
             str(sample_rate),
             "-d",
-            str(max(1, int(math.ceil(seconds)))),
+            str(max(1, math.ceil(seconds))),
             tmp.name,
         ]
         subprocess.run(command, check=True)
@@ -544,33 +588,83 @@ def _capture_with_arecord(
             data = wav.readframes(wav.getnframes())
             rate = wav.getframerate()
             channels = wav.getnchannels()
+    return data, rate, channels
 
-    samples = struct.unpack("<" + "h" * (len(data) // 2), data) if data else []
-    rms = math.sqrt(sum(sample * sample for sample in samples) / len(samples)) if samples else 0.0
-    peak = max((abs(sample) for sample in samples), default=0)
+
+def _capture_until_end_of_turn_with_arecord(
+    *,
+    device: str,
+    sample_rate: int,
+    max_seconds: float,
+    end_silence_seconds: float,
+    threshold: int,
+    frame_ms: int,
+) -> tuple[bytes, int, int]:
+    frame_samples = max(1, int(sample_rate * frame_ms / 1000))
+    frame_bytes = frame_samples * 2
+    command = [
+        "arecord",
+        "-q",
+        "-D",
+        device,
+        "-f",
+        "S16_LE",
+        "-c",
+        "1",
+        "-r",
+        str(sample_rate),
+        "-t",
+        "raw",
+    ]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    chunks: list[bytes] = []
+    voice_seen = False
+    silence_after_voice = 0.0
+    stopped_by_silence = False
+    started = time.monotonic()
+    silence_threshold = max(1, int(threshold * 0.55))
     print(
-        f"Audio capturado: {channels}ch {rate}Hz, rms={rms:.1f}, peak={peak}",
+        f"VAD: voz >= {threshold} RMS, silencio < {silence_threshold} RMS",
         flush=True,
     )
-    if peak == 0:
-        print("Aviso: el audio llegó en silencio total desde ALSA.", flush=True)
-    if vad_trim:
-        trimmed = _trim_after_end_of_turn_pcm16(
-            data,
-            sample_rate=rate,
-            end_silence_seconds=end_silence_seconds,
-            threshold=vad_threshold,
+    try:
+        assert process.stdout is not None
+        while time.monotonic() - started < max_seconds:
+            chunk = process.stdout.read(frame_bytes)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            samples = struct.unpack("<" + "h" * (len(chunk) // 2), chunk)
+            rms = math.sqrt(sum(sample * sample for sample in samples) / len(samples))
+            if rms >= threshold:
+                voice_seen = True
+                silence_after_voice = 0.0
+                continue
+            if voice_seen and rms < silence_threshold:
+                silence_after_voice += len(samples) / sample_rate
+                if silence_after_voice >= end_silence_seconds:
+                    stopped_by_silence = True
+                    break
+            elif voice_seen:
+                silence_after_voice = 0.0
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=1)
+    data = b"".join(chunks)
+    duration = len(data) / max(1, sample_rate * 2)
+    if stopped_by_silence:
+        print(
+            f"End-of-turn detectado en vivo: {duration:.2f}s "
+            f"(silencio >= {end_silence_seconds:.1f}s)",
+            flush=True,
         )
-        if len(trimmed) != len(data):
-            print(
-                "End-of-turn detectado: "
-                f"{len(data) / max(1, rate * 2):.2f}s -> {len(trimmed) / max(1, rate * 2):.2f}s "
-                f"(silencio ≥ {end_silence_seconds:.1f}s)",
-                flush=True,
-            )
-        data = trimmed
-    data = _normalize_pcm16(data, target_peak=24_000)
-    return AudioBuffer(data=data, sample_rate=rate, encoding="LINEAR16")
+    else:
+        print(f"Captura llegó al máximo: {duration:.2f}s", flush=True)
+    return data, sample_rate, 1
 
 
 def _trim_after_end_of_turn_pcm16(

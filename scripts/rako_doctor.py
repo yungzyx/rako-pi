@@ -44,7 +44,7 @@ def main() -> int:
         "--record", action="store_true", help="Record 2s from ReSpeaker and report levels"
     )
     parser.add_argument("--sound", action="store_true", help="Play Rako cue sounds on audio output")
-    parser.add_argument("--audio-device", default="hw:2,0")
+    parser.add_argument("--audio-device", default="plughw:seeed2micvoicec,0")
     parser.add_argument("--capture-device", default="plughw:seeed2micvoicec,0")
     args = parser.parse_args()
 

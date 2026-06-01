@@ -84,8 +84,8 @@ argumentos al listener:
 
 ```bash
 rako-chat --no-playback
-rako-chat --capture-seconds 7 --audio-device hw:2,0
-rako-chat --cue-volume 0.14 --playback-warmup-seconds 0.55
+rako-chat --capture-seconds 7 --audio-device plughw:seeed2micvoicec,0
+rako-chat --cue-volume 0.14 --playback-warmup-seconds 0.15
 ```
 
 Si quieres apagar OLED para depurar:
@@ -161,6 +161,27 @@ Para detener/desactivar:
 ```bash
 sudo systemctl disable --now rako-chat.service
 ```
+
+### API local para app móvil
+
+La app móvil puede hablar con la Pi por la red local. El primer contrato expone
+estado y foco:
+
+```bash
+rako-api
+```
+
+Endpoints iniciales:
+
+```text
+GET  /health
+GET  /status
+POST /focus/start   {"title": "cálculo", "minutes": 30}
+POST /focus/cancel
+```
+
+Por defecto escucha en `0.0.0.0:8765`. Puedes cambiarlo con
+`RAKO_API_HOST` y `RAKO_API_PORT`.
 
 ---
 

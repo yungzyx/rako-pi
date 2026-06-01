@@ -66,7 +66,9 @@ def _build_focus_response(*, session: FocusSession, notify_external: bool) -> st
     minutes = int(session.duration.total_seconds() // 60)
     suggestion = first_step_suggestion(session.task_title)
     notification_text = " Te avisaré por WhatsApp con un resumen seguro." if notify_external else ""
-    return (
-        f"Listo, inicié un bloque de foco de {minutes} minutos para: {session.task_title}. "
-        f"{suggestion}{notification_text}"
-    )
+    title = session.task_title.strip()
+    if title.lower() == "sesión de foco":
+        intro = f"Dale, partimos con {minutes} minutos."
+    else:
+        intro = f"Dale, partimos: {minutes} minutos para {title}."
+    return f"{intro} {suggestion}{notification_text}"

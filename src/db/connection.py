@@ -35,7 +35,7 @@ def open_connection(path: str, key: str | None = None) -> sqlite3.Connection:
     pragmas de seguridad activados.
     """
     conn = encryption.open_encrypted(path, key) if key else sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
+    conn.row_factory = sqlite3.Row if isinstance(conn, sqlite3.Connection) else _dict_row
     for pragma in _PRAGMAS:
         conn.execute(pragma)
     return conn
@@ -49,3 +49,26 @@ def require_encrypted(conn: sqlite3.Connection) -> None:
             "Provision SQLCipher (pysqlcipher3 + libsqlcipher-dev) and "
             "restart with SQLITE_ENCRYPTION_KEY set."
         )
+
+
+class _CompatRow:
+    def __init__(self, columns: tuple[str, ...], values: tuple[object, ...]) -> None:
+        self._columns = columns
+        self._values = values
+        self._index = {column: index for index, column in enumerate(columns)}
+
+    def __getitem__(self, key: str | int) -> object:
+        if isinstance(key, int):
+            return self._values[key]
+        return self._values[self._index[key]]
+
+    def __iter__(self):
+        return iter(self._values)
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+
+def _dict_row(cursor, row) -> _CompatRow:
+    columns = tuple(column[0] for column in cursor.description)
+    return _CompatRow(columns, tuple(row))

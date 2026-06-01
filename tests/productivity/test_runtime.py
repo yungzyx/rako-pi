@@ -30,7 +30,7 @@ def test_maybe_start_focus_from_transcript_creates_task_and_response(db) -> None
     assert task.status is TaskStatus.IN_PROGRESS
     assert task.title == "calculo"
     assert result.session.duration.total_seconds() == 25 * 60
-    assert "bloque de foco de 25 minutos" in result.response_text
+    assert "25 minutos para calculo" in result.response_text
     assert "WhatsApp" not in result.response_text
 
 
@@ -83,3 +83,20 @@ def test_maybe_start_focus_mentions_whatsapp_only_when_enabled(db) -> None:
     assert result.session is not None
     assert "WhatsApp" in result.response_text
     assert "Sesión de foco" in result.session.task_title
+    assert "para Sesión de foco" not in result.response_text
+
+
+def test_maybe_start_focus_uses_clean_countdown_activity(db) -> None:
+    now = datetime(2026, 5, 10, 17, 30, tzinfo=UTC)
+
+    result = maybe_start_focus_from_transcript(
+        "ayúdame con el conteo de 30 minutos de estudiar",
+        db=db,
+        now=now,
+    )
+
+    assert result is not None
+    assert result.session is not None
+    assert result.session.task_title == "estudiar"
+    assert "30 minutos para estudiar" in result.response_text
+    assert "conteo de" not in result.response_text

@@ -32,7 +32,10 @@ def main() -> int:
     print(f"Audio escrito en {out} ({len(result.audio.data)} bytes)")
 
     print("Reproduciendo por el parlante...")
-    subprocess.run(["mpg123", "-q", "-a", "hw:2,0", str(out)], check=True)
+    subprocess.run(
+        ["mpg123", "-q", "-o", "alsa", "-a", "plughw:seeed2micvoicec,0", str(out)],
+        check=True,
+    )
     print("Listo.")
     return 0
 

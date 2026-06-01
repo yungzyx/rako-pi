@@ -50,7 +50,10 @@ def main() -> int:
             audio = app.tts.synthesize(result.text)
             out = Path("/tmp/rako-reply.mp3")
             out.write_bytes(audio.audio.data)
-            subprocess.run(["mpg123", "-q", "-a", "hw:2,0", str(out)], check=False)
+            subprocess.run(
+                ["mpg123", "-q", "-o", "alsa", "-a", "plughw:seeed2micvoicec,0", str(out)],
+                check=False,
+            )
     except KeyboardInterrupt:
         pass
     finally:

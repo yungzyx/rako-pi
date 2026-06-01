@@ -20,6 +20,10 @@ _DEFAULT_FOCUS_MINUTES = 25
 _MIN_FOCUS_MINUTES = 1
 _MAX_FOCUS_MINUTES = 180
 _DURATION_RE = re.compile(r"(?P<minutes>\d{1,3})\s*(?:minutos?|mins?|m)\b", re.IGNORECASE)
+_POST_DURATION_ACTIVITY_RE = re.compile(
+    r"\d{1,3}\s*(?:minutos?|mins?|m)\s+(?:para|de)\s+(?P<title>[\wáéíóúüñÁÉÍÓÚÜÑ ]+)$",
+    re.IGNORECASE,
+)
 _NATURAL_ACTIVITY_RE = re.compile(
     r"\b(?:voy a|quiero|necesito|tengo que)\s+(?P<title>[\wáéíóúüñÁÉÍÓÚÜÑ ]+?)\s+(?:por\s+|durante\s+)?\d{1,3}\s*(?:minutos?|mins?|m)\b",
     re.IGNORECASE,
@@ -40,6 +44,8 @@ _START_HINTS = (
     "repasar",
     "hazme un pomodoro",
     "pomodoro",
+    "conteo",
+    "temporizador",
     "focus",
     "foco",
     "estudiar",
@@ -51,7 +57,21 @@ _ASSISTANT_INVOCATION_RE = re.compile(
     r"^(?:oye|hola|hey)?\s*(?:rako|raco|racko|rackle|raquel)\b[\s,;:.-]*",
     re.IGNORECASE,
 )
-_LOW_VALUE_TITLES = {"a", "que", "qué", "eso", "algo", "pomodoro", "foco", "tarea"}
+_LOW_VALUE_TITLES = {
+    "a",
+    "que",
+    "qué",
+    "eso",
+    "algo",
+    "pomodoro",
+    "foco",
+    "tarea",
+    "conteo",
+    "temporizador",
+    "un conteo",
+    "el conteo",
+    "conteo de",
+}
 _HELP_SEEKING_FOCUS_BLOCKERS = (
     "ayuda para empezar",
     "ayudame a empezar",
@@ -231,9 +251,17 @@ def start_focus_session(task: Task, now: datetime, *, minutes: int) -> FocusSess
 
 def first_step_suggestion(title: str) -> str:
     title = title.strip() or "la tarea"
+    if title.lower() == "sesión de foco":
+        return "Elige una sola cosa para avanzar y deja abierto solo lo que necesitas para empezar."
+    if title.lower() == "estudiar":
+        return (
+            "Abre solo el material que vas a usar ahora y parte por la primera página, "
+            "ejercicio o apunte que tengas a mano."
+        )
+    if title.lower().startswith("estudiar "):
+        return f"Abre tus apuntes o ejercicios de {title.removeprefix('estudiar ').strip()} y parte por el primer ítem."
     return (
-        f"Partamos simple: abre lo necesario para {title} y trabaja solo cinco minutos. "
-        "Yo te acompaño con el temporizador."
+        f"Deja abierto solo lo necesario para {title} y avanza por el primer paso."
     )
 
 
@@ -249,6 +277,11 @@ def _extract_task_title(text: str) -> str | None:
     title = text
     for prefix in _STOPWORDS:
         title = title.replace(prefix, " ")
+    post_duration_match = _POST_DURATION_ACTIVITY_RE.search(title)
+    if post_duration_match is not None:
+        post_duration_title = _clean_title_words(post_duration_match.group("title"))
+        if post_duration_title:
+            return post_duration_title
     natural_match = _NATURAL_ACTIVITY_RE.search(title)
     if natural_match is not None:
         natural_title = _clean_natural_activity_title(natural_match.group("title"))
@@ -267,6 +300,14 @@ def _extract_task_title(text: str) -> str | None:
         "quiero",
         "necesito",
         "tengo que",
+        "ayúdame con",
+        "ayudame con",
+        "me ayudas con",
+        "te ayudo a",
+        "el conteo",
+        "un conteo",
+        "conteo",
+        "temporizador",
         "avanzar en",
         "avanzar",
         "ordenar",

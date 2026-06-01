@@ -36,7 +36,7 @@ def main() -> int:
     parser.add_argument(
         "--seconds", type=int, default=None, help="Override duration for quick tests"
     )
-    parser.add_argument("--audio-device", default="hw:2,0")
+    parser.add_argument("--audio-device", default="plughw:seeed2micvoicec,0")
     parser.add_argument("--cue-volume", type=float, default=0.14)
     parser.add_argument("--playback-warmup-seconds", type=float, default=0.55)
     parser.add_argument("--no-playback", action="store_true")

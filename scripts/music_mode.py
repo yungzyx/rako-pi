@@ -21,7 +21,7 @@ WAV_FILE = Path("/tmp/rako-chill-loop.wav")
 def main() -> int:
     parser = argparse.ArgumentParser(description="Rako local chill music mode")
     parser.add_argument("action", choices=("start", "stop", "toggle", "status"))
-    parser.add_argument("--audio-device", default="hw:2,0")
+    parser.add_argument("--audio-device", default="plughw:seeed2micvoicec,0")
     parser.add_argument("--volume", type=float, default=0.08)
     args = parser.parse_args()
 

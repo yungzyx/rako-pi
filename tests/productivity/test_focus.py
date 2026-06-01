@@ -36,6 +36,23 @@ def test_parse_focus_intent_understands_natural_activity_duration() -> None:
     assert intent.task_title == "estudiar cálculo"
 
 
+def test_parse_focus_intent_extracts_activity_after_countdown_duration() -> None:
+    intent = parse_focus_intent("ayúdame con el conteo de 30 minutos de estudiar")
+
+    assert intent.should_start is True
+    assert intent.minutes == 30
+    assert intent.duration_was_explicit is True
+    assert intent.task_title == "estudiar"
+
+
+def test_parse_focus_intent_does_not_keep_incomplete_countdown_title() -> None:
+    intent = parse_focus_intent("te ayudo a preparar el conteo de 30 minutos de")
+
+    assert intent.should_start is True
+    assert intent.minutes == 30
+    assert intent.task_title is None
+
+
 def test_parse_focus_intent_understands_need_to_activity_duration() -> None:
     intent = parse_focus_intent("necesito leer papers por 45 minutos")
 
@@ -148,5 +165,5 @@ def test_start_focus_session_tracks_remaining_time() -> None:
 def test_first_step_suggestion_is_small_and_actionable() -> None:
     suggestion = first_step_suggestion("estudiar cálculo")
 
-    assert "cinco minutos" in suggestion
-    assert "estudiar cálculo" in suggestion
+    assert "cálculo" in suggestion
+    assert "primer ítem" in suggestion

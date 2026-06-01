@@ -19,7 +19,7 @@ from hardware.oled_states import RakoVisualState
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run a guided Rako demo")
-    parser.add_argument("--audio-device", default="hw:2,0")
+    parser.add_argument("--audio-device", default="plughw:seeed2micvoicec,0")
     parser.add_argument("--no-playback", action="store_true")
     parser.add_argument("--no-cues", action="store_true")
     parser.add_argument("--no-oled", action="store_true")

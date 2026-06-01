@@ -7,6 +7,8 @@
 # Core config / API clients
 pydantic>=2.9,<3.0
 pydantic-settings>=2.5,<3.0
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
 anthropic>=0.39,<1.0
 httpx>=0.27,<1.0
 
