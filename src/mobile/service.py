@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from db.database import Database
-from db.types import TaskSource, TaskStatus
+from db.types import Task, TaskSource, TaskStatus
 from productivity.focus import FocusSession, create_focus_task, start_focus_session
 from productivity.runtime import _build_focus_response
 
@@ -25,6 +25,7 @@ class MobileStatus:
     state: str
     active_focus: dict[str, Any] | None
     pending_task_count: int
+    recent_tasks: list[dict[str, Any]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +39,11 @@ class MobileFocusStart:
     response_text: str
 
 
+@dataclass(frozen=True, slots=True)
+class MobileTaskList:
+    tasks: list[dict[str, Any]]
+
+
 class MobileService:
     def __init__(self, db: Database) -> None:
         self._db = db
@@ -49,7 +55,18 @@ class MobileService:
             state="focus" if active_focus is not None else "ready",
             active_focus=active_focus,
             pending_task_count=len(self._db.tasks.list_pending()),
+            recent_tasks=[_task_to_dict(task) for task in self._db.tasks.list_recent(limit=5)],
         )
+
+    def tasks(self, *, limit: int = 20, pending_only: bool = False) -> MobileTaskList:
+        if limit <= 0 or limit > 100:
+            raise ValueError(f"limit must be between 1 and 100, got {limit}")
+        tasks = (
+            self._db.tasks.list_pending()
+            if pending_only
+            else self._db.tasks.list_recent(limit=limit)
+        )
+        return MobileTaskList(tasks=[_task_to_dict(task) for task in tasks[:limit]])
 
     def start_focus(
         self, *, title: str | None, minutes: int, now: datetime | None = None
@@ -128,6 +145,21 @@ def status_to_dict(status: MobileStatus) -> dict[str, Any]:
 
 def focus_start_to_dict(result: MobileFocusStart) -> dict[str, Any]:
     return asdict(result)
+
+
+def task_list_to_dict(result: MobileTaskList) -> dict[str, Any]:
+    return asdict(result)
+
+
+def _task_to_dict(task: Task) -> dict[str, Any]:
+    return {
+        "id": task.id,
+        "title": task.title,
+        "status": task.status.value,
+        "source": task.source.value,
+        "created_at": task.created_at.isoformat(),
+        "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+    }
 
 
 def _clean_title(title: str | None) -> str:

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from config import Settings
 from db.database import Database
-from mobile.service import MobileService, focus_start_to_dict, status_to_dict
+from mobile.service import MobileService, focus_start_to_dict, status_to_dict, task_list_to_dict
 
 
 class StartFocusRequest(BaseModel):
@@ -24,12 +24,32 @@ class StartFocusRequest(BaseModel):
 
 def create_app() -> Any:
     try:
-        from fastapi import Depends, FastAPI
+        from fastapi import (
+            Depends,
+            FastAPI,
+            Header,
+            HTTPException,
+            Query,
+            status,
+        )
     except ImportError as exc:  # pragma: no cover - depends on optional HTTP deps
         raise RuntimeError("Install fastapi and uvicorn to run the mobile API") from exc
 
     settings = Settings()
     app = FastAPI(title="Rako Local API", version="0.1.0")
+
+    async def require_api_token(
+        authorization: str | None = Header(default=None),
+    ) -> None:
+        token = settings.rako_api_token
+        if not token:
+            return
+        expected = f"Bearer {token}"
+        if authorization != expected:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="missing or invalid API token",
+            )
 
     async def build_service() -> AsyncIterator[MobileService]:
         db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
@@ -38,6 +58,7 @@ def create_app() -> Any:
         finally:
             db.close()
 
+    auth_dep = Depends(require_api_token)
     service_dep = Depends(build_service)
 
     @app.get("/health")
@@ -45,12 +66,25 @@ def create_app() -> Any:
         return {"status": "ok"}
 
     @app.get("/status")
-    async def status(service: MobileService = service_dep) -> dict[str, Any]:
+    async def get_status(
+        _: None = auth_dep,
+        service: MobileService = service_dep,
+    ) -> dict[str, Any]:
         return status_to_dict(service.status())
+
+    @app.get("/tasks")
+    async def tasks(
+        limit: int = Query(default=20, ge=1, le=100),
+        pending_only: bool = False,
+        _: None = auth_dep,
+        service: MobileService = service_dep,
+    ) -> dict[str, Any]:
+        return task_list_to_dict(service.tasks(limit=limit, pending_only=pending_only))
 
     @app.post("/focus/start")
     async def start_focus(
         request: StartFocusRequest,
+        _: None = auth_dep,
         service: MobileService = service_dep,
     ) -> dict[str, Any]:
         return focus_start_to_dict(
@@ -58,7 +92,10 @@ def create_app() -> Any:
         )
 
     @app.post("/focus/cancel")
-    async def cancel_focus(service: MobileService = service_dep) -> dict[str, bool]:
+    async def cancel_focus(
+        _: None = auth_dep,
+        service: MobileService = service_dep,
+    ) -> dict[str, bool]:
         return {"cancelled": service.cancel_focus()}
 
     return app

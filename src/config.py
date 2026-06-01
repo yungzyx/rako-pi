@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     sqlite_path: str = "./data/rako.db"
     sqlite_encryption_key: str | None = None
 
+    # --- API local ---
+    # Si está definido, la app móvil debe enviar:
+    #   Authorization: Bearer <token>
+    rako_api_token: str | None = None
+
     # --- Wake word ---
     # `text_stt` es fallback dev: transcribe audio con STT y busca texto.
     # Para producto, preferir `porcupine` con keyword custom entrenada para Rako.

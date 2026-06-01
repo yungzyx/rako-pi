@@ -14,6 +14,7 @@ def test_status_is_ready_without_active_focus(db_conn) -> None:
 
     assert status_to_dict(status)["state"] == "ready"
     assert status.active_focus is None
+    assert status.recent_tasks == []
 
 
 def test_start_focus_stores_active_focus_for_mobile_status(db_conn) -> None:
@@ -31,6 +32,36 @@ def test_start_focus_stores_active_focus_for_mobile_status(db_conn) -> None:
     assert status.active_focus is not None
     assert status.active_focus["title"] == "cálculo"
     assert status.active_focus["remaining_seconds"] == 25 * 60
+    assert status.recent_tasks[0]["title"] == "cálculo"
+    assert status.recent_tasks[0]["status"] == "IN_PROGRESS"
+
+
+def test_tasks_returns_recent_or_pending_tasks(db_conn) -> None:
+    db = Database(db_conn)
+    service = MobileService(db)
+    now = datetime(2026, 6, 1, 15, 0, tzinfo=UTC)
+
+    done = service.start_focus(title="leer", minutes=1, now=now)
+    service.status(now + timedelta(minutes=2))
+    active = service.start_focus(title="programar", minutes=20, now=now + timedelta(minutes=3))
+
+    all_tasks = service.tasks(limit=10)
+    pending_tasks = service.tasks(limit=10, pending_only=True)
+
+    assert [task["id"] for task in all_tasks.tasks] == [active.task_id, done.task_id]
+    assert [task["id"] for task in pending_tasks.tasks] == [active.task_id]
+
+
+def test_tasks_rejects_invalid_limits(db_conn) -> None:
+    service = MobileService(Database(db_conn))
+
+    for limit in (0, 101):
+        try:
+            service.tasks(limit=limit)
+        except ValueError as exc:
+            assert "between 1 and 100" in str(exc)
+        else:
+            raise AssertionError("expected ValueError")
 
 
 def test_status_completes_expired_focus(db_conn) -> None:

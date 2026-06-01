@@ -84,6 +84,19 @@ class TaskRepository:
         ).fetchall()
         return [self._row_to_task(r) for r in rows]
 
+    def list_recent(self, limit: int = 20) -> list[Task]:
+        if limit <= 0:
+            raise ValueError(f"limit must be positive, got {limit}")
+        rows = self._conn.execute(
+            """
+            SELECT * FROM tasks
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [self._row_to_task(r) for r in rows]
+
     def list_children(self, parent_id: str) -> list[Task]:
         rows = self._conn.execute(
             "SELECT * FROM tasks WHERE parent_id = ? ORDER BY created_at",

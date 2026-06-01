@@ -74,6 +74,24 @@ def test_list_pending_returns_todo_and_in_progress(db_conn) -> None:
     assert {t.id for t in pending} == {"a", "b"}
 
 
+def test_list_recent_orders_by_newest_and_limits(db_conn) -> None:
+    repo = TaskRepository(db_conn)
+    repo.create(_new_task(id="old", created_at=datetime(2026, 5, 1, 18, 0, tzinfo=UTC)))
+    repo.create(_new_task(id="new", created_at=datetime(2026, 5, 1, 20, 0, tzinfo=UTC)))
+    repo.create(_new_task(id="middle", created_at=datetime(2026, 5, 1, 19, 0, tzinfo=UTC)))
+
+    recent = repo.list_recent(limit=2)
+
+    assert [task.id for task in recent] == ["new", "middle"]
+
+
+def test_list_recent_rejects_non_positive_limit(db_conn) -> None:
+    repo = TaskRepository(db_conn)
+
+    with pytest.raises(ValueError):
+        repo.list_recent(limit=0)
+
+
 def test_list_children_returns_only_children(db_conn) -> None:
     repo = TaskRepository(db_conn)
     repo.create(_new_task(id="parent"))

@@ -176,12 +176,14 @@ Endpoints iniciales:
 ```text
 GET  /health
 GET  /status
+GET  /tasks?pending_only=true&limit=20
 POST /focus/start   {"title": "cálculo", "minutes": 30}
 POST /focus/cancel
 ```
 
 Por defecto escucha en `0.0.0.0:8765`. Puedes cambiarlo con
-`RAKO_API_HOST` y `RAKO_API_PORT`.
+`RAKO_API_HOST` y `RAKO_API_PORT`. Si defines `RAKO_API_TOKEN`, todos los
+endpoints excepto `/health` requieren `Authorization: Bearer <token>`.
 
 ---
 
