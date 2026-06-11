@@ -32,6 +32,7 @@ from bootstrap import build_pi_application
 from config import Settings
 from hardware.oled_runtime import OledEyeController
 from hardware.oled_states import RakoVisualState
+from orchestrator.memory import ConversationMemory
 from orchestrator.orchestrator import TurnInput, TurnKind
 from orchestrator.types import default_user_context
 from productivity.runtime import maybe_start_focus_from_transcript
@@ -164,7 +165,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not 0 <= args.cue_volume <= 1:
         parser.error("--cue-volume must be between 0.0 and 1.0")
 
-    app_holder: dict[str, Any] = {"app": None}
+    app_holder: dict[str, Any] = {"app": None, "memory": ConversationMemory()}
     eyes = OledEyeController(enabled=args.oled, project_root=Path(__file__).resolve().parents[1])
     eyes.set_state(RakoVisualState.READY)
 
@@ -309,6 +310,7 @@ def _handle_press(
     if music_response is not None:
         print(f"Rako: {music_response}", flush=True)
         _synthesize_and_maybe_play(app=app, text=music_response, eyes=eyes, args=args)
+        _remember_turn(app_holder=app_holder, user=transcript, rako=music_response)
         eyes.set_state(RakoVisualState.READY)
         return
 
@@ -318,11 +320,13 @@ def _handle_press(
             eyes.set_state(RakoVisualState.THINKING)
             print(f"Rako: {focus.response_text}", flush=True)
             _synthesize_and_maybe_play(app=app, text=focus.response_text, eyes=eyes, args=args)
+            _remember_turn(app_holder=app_holder, user=transcript, rako=focus.response_text)
             eyes.set_state(RakoVisualState.READY)
             return
         eyes.set_state(RakoVisualState.FOCUS_RUNNING)
         print(f"Rako: {focus.response_text}", flush=True)
         _synthesize_and_maybe_play(app=app, text=focus.response_text, eyes=eyes, args=args)
+        _remember_turn(app_holder=app_holder, user=transcript, rako=focus.response_text)
         if not args.no_focus_countdown:
             eyes.close()
             _launch_focus_countdown(focus=focus, args=args)
@@ -337,7 +341,7 @@ def _handle_press(
         emotion_history=(),
         last_high_distress_at=None,
         last_interaction_at=None,
-        user_context=default_user_context(now),
+        user_context=default_user_context(now, recent_conversation=app_holder["memory"].lines()),
         now=now,
     )
     llm_started = time.monotonic()
@@ -346,7 +350,14 @@ def _handle_press(
     print(f"Tiempo total antes de responder: {time.monotonic() - turn_started:.2f}s", flush=True)
     print(f"Rako: {result.text}", flush=True)
     _synthesize_and_maybe_play(app=app, text=result.text, eyes=eyes, args=args)
+    _remember_turn(app_holder=app_holder, user=transcript, rako=result.text)
     eyes.set_state(RakoVisualState.READY)
+
+
+def _remember_turn(*, app_holder: dict[str, Any], user: str, rako: str) -> None:
+    memory = app_holder.get("memory")
+    if isinstance(memory, ConversationMemory):
+        memory.add_turn(user=user, rako=rako)
 
 
 def _guardrail_result_for_transcript(*, app: Any, transcript: str, now: datetime) -> Any | None:

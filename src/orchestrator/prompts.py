@@ -63,6 +63,9 @@ def format_user_context(ctx: UserContext) -> str:
     ]
     if ctx.recent_mood_summary:
         lines.append(f"Sensación reciente: {ctx.recent_mood_summary}.")
+    if ctx.recent_conversation:
+        lines.append("Conversación reciente de esta sesión:")
+        lines.extend(f"- {line}" for line in ctx.recent_conversation[-8:])
     return "\n".join(lines)
 
 
@@ -85,6 +88,8 @@ def build_user_message(
         "- Suena conversacional, como alguien que acompaña en la mesa: natural, directo y sin frases de plantilla.\n"
         "- No repitas estructuras como 'Veo que no tienes tareas pendientes' o '¿Hay algo específico...?'. Usa el contexto solo si aporta.\n"
         "- No menciones tareas pendientes, logros, hora del día o nivel del robot salvo que el usuario pregunte o sea claramente útil.\n"
+        "- Usa la conversación reciente para mantener continuidad, pero no la repitas ni la resumas salvo que ayude.\n"
+        "- Si el usuario continúa algo que ya venían hablando, responde como continuación natural, sin volver a saludar ni reiniciar el tema.\n"
         "- Evita cerrar siempre con una pregunta. A veces basta con proponer el siguiente paso y dejar espacio.\n"
         "- Si el usuario pide ayuda con una tarea, divide la tarea en pasos pequeños y concretos.\n"
         "- Si el usuario ya va a estudiar, no lo llenes de técnicas: déjalo arrancar con un primer paso.\n"

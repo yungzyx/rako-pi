@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,6 +12,7 @@ from bootstrap import build_dev_application
 from config import Settings
 from hardware.event_bus import InMemoryHardwareEventBus
 from hardware.types import HardwareEvent, HardwareEventKind, LEDState
+from orchestrator.orchestrator import TurnKind, TurnResult
 from orchestrator.run import RunConfig, RunLoop
 from voice.types import AudioBuffer, SynthesisResult, TranscriptResult
 
@@ -154,6 +155,38 @@ def test_voice_turn_captures_audio_and_synthesizes_response(tmp_path: Path) -> N
         played = app.playback.played  # type: ignore[attr-defined]
         assert len(played) >= 1
         assert isinstance(played[0], AudioBuffer)
+    finally:
+        app.close()
+
+
+def test_voice_turn_passes_short_memory_to_next_turn(tmp_path: Path) -> None:
+    loop, app, _ = _make_loop(tmp_path)
+
+    @dataclass
+    class _RecordingOrchestrator:
+        conversations: list[tuple[str, ...]] = field(default_factory=list)
+
+        def handle_turn(self, turn):  # type: ignore[no-untyped-def]
+            self.conversations.append(turn.user_context.recent_conversation)
+            return TurnResult(
+                kind=TurnKind.LLM_RESPONSE,
+                text="Dale, sigamos con eso.",
+                audio_path=None,
+                rag_chunk_ids=(),
+                notify_contact=False,
+                show_resources=False,
+            )
+
+    recorder = _RecordingOrchestrator()
+    app.orchestrator = recorder  # type: ignore[assignment]
+    try:
+        _emit(app.event_bus, HardwareEventKind.TOUCH)  # type: ignore[arg-type]
+        _emit(app.event_bus, HardwareEventKind.TOUCH)  # type: ignore[arg-type]
+        loop.run(max_iterations=1)
+
+        assert recorder.conversations[0] == ()
+        assert "Usuario: estoy aquí" in recorder.conversations[1]
+        assert "Rako: Dale, sigamos con eso." in recorder.conversations[1]
     finally:
         app.close()
 

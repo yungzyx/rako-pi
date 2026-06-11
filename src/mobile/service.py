@@ -48,6 +48,10 @@ class MobileService:
     def __init__(self, db: Database) -> None:
         self._db = db
 
+    @property
+    def db(self) -> Database:
+        return self._db
+
     def status(self, now: datetime | None = None) -> MobileStatus:
         now = _ensure_aware(now or datetime.now(UTC))
         active_focus = self._active_focus(now)

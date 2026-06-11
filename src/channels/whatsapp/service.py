@@ -15,6 +15,7 @@ from channels.whatsapp.client import WhatsAppClient, WhatsAppOutboundMessage
 from db.database import Database
 from db.types import EmotionalStateRecord
 from emotion.types import EmotionalVector
+from productivity.progress import ProgressPeriod, build_progress_summary
 from productivity.runtime import maybe_start_focus_from_transcript
 from safety.detector import detect_crisis
 from safety.responses import pick_response
@@ -56,6 +57,43 @@ class WhatsAppService:
             json.dumps({"to": to, "sent_at": now.isoformat()}, ensure_ascii=False),
         )
         return message
+
+    def send_progress_report(
+        self,
+        *,
+        to: str,
+        period: ProgressPeriod = "today",
+        now: datetime | None = None,
+    ) -> WhatsAppOutboundMessage:
+        now = _ensure_aware(now or datetime.now(UTC))
+        summary = build_progress_summary(self._db, now=now, period=period)
+        return self._client.send_text(
+            to=to,
+            text=summary.message,
+            kind="PROGRESS_REPORT",
+            metadata={"period": period, "sent_at": now.isoformat()},
+        )
+
+    def send_action_menu(
+        self,
+        *,
+        to: str,
+        now: datetime | None = None,
+    ) -> WhatsAppOutboundMessage:
+        now = _ensure_aware(now or datetime.now(UTC))
+        text = (
+            "¿Qué hacemos ahora?\n"
+            "1. Elegir una tarea corta\n"
+            "2. Foco de 25 minutos\n"
+            "3. Revisar progreso\n"
+            "4. Check-in de ánimo"
+        )
+        return self._client.send_text(
+            to=to,
+            text=text,
+            kind="ACTION_MENU",
+            metadata={"sent_at": now.isoformat()},
+        )
 
     def handle_inbound(
         self,
@@ -105,6 +143,10 @@ class WhatsAppService:
                 stored_mood=mood,
             )
 
+        menu_result = self._handle_menu_choice(clean_text, from_number=from_number, now=now)
+        if menu_result is not None:
+            return menu_result
+
         focus = maybe_start_focus_from_transcript(clean_text, db=self._db, now=now)
         if focus is not None:
             return self._reply(
@@ -122,6 +164,44 @@ class WhatsAppService:
                 "'quiero estudiar 25 minutos'."
             ),
         )
+
+    def _handle_menu_choice(
+        self,
+        text: str,
+        *,
+        from_number: str,
+        now: datetime,
+    ) -> WhatsAppInboundResult | None:
+        normalized = text.strip().lower()
+        if normalized in {"1", "tarea", "tarea corta"}:
+            next_task = self._db.tasks.list_pending()
+            title = next_task[0].title if next_task else None
+            response = (
+                f"Partamos chico: abre {title} y haz solo el primer paso durante 10 minutos."
+                if title
+                else "No veo tareas pendientes. Dime una tarea y la convertimos en un primer paso de 10 minutos."
+            )
+            return self._reply(to=from_number, action="MENU_TASK", response_text=response)
+        if normalized in {"2", "foco", "pomodoro"}:
+            return self._reply(
+                to=from_number,
+                action="MENU_FOCUS",
+                response_text="Dime la actividad y duración, por ejemplo: estudiar cálculo 25 minutos.",
+            )
+        if normalized in {"3", "progreso", "avance"}:
+            summary = build_progress_summary(self._db, now=now, period="today")
+            return self._reply(
+                to=from_number,
+                action="MENU_PROGRESS",
+                response_text=summary.message,
+            )
+        if normalized in {"4", "ánimo", "animo", "mood"}:
+            return self._reply(
+                to=from_number,
+                action="MENU_MOOD",
+                response_text="Dime rápido cómo estás: bien, normal o bajo.",
+            )
+        return None
 
     def _reply(
         self,

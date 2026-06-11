@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -19,9 +20,14 @@ class UserContext:
     robot_level: int
     time_of_day: str
     recent_mood_summary: str | None
+    recent_conversation: tuple[str, ...] = ()
 
 
-def default_user_context(now: datetime) -> UserContext:
+def default_user_context(
+    now: datetime,
+    *,
+    recent_conversation: Iterable[str] = (),
+) -> UserContext:
     """Contexto mínimo basado solo en la hora — para usar cuando todavía
     no tenemos estado real del usuario en SQLite (e.g. demos, primer turn)."""
     hour = now.hour
@@ -37,4 +43,5 @@ def default_user_context(now: datetime) -> UserContext:
         robot_level=1,
         time_of_day=tod,
         recent_mood_summary=None,
+        recent_conversation=tuple(recent_conversation),
     )

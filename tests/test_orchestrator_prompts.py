@@ -100,6 +100,23 @@ def test_format_user_context_omits_pii_and_includes_safe_aggregates() -> None:
     assert "valencia" not in formatted.lower()
 
 
+def test_format_user_context_includes_recent_conversation_when_present() -> None:
+    ctx = UserContext(
+        pending_task_count=1,
+        recent_completion_count=0,
+        robot_level=1,
+        time_of_day="tarde",
+        recent_mood_summary=None,
+        recent_conversation=("Usuario: quiero estudiar", "Rako: Dale, partimos."),
+    )
+
+    formatted = format_user_context(ctx)
+
+    assert "Conversación reciente" in formatted
+    assert "quiero estudiar" in formatted
+    assert "Dale, partimos" in formatted
+
+
 def test_build_user_message_combines_query_chunks_and_context() -> None:
     chunks = (Chunk(id="01#0", text="Respira profundo.", metadata={}),)
     ctx = UserContext(
@@ -115,6 +132,23 @@ def test_build_user_message_combines_query_chunks_and_context() -> None:
     assert "Me siento atascado" in message
     assert "Respira profundo" in message
     assert "tarde" in message
+
+
+def test_build_user_message_tells_llm_to_continue_existing_topic() -> None:
+    ctx = UserContext(
+        pending_task_count=1,
+        recent_completion_count=0,
+        robot_level=1,
+        time_of_day="tarde",
+        recent_mood_summary=None,
+        recent_conversation=("Usuario: ayúdame con cálculo", "Rako: Partamos por límites."),
+    )
+
+    message = build_user_message(query="ya, sigamos", chunks=(), context=ctx)
+
+    assert "continúa algo" in message
+    assert "sin volver a saludar" in message
+    assert "Partamos por límites" in message
 
 
 def test_build_user_message_guides_task_breakdowns_and_suggestions() -> None:

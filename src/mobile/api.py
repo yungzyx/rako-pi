@@ -8,7 +8,7 @@ Run locally on the Pi:
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,7 @@ from channels.whatsapp.service import (
 from config import Settings
 from db.database import Database
 from mobile.service import MobileService, focus_start_to_dict, status_to_dict, task_list_to_dict
+from productivity.progress import build_progress_summary, progress_summary_to_dict
 
 
 class StartFocusRequest(BaseModel):
@@ -30,6 +31,11 @@ class StartFocusRequest(BaseModel):
 
 class WhatsAppCheckinRequest(BaseModel):
     to: str = Field(min_length=3, max_length=32)
+
+
+class WhatsAppProgressRequest(BaseModel):
+    to: str = Field(min_length=3, max_length=32)
+    period: Literal["today", "week"] = "today"
 
 
 class WhatsAppInboundRequest(BaseModel):
@@ -104,6 +110,20 @@ def create_app() -> Any:
     ) -> dict[str, Any]:
         return task_list_to_dict(service.tasks(limit=limit, pending_only=pending_only))
 
+    @app.get("/progress/today")
+    async def progress_today(
+        _: None = auth_dep,
+        service: MobileService = service_dep,
+    ) -> dict[str, Any]:
+        return progress_summary_to_dict(build_progress_summary(service.db, period="today"))
+
+    @app.get("/progress/week")
+    async def progress_week(
+        _: None = auth_dep,
+        service: MobileService = service_dep,
+    ) -> dict[str, Any]:
+        return progress_summary_to_dict(build_progress_summary(service.db, period="week"))
+
     @app.post("/focus/start")
     async def start_focus(
         request: StartFocusRequest,
@@ -128,6 +148,24 @@ def create_app() -> Any:
         service: WhatsAppService = whatsapp_dep,
     ) -> dict[str, Any]:
         return outbound_message_to_dict(service.send_checkin(to=request.to))
+
+    @app.post("/whatsapp/progress")
+    async def whatsapp_progress(
+        request: WhatsAppProgressRequest,
+        _: None = auth_dep,
+        service: WhatsAppService = whatsapp_dep,
+    ) -> dict[str, Any]:
+        return outbound_message_to_dict(
+            service.send_progress_report(to=request.to, period=request.period)
+        )
+
+    @app.post("/whatsapp/actions")
+    async def whatsapp_actions(
+        request: WhatsAppCheckinRequest,
+        _: None = auth_dep,
+        service: WhatsAppService = whatsapp_dep,
+    ) -> dict[str, Any]:
+        return outbound_message_to_dict(service.send_action_menu(to=request.to))
 
     @app.post("/whatsapp/inbound")
     async def whatsapp_inbound(

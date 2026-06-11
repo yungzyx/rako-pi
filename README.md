@@ -177,9 +177,13 @@ Endpoints iniciales:
 GET  /health
 GET  /status
 GET  /tasks?pending_only=true&limit=20
+GET  /progress/today
+GET  /progress/week
 POST /focus/start   {"title": "cálculo", "minutes": 30}
 POST /focus/cancel
 POST /whatsapp/checkin   {"to": "+56912345678"}
+POST /whatsapp/progress  {"to": "+56912345678", "period": "today"}
+POST /whatsapp/actions   {"to": "+56912345678"}
 POST /whatsapp/inbound   {"from_number": "+56912345678", "text": "estoy bien"}
 ```
 
@@ -187,8 +191,8 @@ Por defecto escucha en `0.0.0.0:8765`. Puedes cambiarlo con
 `RAKO_API_HOST` y `RAKO_API_PORT`. Si defines `RAKO_API_TOKEN`, todos los
 endpoints excepto `/health` requieren `Authorization: Bearer <token>`.
 La integración WhatsApp actual es un MVP local con cliente en memoria: permite
-probar check-ins, respuestas de ánimo, inicio de foco y bypass de crisis antes
-de conectar WhatsApp Cloud API real.
+probar check-ins, respuestas de ánimo, menú de acciones, reportes de progreso,
+inicio de foco y bypass de crisis antes de conectar WhatsApp Cloud API real.
 
 ---
 

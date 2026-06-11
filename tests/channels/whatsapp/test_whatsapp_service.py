@@ -5,6 +5,8 @@ from datetime import UTC, datetime, timedelta
 from channels.whatsapp.client import InMemoryWhatsAppClient
 from channels.whatsapp.service import WhatsAppService
 from db.database import Database
+from db.types import TaskStatus
+from productivity.focus import create_focus_task
 
 
 def test_send_checkin_uses_safe_short_prompt(db_conn) -> None:
@@ -68,3 +70,41 @@ def test_handle_inbound_crisis_uses_curated_response(db_conn) -> None:
     assert result.crisis is True
     assert "No tienes que estar solo" in result.response_text
     assert client.sent[-1].kind == "CRISIS"
+
+
+def test_send_progress_report_uses_real_task_progress(db_conn) -> None:
+    db = Database(db_conn)
+    now = datetime(2026, 6, 10, 16, 0, tzinfo=UTC)
+    task = db.tasks.create(create_focus_task("leer papers", now - timedelta(hours=1)))
+    db.tasks.update_status(task.id, TaskStatus.DONE, completed_at=now)
+    client = InMemoryWhatsAppClient()
+    service = WhatsAppService(db, client)
+
+    message = service.send_progress_report(to="+56912345678", now=now)
+
+    assert message.kind == "PROGRESS_REPORT"
+    assert "completaste 1 tarea" in message.text
+    assert "leer papers" in message.text
+
+
+def test_send_action_menu_offers_clear_choices(db_conn) -> None:
+    service = WhatsAppService(Database(db_conn), InMemoryWhatsAppClient())
+
+    message = service.send_action_menu(to="+56912345678")
+
+    assert message.kind == "ACTION_MENU"
+    assert "1. Elegir una tarea corta" in message.text
+    assert "4. Check-in de ánimo" in message.text
+
+
+def test_handle_inbound_menu_choice_returns_progress(db_conn) -> None:
+    db = Database(db_conn)
+    now = datetime(2026, 6, 10, 16, 0, tzinfo=UTC)
+    task = db.tasks.create(create_focus_task("programar", now))
+    db.tasks.update_status(task.id, TaskStatus.DONE, completed_at=now)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    result = service.handle_inbound(from_number="+56912345678", text="3", now=now)
+
+    assert result.action == "MENU_PROGRESS"
+    assert "programar" in result.response_text

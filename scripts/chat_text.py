@@ -16,6 +16,7 @@ from pathlib import Path
 
 from bootstrap import build_pi_application
 from config import Settings
+from orchestrator.memory import ConversationMemory
 from orchestrator.orchestrator import TurnInput
 from orchestrator.types import default_user_context
 
@@ -23,6 +24,7 @@ from orchestrator.types import default_user_context
 def main() -> int:
     settings = Settings()
     app = build_pi_application(settings)
+    memory = ConversationMemory()
     print("Rako listo. Escribe algo y Enter. Ctrl+C para salir.")
     try:
         while True:
@@ -41,11 +43,12 @@ def main() -> int:
                 emotion_history=(),
                 last_high_distress_at=None,
                 last_interaction_at=None,
-                user_context=default_user_context(now),
+                user_context=default_user_context(now, recent_conversation=memory.lines()),
                 now=now,
             )
             result = app.orchestrator.handle_turn(turn_in)
             print(f"Rako: {result.text}")
+            memory.add_turn(user=text, rako=result.text)
 
             audio = app.tts.synthesize(result.text)
             out = Path("/tmp/rako-reply.mp3")

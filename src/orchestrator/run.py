@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from hardware.types import HardwareEvent, HardwareEventKind, LEDState
+from orchestrator.memory import ConversationMemory
 from orchestrator.orchestrator import TurnInput
 from orchestrator.types import default_user_context
 from safety.types import PanicSource
@@ -59,6 +60,7 @@ class RunLoop:
         self._pending: list[HardwareEvent] = []
         self._iteration = 0
         self._stopped = False
+        self._memory = ConversationMemory()
         app.event_bus.subscribe(self._enqueue)
 
     # ------------------------------------------------------------------
@@ -148,10 +150,11 @@ class RunLoop:
             emotion_history=(),
             last_high_distress_at=None,
             last_interaction_at=now,
-            user_context=default_user_context(now),
+            user_context=default_user_context(now, recent_conversation=self._memory.lines()),
             now=now,
         )
         result = self._app.orchestrator.handle_turn(turn)
+        self._memory.add_turn(user=transcript, rako=result.text)
         self._dispatch(result)
 
     def _transcribe(self, audio) -> str:
