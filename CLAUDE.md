@@ -40,7 +40,7 @@ app móvil ni el contenido del RAG.
 ### En la Pi
 - **Hardware actual:** Raspberry Pi 4 8GB + ReSpeaker 2-Mics Pi HAT + pantalla OLED por I2C. No hay speaker fijo todavía; salida temporal por cable a parlante externo cuando esté conectado. Ver `HARDWARE.md`.
 - **OS:** Raspberry Pi OS (Debian 64-bit).
-- **Lenguaje:** Python 3.12 (Pi OS Bookworm). Mantener compat 3.11+.
+- **Lenguaje:** Python 3.12+ (Pi OS Bookworm).
 - **Frameworks:** FastAPI (servicios internos), LangChain (orquestación RAG+LLM).
 - **Vector DB:** ChromaDB (local).
 - **Relacional local:** SQLite + SQLCipher (cifrado en disco).
@@ -65,7 +65,7 @@ app móvil ni el contenido del RAG.
 ## 3. Reglas de código (siempre)
 
 ### Python
-- **Python 3.12** (compat 3.11+). Type hints en toda función pública.
+- **Python 3.12+**. Type hints en toda función pública.
 - **Inmutabilidad por defecto.** Crear objetos nuevos, no mutar. `@dataclass(frozen=True)` cuando aplica.
 - **Archivos chicos:** ~200–400 líneas, máximo 800. Si crece, partir.
 - **Funciones cortas:** <50 líneas. Anidamiento <4 niveles. Early returns.
@@ -76,7 +76,7 @@ app móvil ni el contenido del RAG.
 
 ### Tests
 - **TDD.** Test primero (rojo), implementación mínima (verde), refactor.
-- **Cobertura ≥ 80%** en módulos no-hardware.
+- **Cobertura ≥ 95%** en CI.
 - **Pytest.** AAA (Arrange-Act-Assert). Nombres descriptivos del comportamiento.
 - **Sin tocar APIs reales en tests.** Mocks o fixtures locales.
 - **Hardware:** abstraer detrás de interfaces para poder fakear en CI.
@@ -190,9 +190,10 @@ Para iterar en `safety/` (no necesita las deps pesadas) basta con
 
 ### Tests
 ```bash
-pytest                                # toda la suite
-pytest tests/test_safety.py -v        # solo crisis (debe pasar siempre)
-pytest --cov=src --cov-report=term-missing
+python scripts/checks.py lint         # Ruff + format check
+python scripts/checks.py test         # suite completa + cobertura CI
+python scripts/checks.py safety       # fixtures críticos de seguridad
+python scripts/checks.py all          # harness local completo
 ```
 
 ### Re-indexar el RAG desde Obsidian
@@ -235,7 +236,7 @@ Detalle: `../docs/Arquitectura_Tecnica.md` §5.
 
 ## 9. Antes de marcar trabajo como hecho
 
-- [ ] Tests verdes y cobertura ≥ 80% en módulos no-hardware.
+- [ ] Tests verdes y cobertura ≥ 95%.
 - [ ] Si tocaste `safety/`, los fixtures de crisis siguen disparando.
 - [ ] Nada que viole las reglas de privacidad de §4.1 sale del repo.
 - [ ] No hay secretos en código.

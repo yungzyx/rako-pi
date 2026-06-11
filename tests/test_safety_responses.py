@@ -109,6 +109,7 @@ def test_crisis_response_contains_short_udd_resources_and_confirmation() -> None
     assert "Bienestar UDD" in response.text
     assert "+56 2 2820 3419" in response.text
     assert "SAMU: 131" in response.text
-    assert "Te envío la información completa al WhatsApp" in response.text
+    assert "Te envío la información completa al WhatsApp" not in response.text
+    assert "Mantén estos datos visibles" in response.text
     assert "800 200 125" not in response.text
     assert "¿Puedes decirme que vas a contactar a alguno de estos?" in response.text

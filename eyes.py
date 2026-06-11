@@ -48,7 +48,9 @@ def canvas() -> tuple[Image.Image, ImageDraw.ImageDraw]:
     return image, ImageDraw.Draw(image)
 
 
-def eye(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], *, pupil: tuple[int, int] = (0, 0)) -> None:
+def eye(
+    draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], *, pupil: tuple[int, int] = (0, 0)
+) -> None:
     draw.rounded_rectangle(box, radius=10, outline=255, fill=255)
     cx = (box[0] + box[2]) // 2 + pupil[0]
     cy = (box[1] + box[3]) // 2 + pupil[1]
@@ -154,7 +156,9 @@ def draw_speaking(draw: ImageDraw.ImageDraw, t: float) -> None:
     eye(draw, LEFT_EYE, pupil=(0, -1))
     eye(draw, RIGHT_EYE, pupil=(0, -1))
     level = int(8 * (0.5 + 0.5 * math.sin(t * 18)))
-    draw.rounded_rectangle((50, 48 - level // 2, 78, 56 + level // 2), radius=4, outline=255, width=2)
+    draw.rounded_rectangle(
+        (50, 48 - level // 2, 78, 56 + level // 2), radius=4, outline=255, width=2
+    )
 
 
 def draw_love(draw: ImageDraw.ImageDraw, t: float) -> None:
@@ -226,9 +230,13 @@ def run_demo(device) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Show Rako OLED eye expressions")
-    parser.add_argument("expression", nargs="?", default="demo", choices=["demo", "random", *EXPRESSIONS])
+    parser.add_argument(
+        "expression", nargs="?", default="demo", choices=["demo", "random", *EXPRESSIONS]
+    )
     parser.add_argument("--loop", action="store_true", help="Loop a single expression")
-    parser.add_argument("--seconds", type=float, default=None, help="Duration for a single expression")
+    parser.add_argument(
+        "--seconds", type=float, default=None, help="Duration for a single expression"
+    )
     args = parser.parse_args()
 
     device = open_device()

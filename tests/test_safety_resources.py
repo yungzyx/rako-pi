@@ -28,7 +28,8 @@ def test_crisis_resources_are_short_for_voice() -> None:
 
     assert "+56 2 2820 3419" in rendered
     assert "SAMU: 131" in rendered
-    assert "WhatsApp" in rendered
+    assert "WhatsApp" not in rendered
+    assert "Mantén estos datos visibles" in rendered
     assert "800 200 125" not in rendered
     assert "+56 9 8821 9885" not in rendered
     assert len(rendered) < 180

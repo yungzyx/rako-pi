@@ -1,12 +1,9 @@
 """Bootstrap del cerebro — arma el grafo de dependencias.
 
-`build_dev_application(settings)` compone una `Application` con fakes
-para todo lo que requiere hardware o credenciales reales (cloud APIs,
-GPIO). Útil para CI, demos y desarrollo en mac.
-
-Una versión `build_pi_application` se agregará al provisionar la Pi —
-intercambia los fakes por las impls reales (`gpiozero`, `sounddevice`,
-`google-cloud-speech`, `firebase-admin`).
+`build_dev_application(settings)` compone una `Application` con fakes para CI,
+demos y desarrollo sin hardware. `build_pi_application(settings)` intenta usar
+las implementaciones reales disponibles en la Raspberry Pi y cae a fakes cuando
+faltan drivers o credenciales.
 """
 
 from __future__ import annotations

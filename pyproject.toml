@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "rako-pi"
 version = "0.1.0"
 description = "Rako — cerebro sobre Raspberry Pi 4."
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -64,7 +64,12 @@ def create_app() -> Any:
     ) -> None:
         token = settings.rako_api_token
         if not token:
-            return
+            if settings.rako_env == "dev":
+                return
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="RAKO_API_TOKEN is required outside dev",
+            )
         expected = f"Bearer {token}"
         if authorization != expected:
             raise HTTPException(

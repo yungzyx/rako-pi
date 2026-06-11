@@ -84,7 +84,8 @@ def test_send_progress_report_uses_real_task_progress(db_conn) -> None:
 
     assert message.kind == "PROGRESS_REPORT"
     assert "completaste 1 tarea" in message.text
-    assert "leer papers" in message.text
+    assert "leer papers" not in message.text
+    assert "tarea pequeña" in message.text
 
 
 def test_send_action_menu_offers_clear_choices(db_conn) -> None:
@@ -107,4 +108,5 @@ def test_handle_inbound_menu_choice_returns_progress(db_conn) -> None:
     result = service.handle_inbound(from_number="+56912345678", text="3", now=now)
 
     assert result.action == "MENU_PROGRESS"
-    assert "programar" in result.response_text
+    assert "programar" not in result.response_text
+    assert "completaste 1 tarea" in result.response_text

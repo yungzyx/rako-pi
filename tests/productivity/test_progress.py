@@ -5,7 +5,11 @@ from datetime import UTC, datetime, timedelta
 from db.database import Database
 from db.types import TaskSource, TaskStatus
 from productivity.focus import create_focus_task
-from productivity.progress import build_progress_summary, progress_summary_to_dict
+from productivity.progress import (
+    build_external_progress_message,
+    build_progress_summary,
+    progress_summary_to_dict,
+)
 
 
 def test_progress_summary_counts_today_completed_and_pending(db_conn) -> None:
@@ -50,3 +54,15 @@ def test_progress_summary_to_dict_is_api_friendly(db_conn) -> None:
     assert payload["period"] == "today"
     assert payload["tasks_completed"] == 0
     assert isinstance(payload["message"], str)
+
+
+def test_external_progress_message_does_not_include_task_titles(db_conn) -> None:
+    db = Database(db_conn)
+    now = datetime(2026, 6, 10, 18, 0, tzinfo=UTC)
+    task = db.tasks.create(create_focus_task("tarea privada", now - timedelta(hours=1)))
+    db.tasks.update_status(task.id, TaskStatus.DONE, completed_at=now)
+
+    message = build_external_progress_message(build_progress_summary(db, now=now))
+
+    assert "completaste 1 tarea" in message
+    assert "tarea privada" not in message

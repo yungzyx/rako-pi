@@ -78,6 +78,26 @@ def progress_summary_to_dict(summary: ProgressSummary) -> dict[str, object]:
     return asdict(summary)
 
 
+def build_external_progress_message(summary: ProgressSummary) -> str:
+    """Privacy-safe message for external channels such as WhatsApp.
+
+    It intentionally avoids task titles. Detailed titles stay available through
+    the local authenticated API.
+    """
+    period_text = "hoy" if summary.period == "today" else "esta semana"
+    if summary.tasks_completed > 0:
+        task_word = "tarea" if summary.tasks_completed == 1 else "tareas"
+        base = f"{period_text.capitalize()} completaste {summary.tasks_completed} {task_word}."
+    elif summary.active_task_count > 0:
+        base = f"{period_text.capitalize()} tienes una tarea en marcha."
+    else:
+        base = f"{period_text.capitalize()} todavía no hay tareas completadas."
+
+    if summary.pending_task_count > 0:
+        return f"{base} Hay un siguiente paso disponible cuando quieras retomarlo."
+    return f"{base} Podemos elegir una tarea pequeña para partir."
+
+
 def _period_bounds(now: datetime, period: ProgressPeriod) -> tuple[datetime, datetime]:
     today = now.date()
     start_day = today if period == "today" else today - timedelta(days=today.weekday())

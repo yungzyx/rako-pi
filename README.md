@@ -187,9 +187,10 @@ POST /whatsapp/actions   {"to": "+56912345678"}
 POST /whatsapp/inbound   {"from_number": "+56912345678", "text": "estoy bien"}
 ```
 
-Por defecto escucha en `0.0.0.0:8765`. Puedes cambiarlo con
+Por defecto escucha en `127.0.0.1:8765`. Puedes cambiarlo con
 `RAKO_API_HOST` y `RAKO_API_PORT`. Si defines `RAKO_API_TOKEN`, todos los
-endpoints excepto `/health` requieren `Authorization: Bearer <token>`.
+endpoints excepto `/health` requieren `Authorization: Bearer <token>`; en
+`staging`/`prod`, el token es obligatorio.
 La integración WhatsApp actual es un MVP local con cliente en memoria: permite
 probar check-ins, respuestas de ánimo, menú de acciones, reportes de progreso,
 inicio de foco y bypass de crisis antes de conectar WhatsApp Cloud API real.
@@ -199,14 +200,14 @@ inicio de foco y bypass de crisis antes de conectar WhatsApp Cloud API real.
 ## Tests
 
 ```bash
-pytest                                        # toda la suite (mocks de hardware)
-pytest tests/test_safety.py -v                # protocolo de crisis (CRÍTICO)
-pytest -m "not hardware"                      # excluir tests que necesitan Pi
-pytest --cov=src --cov-report=term-missing    # cobertura
+python scripts/checks.py lint                 # Ruff + format check, igual que CI
+python scripts/checks.py test                 # suite completa + cobertura, igual que CI
+python scripts/checks.py safety               # fixtures críticos de seguridad
+python scripts/checks.py all                  # todo el harness local
 ```
 
-Cobertura objetivo: **≥ 80%** en módulos no-hardware. El detector de crisis
-tiene fixtures dedicados y no puede regresionar.
+Cobertura objetivo de CI: **≥ 95%**. El detector de crisis tiene fixtures
+dedicados y no puede regresionar.
 
 ---
 
@@ -237,8 +238,11 @@ Reglas detalladas: [`CLAUDE.md`](./CLAUDE.md) §4 y
 
 ## Estado actual
 
-Esqueleto. Sin lógica todavía. Cada módulo en `src/` tiene un docstring que
-describe su responsabilidad y los archivos están vacíos.
+MVP funcional en Raspberry Pi: conversación por botón, STT/TTS, OLED/LED,
+SQLite local, memoria conversacional breve, tareas/foco, reportes de progreso,
+API móvil local y canal WhatsApp simulado para check-ins y acciones. Crisis y
+derivación usan respuestas curadas; los reportes externos evitan títulos de
+tareas por defecto.
 
 ## Licencia
 

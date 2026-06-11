@@ -1,5 +1,5 @@
 # Rako — Cerebro (Raspberry Pi 4)
-# Python 3.12 (compat 3.11+)
+# Python 3.12+
 #
 # Versiones pinneadas conservadoras para Pi 4 ARM64. Ajustar al hacer
 # `pip-compile` real cuando arranque la implementación.
@@ -36,7 +36,7 @@ numpy==1.26.4
 librosa==0.10.2.post1
 
 # --- RAG: vector DB + embeddings ------------------------------------------
-chromadb==0.5.15
+chromadb==1.5.9
 sentence-transformers==3.1.1
 
 # --- Wake word -------------------------------------------------------------

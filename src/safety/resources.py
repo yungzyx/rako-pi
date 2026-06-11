@@ -79,7 +79,7 @@ def render_crisis_resources() -> str:
     return (
         "Contacta ahora a Bienestar UDD: +56 2 2820 3419. "
         "Si hay emergencia inmediata, llama al SAMU: 131. "
-        "Te envío la información completa al WhatsApp."
+        "Mantén estos datos visibles mientras contactas apoyo."
     )
 
 

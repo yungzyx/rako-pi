@@ -15,7 +15,11 @@ from channels.whatsapp.client import WhatsAppClient, WhatsAppOutboundMessage
 from db.database import Database
 from db.types import EmotionalStateRecord
 from emotion.types import EmotionalVector
-from productivity.progress import ProgressPeriod, build_progress_summary
+from productivity.progress import (
+    ProgressPeriod,
+    build_external_progress_message,
+    build_progress_summary,
+)
 from productivity.runtime import maybe_start_focus_from_transcript
 from safety.detector import detect_crisis
 from safety.responses import pick_response
@@ -69,7 +73,7 @@ class WhatsAppService:
         summary = build_progress_summary(self._db, now=now, period=period)
         return self._client.send_text(
             to=to,
-            text=summary.message,
+            text=build_external_progress_message(summary),
             kind="PROGRESS_REPORT",
             metadata={"period": period, "sent_at": now.isoformat()},
         )
@@ -175,10 +179,9 @@ class WhatsAppService:
         normalized = text.strip().lower()
         if normalized in {"1", "tarea", "tarea corta"}:
             next_task = self._db.tasks.list_pending()
-            title = next_task[0].title if next_task else None
             response = (
-                f"Partamos chico: abre {title} y haz solo el primer paso durante 10 minutos."
-                if title
+                "Partamos chico: abre tu siguiente tarea pendiente y haz solo el primer paso durante 10 minutos."
+                if next_task
                 else "No veo tareas pendientes. Dime una tarea y la convertimos en un primer paso de 10 minutos."
             )
             return self._reply(to=from_number, action="MENU_TASK", response_text=response)
@@ -193,7 +196,7 @@ class WhatsAppService:
             return self._reply(
                 to=from_number,
                 action="MENU_PROGRESS",
-                response_text=summary.message,
+                response_text=build_external_progress_message(summary),
             )
         if normalized in {"4", "ánimo", "animo", "mood"}:
             return self._reply(

@@ -78,7 +78,20 @@ def test_whatsapp_progress_endpoint_returns_report(monkeypatch, tmp_path) -> Non
 
     assert response.status_code == 200
     assert response.json()["kind"] == "PROGRESS_REPORT"
-    assert "leer papers" in response.json()["text"]
+    assert "leer papers" not in response.json()["text"]
+    assert "siguiente paso disponible" in response.json()["text"]
+
+
+def test_api_requires_token_outside_dev_when_missing(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_ENV", "prod")
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.get("/status")
+
+    assert response.status_code == 401
+    assert "RAKO_API_TOKEN" in response.json()["detail"]
 
 
 def test_whatsapp_actions_endpoint_returns_menu(monkeypatch, tmp_path) -> None:

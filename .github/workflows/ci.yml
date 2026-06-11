@@ -31,12 +31,7 @@ jobs:
           # Force fake LLM and skip vault lookups.
           ANTHROPIC_API_KEY: ""
           OBSIDIAN_VAULT_PATH: ./this-path-does-not-exist
-        run: |
-          pytest \
-            --cov=src \
-            --cov-report=term-missing \
-            --cov-report=xml \
-            --cov-fail-under=95
+        run: python scripts/checks.py test
 
       - name: Upload coverage XML
         if: always()
@@ -64,11 +59,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: Lint
-        run: ruff check src tests
-
-      - name: Format check
-        run: ruff format --check src tests
+      - name: Lint + format
+        run: python scripts/checks.py lint
 
   safety-fixtures:
     # Tests del detector de crisis nunca pueden regresionar.
@@ -92,12 +84,4 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run safety + emotion + db.journal tests
-        run: |
-          pytest -v \
-            tests/test_safety_detector.py \
-            tests/test_safety_protocol.py \
-            tests/test_safety_responses.py \
-            tests/test_safety_resources.py \
-            tests/test_safety_protocol_with_journal.py \
-            tests/test_emotion_types.py \
-            tests/test_db_journal.py
+        run: python scripts/checks.py safety

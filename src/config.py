@@ -64,8 +64,8 @@ class Settings(BaseSettings):
     sqlite_encryption_key: str | None = None
 
     # --- API local ---
-    # Si está definido, la app móvil debe enviar:
-    #   Authorization: Bearer <token>
+    # Si está definido, la app móvil debe enviar Authorization: Bearer <token>.
+    # En staging/prod es obligatorio; en dev se permite omitirlo para pruebas locales.
     rako_api_token: str | None = None
 
     # --- Wake word ---
