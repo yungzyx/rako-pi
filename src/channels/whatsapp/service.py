@@ -15,6 +15,7 @@ from channels.whatsapp.client import WhatsAppClient, WhatsAppOutboundMessage
 from db.database import Database
 from db.types import EmotionalStateRecord
 from emotion.types import EmotionalVector
+from product.user_config import UserConfigService
 from productivity.progress import (
     ProgressPeriod,
     build_external_progress_message,
@@ -49,6 +50,8 @@ class WhatsAppService:
         now: datetime | None = None,
     ) -> WhatsAppOutboundMessage:
         now = _ensure_aware(now or datetime.now(UTC))
+        if not UserConfigService(self._db).whatsapp_can_send():
+            return self._consent_required(to=to, now=now)
         text = "Hey, soy Rako. Check-in rápido: ¿cómo te sientes ahora: bien, normal o bajo?"
         message = self._client.send_text(
             to=to,
@@ -70,6 +73,8 @@ class WhatsAppService:
         now: datetime | None = None,
     ) -> WhatsAppOutboundMessage:
         now = _ensure_aware(now or datetime.now(UTC))
+        if not UserConfigService(self._db).progress_reports_can_send():
+            return self._consent_required(to=to, now=now)
         summary = build_progress_summary(self._db, now=now, period=period)
         return self._client.send_text(
             to=to,
@@ -85,6 +90,8 @@ class WhatsAppService:
         now: datetime | None = None,
     ) -> WhatsAppOutboundMessage:
         now = _ensure_aware(now or datetime.now(UTC))
+        if not UserConfigService(self._db).whatsapp_can_send():
+            return self._consent_required(to=to, now=now)
         text = (
             "¿Qué hacemos ahora?\n"
             "1. Elegir una tarea corta\n"
@@ -96,6 +103,17 @@ class WhatsAppService:
             to=to,
             text=text,
             kind="ACTION_MENU",
+            metadata={"sent_at": now.isoformat()},
+        )
+
+    def _consent_required(self, *, to: str, now: datetime) -> WhatsAppOutboundMessage:
+        return self._client.send_text(
+            to=to,
+            text=(
+                "Necesito que actives WhatsApp en la configuración de Rako antes de enviarte "
+                "avisos o reportes por este canal."
+            ),
+            kind="CONSENT_REQUIRED",
             metadata={"sent_at": now.isoformat()},
         )
 

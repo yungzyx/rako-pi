@@ -176,9 +176,19 @@ Endpoints iniciales:
 ```text
 GET  /health
 GET  /status
+GET  /onboarding/status
 GET  /tasks?pending_only=true&limit=20
 GET  /progress/today
 GET  /progress/week
+GET  /user/profile
+PATCH /user/profile     {"preferred_name": "Nico", "university": "UDD"}
+GET  /user/consent
+PATCH /user/consent     {"whatsapp_enabled": true}
+GET  /user/channels
+PATCH /user/channels    {"wifi_ssid": "Casa", "whatsapp_number": "+569..."}
+GET  /user/memory
+POST /user/memory       {"text": "Prefiero bloques de 25 minutos", "category": "routine"}
+DELETE /user/memory/{id}
 POST /focus/start   {"title": "cálculo", "minutes": 30}
 POST /focus/cancel
 POST /whatsapp/checkin   {"to": "+56912345678"}
@@ -194,6 +204,9 @@ endpoints excepto `/health` requieren `Authorization: Bearer <token>`; en
 La integración WhatsApp actual es un MVP local con cliente en memoria: permite
 probar check-ins, respuestas de ánimo, menú de acciones, reportes de progreso,
 inicio de foco y bypass de crisis antes de conectar WhatsApp Cloud API real.
+Los mensajes salientes por WhatsApp requieren opt-in local en `/user/consent`
+y número configurado en `/user/channels`. El SSID WiFi se puede guardar para
+diagnóstico/onboarding, pero la contraseña WiFi no se persiste en SQLite.
 
 ---
 

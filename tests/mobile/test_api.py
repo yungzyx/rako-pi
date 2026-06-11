@@ -56,10 +56,63 @@ def test_progress_endpoint_summarizes_tasks(monkeypatch, tmp_path) -> None:
     assert response.json()["next_task_title"] == "cálculo"
 
 
+def test_user_config_endpoints_support_product_onboarding(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    initial = client.get("/onboarding/status")
+    profile = client.patch(
+        "/user/profile",
+        json={"preferred_name": "Nico", "university": "UDD", "program": "Ingeniería"},
+    )
+    channels = client.patch(
+        "/user/channels",
+        json={"wifi_ssid": "Casa", "whatsapp_number": "+56912345678"},
+    )
+    consent = client.patch(
+        "/user/consent",
+        json={"whatsapp_enabled": True, "progress_reports_enabled": True},
+    )
+    ready = client.get("/onboarding/status")
+
+    assert initial.status_code == 200
+    assert "privacy_consent" in initial.json()["missing"]
+    assert profile.json()["preferred_name"] == "Nico"
+    assert channels.json()["wifi_ssid"] == "Casa"
+    assert consent.json()["accepted_at"] is not None
+    assert ready.json()["ready"] is True
+
+
+def test_user_memory_endpoint_requires_sensitive_memory_consent(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    rejected = client.post(
+        "/user/memory",
+        json={"text": "Prefiero estudiar de noche", "sensitivity": "sensitive"},
+    )
+    client.patch("/user/consent", json={"sensitive_memory_enabled": True})
+    created = client.post(
+        "/user/memory",
+        json={"text": "Prefiero estudiar de noche", "category": "routine"},
+    )
+    listed = client.get("/user/memory")
+    deleted = client.delete(f"/user/memory/{created.json()['id']}")
+
+    assert rejected.status_code == 400
+    assert created.status_code == 200
+    assert listed.json()["items"][0]["text"] == "Prefiero estudiar de noche"
+    assert deleted.json()["deleted"] is True
+
+
 def test_whatsapp_checkin_endpoint_returns_outbound_message(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
     client = TestClient(create_app())
+    client.patch("/user/channels", json={"whatsapp_number": "+56912345678"})
+    client.patch("/user/consent", json={"whatsapp_enabled": True})
 
     response = client.post("/whatsapp/checkin", json={"to": "+56912345678"})
 
@@ -72,6 +125,11 @@ def test_whatsapp_progress_endpoint_returns_report(monkeypatch, tmp_path) -> Non
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
     client = TestClient(create_app())
+    client.patch("/user/channels", json={"whatsapp_number": "+56912345678"})
+    client.patch(
+        "/user/consent",
+        json={"whatsapp_enabled": True, "progress_reports_enabled": True},
+    )
 
     client.post("/focus/start", json={"title": "leer papers", "minutes": 25})
     response = client.post("/whatsapp/progress", json={"to": "+56912345678"})
@@ -98,6 +156,8 @@ def test_whatsapp_actions_endpoint_returns_menu(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
     client = TestClient(create_app())
+    client.patch("/user/channels", json={"whatsapp_number": "+56912345678"})
+    client.patch("/user/consent", json={"whatsapp_enabled": True})
 
     response = client.post("/whatsapp/actions", json={"to": "+56912345678"})
 

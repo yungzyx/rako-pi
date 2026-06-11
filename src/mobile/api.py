@@ -2,7 +2,7 @@
 
 Run locally on the Pi:
 
-    PYTHONPATH=src uvicorn mobile.api:create_app --factory --host 0.0.0.0 --port 8765
+    PYTHONPATH=src uvicorn mobile.api:create_app --factory --host 127.0.0.1 --port 8765
 """
 
 from __future__ import annotations
@@ -21,6 +21,14 @@ from channels.whatsapp.service import (
 from config import Settings
 from db.database import Database
 from mobile.service import MobileService, focus_start_to_dict, status_to_dict, task_list_to_dict
+from product.user_config import (
+    UserConfigService,
+    channels_to_dict,
+    consent_to_dict,
+    memory_to_dict,
+    onboarding_status_to_dict,
+    user_profile_to_dict,
+)
 from productivity.progress import build_progress_summary, progress_summary_to_dict
 
 
@@ -41,6 +49,37 @@ class WhatsAppProgressRequest(BaseModel):
 class WhatsAppInboundRequest(BaseModel):
     from_number: str = Field(min_length=3, max_length=32)
     text: str = Field(min_length=0, max_length=1000)
+
+
+class UserProfileRequest(BaseModel):
+    preferred_name: str | None = Field(default=None, max_length=80)
+    university: str | None = Field(default=None, max_length=120)
+    program: str | None = Field(default=None, max_length=120)
+    timezone: str | None = Field(default=None, max_length=64)
+    locale: str | None = Field(default=None, max_length=16)
+
+
+class PrivacyConsentRequest(BaseModel):
+    whatsapp_enabled: bool | None = None
+    proactive_messages_enabled: bool | None = None
+    progress_reports_enabled: bool | None = None
+    sensitive_memory_enabled: bool | None = None
+    wellbeing_escalation_enabled: bool | None = None
+
+
+class ChannelConfigRequest(BaseModel):
+    whatsapp_number: str | None = Field(default=None, max_length=32)
+    trusted_contact_name: str | None = Field(default=None, max_length=120)
+    trusted_contact_phone: str | None = Field(default=None, max_length=32)
+    wellbeing_unit_name: str | None = Field(default=None, max_length=160)
+    wellbeing_unit_phone: str | None = Field(default=None, max_length=32)
+    wifi_ssid: str | None = Field(default=None, max_length=64)
+
+
+class MemoryCreateRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=240)
+    category: Literal["study", "routine", "motivation", "preference", "boundary"] = "preference"
+    sensitivity: Literal["normal", "sensitive"] = "normal"
 
 
 def create_app() -> Any:
@@ -91,9 +130,17 @@ def create_app() -> Any:
         finally:
             db.close()
 
+    async def build_user_config_service() -> AsyncIterator[UserConfigService]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            yield UserConfigService(db)
+        finally:
+            db.close()
+
     auth_dep = Depends(require_api_token)
     service_dep = Depends(build_service)
     whatsapp_dep = Depends(build_whatsapp_service)
+    user_config_dep = Depends(build_user_config_service)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -128,6 +175,93 @@ def create_app() -> Any:
         service: MobileService = service_dep,
     ) -> dict[str, Any]:
         return progress_summary_to_dict(build_progress_summary(service.db, period="week"))
+
+    @app.get("/onboarding/status")
+    async def onboarding_status(
+        _: None = auth_dep,
+        service: UserConfigService = user_config_dep,
+    ) -> dict[str, Any]:
+        return onboarding_status_to_dict(service.onboarding_status())
+
+    @app.get("/user/profile")
+    async def get_user_profile(
+        _: None = auth_dep,
+        service: UserConfigService = user_config_dep,
+    ) -> dict[str, Any]:
+        return user_profile_to_dict(service.get_profile())
+
+    @app.patch("/user/profile")
+    async def update_user_profile(
+        request: UserProfileRequest,
+        _: None = auth_dep,
+        service: UserConfigService = user_config_dep,
+    ) -> dict[str, Any]:
+        return user_profile_to_dict(service.update_profile(request.model_dump(exclude_none=True)))
+
+    @app.get("/user/consent")
+    async def get_privacy_consent(
+        _: None = auth_dep,
+        service: UserConfigService = user_config_dep,
+    ) -> dict[str, Any]:
+        return consent_to_dict(service.get_consent())
+
+    @app.patch("/user/consent")
+    async def update_privacy_consent(
+        request: PrivacyConsentRequest,
+        _: None = auth_dep,
+        service: UserConfigService = user_config_dep,
+    ) -> dict[str, Any]:
+        return consent_to_dict(service.update_consent(request.model_dump(exclude_none=True)))
+
+    @app.get("/user/channels")
+    async def get_channel_config(
+        _: None = auth_dep,
+        service: UserConfigService = user_config_dep,
+    ) -> dict[str, Any]:
+        return channels_to_dict(service.get_channels())
+
+    @app.patch("/user/channels")
+    async def update_channel_config(
+        request: ChannelConfigRequest,
+        _: None = auth_dep,
+        service: UserConfigService = user_config_dep,
+    ) -> dict[str, Any]:
+        try:
+            channels = service.update_channels(request.model_dump(exclude_none=True))
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        return channels_to_dict(channels)
+
+    @app.get("/user/memory")
+    async def list_user_memory(
+        _: None = auth_dep,
+        service: UserConfigService = user_config_dep,
+    ) -> dict[str, Any]:
+        return {"items": [memory_to_dict(item) for item in service.list_memory()]}
+
+    @app.post("/user/memory")
+    async def add_user_memory(
+        request: MemoryCreateRequest,
+        _: None = auth_dep,
+        service: UserConfigService = user_config_dep,
+    ) -> dict[str, Any]:
+        try:
+            memory = service.add_memory(
+                text=request.text,
+                category=request.category,
+                sensitivity=request.sensitivity,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        return memory_to_dict(memory)
+
+    @app.delete("/user/memory/{memory_id}")
+    async def delete_user_memory(
+        memory_id: str,
+        _: None = auth_dep,
+        service: UserConfigService = user_config_dep,
+    ) -> dict[str, bool]:
+        return {"deleted": service.delete_memory(memory_id)}
 
     @app.post("/focus/start")
     async def start_focus(

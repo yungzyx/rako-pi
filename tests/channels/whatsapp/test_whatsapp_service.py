@@ -6,11 +6,19 @@ from channels.whatsapp.client import InMemoryWhatsAppClient
 from channels.whatsapp.service import WhatsAppService
 from db.database import Database
 from db.types import TaskStatus
+from product.user_config import UserConfigService
 from productivity.focus import create_focus_task
+
+
+def _enable_whatsapp(db: Database, *, progress: bool = False) -> None:
+    config = UserConfigService(db)
+    config.update_channels({"whatsapp_number": "+56912345678"})
+    config.update_consent({"whatsapp_enabled": True, "progress_reports_enabled": progress})
 
 
 def test_send_checkin_uses_safe_short_prompt(db_conn) -> None:
     db = Database(db_conn)
+    _enable_whatsapp(db)
     client = InMemoryWhatsAppClient()
     service = WhatsAppService(db, client)
     now = datetime(2026, 6, 1, 16, 0, tzinfo=UTC)
@@ -21,6 +29,16 @@ def test_send_checkin_uses_safe_short_prompt(db_conn) -> None:
     assert message.to == "+56912345678"
     assert "¿cómo te sientes" in message.text
     assert db.config.get("whatsapp.last_checkin") is not None
+
+
+def test_send_checkin_requires_whatsapp_consent(db_conn) -> None:
+    db = Database(db_conn)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    message = service.send_checkin(to="+56912345678")
+
+    assert message.kind == "CONSENT_REQUIRED"
+    assert db.config.get("whatsapp.last_checkin") is None
 
 
 def test_handle_inbound_records_low_mood_and_replies(db_conn) -> None:
@@ -74,6 +92,7 @@ def test_handle_inbound_crisis_uses_curated_response(db_conn) -> None:
 
 def test_send_progress_report_uses_real_task_progress(db_conn) -> None:
     db = Database(db_conn)
+    _enable_whatsapp(db, progress=True)
     now = datetime(2026, 6, 10, 16, 0, tzinfo=UTC)
     task = db.tasks.create(create_focus_task("leer papers", now - timedelta(hours=1)))
     db.tasks.update_status(task.id, TaskStatus.DONE, completed_at=now)
@@ -89,7 +108,9 @@ def test_send_progress_report_uses_real_task_progress(db_conn) -> None:
 
 
 def test_send_action_menu_offers_clear_choices(db_conn) -> None:
-    service = WhatsAppService(Database(db_conn), InMemoryWhatsAppClient())
+    db = Database(db_conn)
+    _enable_whatsapp(db)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
 
     message = service.send_action_menu(to="+56912345678")
 

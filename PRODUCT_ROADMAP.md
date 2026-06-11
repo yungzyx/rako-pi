@@ -1,6 +1,6 @@
 # Rako — Product Roadmap
 
-Last updated: 2026-05-10
+Last updated: 2026-06-11
 
 ## Product north star
 
@@ -73,6 +73,22 @@ Not allowed:
 - crisis details beyond existing panic protocol
 - private task descriptions unless user explicitly opts in
 
+### 6. Product onboarding / multi-user loop
+
+Each physical Rako must be assigned to one user before it behaves like a
+product. The app or setup flow should collect:
+
+- preferred name, university/program, locale, timezone
+- WiFi SSID/status without persisting the WiFi password
+- WhatsApp number and explicit channel opt-in
+- proactive-message and progress-report consent
+- trusted contact and wellbeing unit information
+- editable memory such as study preferences, routines, motivation style, and
+  boundaries
+
+Readiness is explicit: `/onboarding/status` reports missing setup fields so the
+app can guide the user without guessing.
+
 ## Implementation phases
 
 ### Phase A — Foundation
@@ -101,3 +117,13 @@ Not allowed:
 - Porcupine custom wake word.
 - Systemd services for Rako loop + OLED status.
 - Hardware-safe LED plan not using GPIO18.
+
+### Phase E — Multi-user product foundation
+
+- Local product profile over `user_config`.
+- Editable memory controlled by the user.
+- Channel consent gates for WhatsApp outbound messages.
+- Mobile API endpoints for profile, consent, channels, memory, and onboarding
+  status.
+- Next: pair device to cloud account, signed OTA updates, WhatsApp Cloud API
+  adapter, and app-side WiFi provisioning.
