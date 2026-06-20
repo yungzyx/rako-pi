@@ -211,6 +211,81 @@ def test_run_subcommand_executes_finite_iterations(
     assert "loop principal" in captured.out.lower()
 
 
+def test_smart_checkin_reports_consent_required(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _common_env(monkeypatch, tmp_path)
+
+    exit_code = cli_module.cli(["smart-checkin", "--at", "2026-06-20T14:00:00+00:00"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "decision=consent_required" in captured.out
+
+
+def test_smart_checkin_dry_run_does_not_record_send(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from db.database import Database
+    from product.user_config import UserConfigService
+
+    _common_env(monkeypatch, tmp_path)
+    db = Database.open(str(tmp_path / "rako.db"))
+    try:
+        config = UserConfigService(db)
+        config.update_channels({"whatsapp_number": "+56912345678"})
+        config.update_consent({"whatsapp_enabled": True, "proactive_messages_enabled": True})
+    finally:
+        db.close()
+
+    exit_code = cli_module.cli(["smart-checkin", "--dry-run", "--at", "2026-06-20T14:00:00+00:00"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "decision=eligible" in captured.out
+    assert "recommendation=" in captured.out
+
+    db = Database.open(str(tmp_path / "rako.db"))
+    try:
+        assert db.config.get("whatsapp.last_checkin") is None
+    finally:
+        db.close()
+
+
+def test_smart_checkin_records_send_when_eligible(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from db.database import Database
+    from product.user_config import UserConfigService
+
+    _common_env(monkeypatch, tmp_path)
+    db = Database.open(str(tmp_path / "rako.db"))
+    try:
+        config = UserConfigService(db)
+        config.update_channels({"whatsapp_number": "+56912345678"})
+        config.update_consent({"whatsapp_enabled": True, "proactive_messages_enabled": True})
+    finally:
+        db.close()
+
+    exit_code = cli_module.cli(["smart-checkin", "--at", "2026-06-20T14:00:00+00:00"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "sent_kind=SMART_CHECKIN" in captured.out
+
+    db = Database.open(str(tmp_path / "rako.db"))
+    try:
+        assert db.config.get("whatsapp.last_checkin") is not None
+    finally:
+        db.close()
+
+
 def test_select_builder_returns_pi_when_prod() -> None:
     from bootstrap import build_pi_application
     from config import Settings

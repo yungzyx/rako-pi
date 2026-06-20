@@ -16,12 +16,21 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from bootstrap import Application, build_dev_application, build_pi_application
+from channels.whatsapp.client import InMemoryWhatsAppClient
+from channels.whatsapp.scheduler import (
+    SmartCheckinSchedule,
+    decide_smart_checkin,
+    send_due_smart_checkin,
+)
+from channels.whatsapp.service import WhatsAppService
 from config import Settings
 from orchestrator.orchestrator import TurnInput, TurnKind
 from orchestrator.types import default_user_context
+from product.user_config import UserConfigService
+from productivity.coaching import build_coaching_recommendation
 from safety.types import PanicSource
 
 
@@ -55,6 +64,25 @@ def cli(argv: list[str] | None = None) -> int:
         help="Límite de iteraciones (default: infinito).",
     )
 
+    p_checkin = sub.add_parser(
+        "smart-checkin",
+        help="Evalúa y dispara un smart check-in WhatsApp si corresponde.",
+    )
+    p_checkin.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Solo muestra la decisión y el mensaje sugerido; no registra envío.",
+    )
+    p_checkin.add_argument(
+        "--at",
+        default=None,
+        help="Fecha/hora ISO para pruebas, por ejemplo 2026-06-20T14:00:00+00:00.",
+    )
+    p_checkin.add_argument("--min-interval-hours", type=float, default=6.0)
+    p_checkin.add_argument("--quiet-start-hour", type=int, default=22)
+    p_checkin.add_argument("--quiet-end-hour", type=int, default=8)
+    p_checkin.add_argument("--recent-interaction-minutes", type=float, default=45.0)
+
     args = parser.parse_args(argv)
 
     settings = Settings()
@@ -71,6 +99,16 @@ def cli(argv: list[str] | None = None) -> int:
             return _run_purge_all(app)
         if args.cmd == "run":
             return _run_loop(app, max_iterations=args.max_iterations)
+        if args.cmd == "smart-checkin":
+            return _run_smart_checkin(
+                app,
+                dry_run=args.dry_run,
+                at=args.at,
+                min_interval_hours=args.min_interval_hours,
+                quiet_start_hour=args.quiet_start_hour,
+                quiet_end_hour=args.quiet_end_hour,
+                recent_interaction_minutes=args.recent_interaction_minutes,
+            )
         parser.error(f"unknown command: {args.cmd}")  # pragma: no cover
         return 2  # pragma: no cover - argparse already exits
     finally:
@@ -165,6 +203,61 @@ def _run_loop(app: Application, *, max_iterations: int | None) -> int:
     except KeyboardInterrupt:  # pragma: no cover - interactive only
         print("\n[Rako] deteniendo.")
     return 0
+
+
+def _run_smart_checkin(
+    app: Application,
+    *,
+    dry_run: bool,
+    at: str | None,
+    min_interval_hours: float,
+    quiet_start_hour: int,
+    quiet_end_hour: int,
+    recent_interaction_minutes: float,
+) -> int:
+    now = _parse_cli_datetime(at)
+    schedule = SmartCheckinSchedule(
+        min_interval=timedelta(hours=min_interval_hours),
+        quiet_start_hour=quiet_start_hour,
+        quiet_end_hour=quiet_end_hour,
+        recent_interaction_window=timedelta(minutes=recent_interaction_minutes),
+    )
+    decision = decide_smart_checkin(app.db, now=now, schedule=schedule)
+    print(f"[Rako] smart-checkin decision={decision.reason} send={decision.should_send}")
+    if decision.to:
+        print(f"  to={decision.to}")
+    if not decision.should_send:
+        return 0
+
+    if dry_run:
+        config = UserConfigService(app.db)
+        recommendation = build_coaching_recommendation(
+            app.db,
+            now=now,
+            include_progress=config.progress_reports_can_send(),
+        )
+        print(f"  recommendation={recommendation.kind}")
+        print(f"  text={recommendation.text}")
+        return 0
+
+    client = InMemoryWhatsAppClient()
+    service = WhatsAppService(app.db, client)
+    message = send_due_smart_checkin(service, app.db, now=now, schedule=schedule)
+    if message is None:
+        print("  no enviado")
+        return 0
+    print(f"  sent_kind={message.kind}")
+    print(f"  text={message.text}")
+    return 0
+
+
+def _parse_cli_datetime(value: str | None) -> datetime:
+    if value is None:
+        return datetime.now(UTC)
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
 
 
 if __name__ == "__main__":  # pragma: no cover

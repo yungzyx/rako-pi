@@ -208,6 +208,22 @@ Los mensajes salientes por WhatsApp requieren opt-in local en `/user/consent`
 y número configurado en `/user/channels`. El SSID WiFi se puede guardar para
 diagnóstico/onboarding, pero la contraseña WiFi no se persiste en SQLite.
 
+### Smart check-ins
+
+Rako puede evaluar si corresponde enviar un check-in proactivo sin molestar al
+usuario. El scheduler respeta consentimiento, horario silencioso, intervalo
+mínimo y actividad reciente.
+
+```bash
+./scripts/rako.sh smart-checkin --dry-run
+./scripts/rako.sh smart-checkin
+```
+
+Para habilitarlo en una placa, el usuario debe tener `whatsapp_enabled=true`,
+`proactive_messages_enabled=true` y `whatsapp_number` configurado. Si además
+activa `progress_reports_enabled=true`, Rako puede celebrar progreso con conteos
+seguros; no envía títulos de tareas por WhatsApp.
+
 ### Provisionar placas nuevas
 
 Después de `scripts/setup_pi.sh`, cada placa puede quedar asignada a un usuario
