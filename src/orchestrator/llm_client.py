@@ -76,6 +76,11 @@ class AnthropicLLMClient:
         )
         return _parse_response(response)
 
+    def close(self) -> None:
+        close = getattr(self._client, "close", None)
+        if callable(close):
+            close()
+
 
 class OpenAILLMClient:
     """Implementación concreta sobre OpenAI Responses API."""
@@ -122,6 +127,11 @@ class OpenAILLMClient:
         )
         response.raise_for_status()
         return _parse_openai_response(response.json())
+
+    def close(self) -> None:
+        close = getattr(self._http, "close", None)
+        if callable(close):
+            close()
 
 
 def _parse_response(response: Any) -> LLMResponse:

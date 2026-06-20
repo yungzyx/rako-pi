@@ -72,6 +72,11 @@ class GoogleCloudTTS:
             text_synthesized=cleaned,
         )
 
+    def close(self) -> None:
+        close = getattr(self._client, "close", None)
+        if callable(close):
+            close()
+
 
 class ElevenLabsTTS:
     def __init__(
@@ -135,3 +140,8 @@ class ElevenLabsTTS:
             voice_name=f"elevenlabs:{self._voice_id}",
             text_synthesized=cleaned,
         )
+
+    def close(self) -> None:
+        close = getattr(self._http, "close", None)
+        if callable(close):
+            close()

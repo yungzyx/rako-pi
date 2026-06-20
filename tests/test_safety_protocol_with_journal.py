@@ -48,23 +48,26 @@ class _FakeNotifier:
 
 def test_crisis_protocol_writes_to_real_journal() -> None:
     conn = open_connection(":memory:")
-    create_all(conn)
-    journal = CrisisJournal(conn)
-    protocol = CrisisProtocol(
-        voice=_FakeVoice(),
-        lighting=_FakeLighting(),
-        notifier=_FakeNotifier(),
-        journal=journal,
-    )
-    signal = CrisisSignal(
-        level=CrisisLevel.CRISIS,
-        reasons=(CrisisReason.KEYWORDS_IDEATION,),
-        detected_at=datetime(2026, 5, 1, 18, 0, tzinfo=UTC),
-    )
+    try:
+        create_all(conn)
+        journal = CrisisJournal(conn)
+        protocol = CrisisProtocol(
+            voice=_FakeVoice(),
+            lighting=_FakeLighting(),
+            notifier=_FakeNotifier(),
+            journal=journal,
+        )
+        signal = CrisisSignal(
+            level=CrisisLevel.CRISIS,
+            reasons=(CrisisReason.KEYWORDS_IDEATION,),
+            detected_at=datetime(2026, 5, 1, 18, 0, tzinfo=UTC),
+        )
 
-    protocol.execute(signal)
+        protocol.execute(signal)
 
-    entries = journal.list_recent()
-    assert len(entries) == 1
-    assert entries[0].reasons == ("KEYWORDS_IDEATION",)
-    assert entries[0].level == "CRISIS"
+        entries = journal.list_recent()
+        assert len(entries) == 1
+        assert entries[0].reasons == ("KEYWORDS_IDEATION",)
+        assert entries[0].level == "CRISIS"
+    finally:
+        conn.close()

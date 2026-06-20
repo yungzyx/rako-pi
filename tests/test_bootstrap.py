@@ -87,6 +87,25 @@ def test_application_close_is_idempotent(tmp_path: Path) -> None:
     app.close()  # no debe levantar
 
 
+def test_application_close_closes_orchestrator_collaborators(tmp_path: Path) -> None:
+    class _ClosableLLM:
+        closed = False
+
+        def generate(self, query, chunks, context):  # pragma: no cover - not used
+            raise AssertionError("not used")
+
+        def close(self) -> None:
+            self.closed = True
+
+    app = build_dev_application(_settings(tmp_path))
+    llm = _ClosableLLM()
+    app.orchestrator._llm = llm  # type: ignore[attr-defined]
+
+    app.close()
+
+    assert llm.closed is True
+
+
 def test_build_dev_with_api_key_uses_anthropic_client(tmp_path: Path) -> None:
     from orchestrator.llm_client import AnthropicLLMClient
 

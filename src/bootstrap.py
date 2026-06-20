@@ -160,9 +160,35 @@ class Application:
     retriever: Retriever
     stt: STTClient
     tts: TTSClient
+    _closed: bool = field(default=False, init=False, repr=False)
 
     def close(self) -> None:
-        self.db.close()
+        if self._closed:
+            return
+        try:
+            for resource in (
+                self.orchestrator,
+                self.sync,
+                self.crisis_protocol,
+                self.leds,
+                self.servos,
+                self.event_bus,
+                self.capture,
+                self.playback,
+                self.wake_word,
+                self.stt,
+                self.tts,
+            ):
+                _close_if_available(resource)
+        finally:
+            self.db.close()
+            self._closed = True
+
+
+def _close_if_available(resource: object) -> None:
+    close = getattr(resource, "close", None)
+    if callable(close):
+        close()
 
 
 # ---------------------------------------------------------------------------

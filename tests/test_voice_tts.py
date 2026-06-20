@@ -27,6 +27,7 @@ class _FakeTTSClient:
     def __init__(self, audio_bytes: bytes = b"FAKEMP3DATA") -> None:
         self._audio_bytes = audio_bytes
         self.calls: list[_RecordedCall] = []
+        self.closed = False
 
     def synthesize_speech(
         self,
@@ -43,6 +44,9 @@ class _FakeTTSClient:
             )
         )
         return _FakeSynthesizeResponse(audio_content=self._audio_bytes)
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def test_google_cloud_tts_satisfies_protocol() -> None:
@@ -70,6 +74,19 @@ def test_synthesize_returns_audio_buffer_with_text_and_voice() -> None:
     assert result.audio.encoding == "MP3"
     assert result.voice_name == "es-CL-Neural2-A"
     assert result.text_synthesized == "Estoy contigo."
+
+
+def test_google_cloud_tts_closes_underlying_client() -> None:
+    fake = _FakeTTSClient()
+    client = GoogleCloudTTS(
+        client=fake,
+        voice_name="es-CL-Neural2-A",
+        language_code="es-CL",
+    )
+
+    client.close()
+
+    assert fake.closed is True
 
 
 def test_synthesize_passes_correct_request_shape() -> None:
@@ -143,6 +160,7 @@ class _FakeElevenLabsHTTPClient:
     def __init__(self, response: _FakeElevenLabsHTTPResponse | None = None) -> None:
         self.response = response or _FakeElevenLabsHTTPResponse()
         self.calls: list[dict[str, Any]] = []
+        self.closed = False
 
     def post(
         self,
@@ -161,6 +179,9 @@ class _FakeElevenLabsHTTPClient:
             }
         )
         return self.response
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def test_elevenlabs_tts_satisfies_protocol() -> None:
@@ -199,6 +220,20 @@ def test_elevenlabs_tts_posts_expected_request_shape() -> None:
     assert result.audio.encoding == "MP3"
     assert result.voice_name == "elevenlabs:voice-123"
     assert result.text_synthesized == "Estoy contigo."
+
+
+def test_elevenlabs_tts_closes_underlying_http_client() -> None:
+    fake = _FakeElevenLabsHTTPClient()
+    client = ElevenLabsTTS(
+        http_client=fake,
+        api_key="el-test",
+        voice_id="voice-123",
+        model="eleven_flash_v2_5",
+    )
+
+    client.close()
+
+    assert fake.closed is True
 
 
 def test_elevenlabs_tts_rejects_empty_text() -> None:

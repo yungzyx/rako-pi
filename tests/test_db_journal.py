@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -23,10 +24,13 @@ def _signal(*reasons: CrisisReason, level: CrisisLevel = CrisisLevel.CRISIS) -> 
 
 
 @pytest.fixture
-def journal() -> CrisisJournal:
+def journal() -> Iterator[CrisisJournal]:
     conn = open_connection(":memory:")
-    create_all(conn)
-    return CrisisJournal(conn)
+    try:
+        create_all(conn)
+        yield CrisisJournal(conn)
+    finally:
+        conn.close()
 
 
 def test_record_persists_signal(journal: CrisisJournal) -> None:

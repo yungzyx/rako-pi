@@ -95,6 +95,12 @@ class Orchestrator:
 
         return self._handle_llm_turn(input, signal)
 
+    def close(self) -> None:
+        for resource in (self._retriever, self._llm):
+            close = getattr(resource, "close", None)
+            if callable(close):
+                close()
+
     def _detect(self, input: TurnInput) -> CrisisSignal:
         crisis_input = CrisisInput(
             transcript=input.transcript,

@@ -61,6 +61,10 @@ class _FakeMessagesAPI:
 class _FakeAnthropic:
     def __init__(self, response: _FakeMessage) -> None:
         self.messages = _FakeMessagesAPI(response)
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def _ctx() -> UserContext:
@@ -108,6 +112,21 @@ def test_generate_returns_text_and_token_counts() -> None:
     assert result.input_tokens == 100
     assert result.output_tokens == 25
     assert result.cache_read_input_tokens == 80
+
+
+def test_anthropic_client_closes_underlying_client() -> None:
+    response = _FakeMessage(content=[_FakeBlock(type="text", text="ok")])
+    fake = _FakeAnthropic(response)
+    client = AnthropicLLMClient(
+        client=fake,
+        model="claude-haiku-4-5",
+        max_tokens=128,
+        system_prompt="System.",
+    )
+
+    client.close()
+
+    assert fake.closed is True
 
 
 def test_generate_passes_correct_model_and_max_tokens() -> None:
@@ -262,6 +281,7 @@ class _FakeOpenAIHTTPClient:
     def __init__(self, payload: dict[str, Any]) -> None:
         self._payload = payload
         self.calls: list[dict[str, Any]] = []
+        self.closed = False
 
     def post(
         self,
@@ -280,6 +300,9 @@ class _FakeOpenAIHTTPClient:
             }
         )
         return _FakeOpenAIResponse(self._payload)
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def _openai_payload(text: str = "Estoy contigo.") -> dict[str, Any]:
@@ -351,3 +374,18 @@ def test_openai_generate_raises_on_empty_text() -> None:
 
     with pytest.raises(ValueError):
         client.generate(query="q", chunks=(), context=_ctx())
+
+
+def test_openai_client_closes_underlying_http_client() -> None:
+    fake = _FakeOpenAIHTTPClient(_openai_payload())
+    client = OpenAILLMClient(
+        http_client=fake,
+        api_key="openai-test",
+        model="gpt-4o-mini",
+        max_tokens=128,
+        system_prompt="System.",
+    )
+
+    client.close()
+
+    assert fake.closed is True
