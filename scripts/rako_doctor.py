@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Literal
 
 from config import Settings
+from db.database import Database
+from product.factory_acceptance import build_factory_acceptance_checklist
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -46,6 +48,11 @@ def main() -> int:
     parser.add_argument("--sound", action="store_true", help="Play Rako cue sounds on audio output")
     parser.add_argument("--audio-device", default="plughw:seeed2micvoicec,0")
     parser.add_argument("--capture-device", default="plughw:seeed2micvoicec,0")
+    parser.add_argument(
+        "--factory",
+        action="store_true",
+        help="Show product handoff checklist for this configured board",
+    )
     args = parser.parse_args()
 
     if args.full:
@@ -82,6 +89,8 @@ def main() -> int:
         icon = {"ok": "✅", "warn": "⚠️", "fail": "❌"}[result.status]
         print(f"{icon} {result.name}: {result.detail}")
 
+    if args.factory:
+        _print_factory_checklist(settings)
     failed = [result for result in results if result.status == "fail"]
     if failed:
         print("\nRako doctor found blockers.")
@@ -277,6 +286,25 @@ def _run_text(command: list[str]) -> str:
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False
     )
     return completed.stdout
+
+
+def _print_factory_checklist(settings: Settings) -> None:
+    print("\nFactory acceptance checklist:")
+    db = Database.open(settings.sqlite_path, key=settings.sqlite_encryption_key)
+    try:
+        checklist = build_factory_acceptance_checklist(db, settings)
+    finally:
+        db.close()
+    for item in checklist.items:
+        icon = {"ok": "✅", "warn": "⚠️", "fail": "❌", "manual": "☐"}[item.status]
+        print(f"{icon} [{item.category}] {item.name}: {item.detail}")
+    print(
+        "\nFactory summary: "
+        f"ready_for_handoff={checklist.ready_for_handoff}, "
+        f"failures={checklist.automatic_failures}, "
+        f"warnings={checklist.automatic_warnings}, "
+        f"manual_items={checklist.manual_items}"
+    )
 
 
 if __name__ == "__main__":

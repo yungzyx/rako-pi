@@ -45,6 +45,7 @@ cd ~/rako-pi
 7. Run checks:
 
 ```bash
+./scripts/rako-doctor --factory
 ./scripts/rako-doctor
 ./scripts/rako-doctor --full
 python scripts/checks.py safety

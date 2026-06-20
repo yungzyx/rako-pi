@@ -104,9 +104,14 @@ Chequea Python, `.env`, comandos de audio/GPIO, ReSpeaker, STT, TTS y ruta de
 SQLite. Para pruebas físicas opcionales:
 
 ```bash
+rako-doctor --factory
 rako-doctor --full
 rako-doctor --calibrate --full
 ```
+
+`--factory` agrega el checklist de entrega de una placa configurada: perfil,
+WiFi, consentimiento, WhatsApp, bienestar, credenciales, seguridad local y los
+gates manuales de micrófono, parlante, OLED, botón, foco y crisis.
 
 ### Foco con countdown en OLED
 
