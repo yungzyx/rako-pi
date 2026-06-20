@@ -181,6 +181,7 @@ Endpoints iniciales:
 ```text
 GET  /health
 GET  /status
+GET  /setup/flow
 GET  /onboarding/status
 GET  /tasks?pending_only=true&limit=20
 GET  /progress/today
@@ -201,6 +202,14 @@ POST /whatsapp/progress  {"to": "+56912345678", "period": "today"}
 POST /whatsapp/actions   {"to": "+56912345678"}
 POST /whatsapp/inbound   {"from_number": "+56912345678", "text": "estoy bien"}
 ```
+
+`/setup/flow` está pensado para primer encendido o app de configuración: entrega
+pasos, porcentaje de avance, próximo bloqueo, notas de privacidad y qué partes
+son opcionales o manuales antes de asignar una placa.
+
+El inbound de WhatsApp también entiende memoria editable con frases como
+`recuerda que prefiero bloques de 25 minutos`, `qué sabes de mí` y
+`olvida bloques de 25`.
 
 Por defecto escucha en `127.0.0.1:8765`. Puedes cambiarlo con
 `RAKO_API_HOST` y `RAKO_API_PORT`. Si defines `RAKO_API_TOKEN`, todos los

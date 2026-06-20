@@ -60,6 +60,7 @@ python scripts/checks.py safety
 - WhatsApp check-in requires consent
 - WhatsApp menu `2 -> 25 -> estudiar cálculo` starts focus
 - crisis phrase uses curated response
+- `/setup/flow` shows the next first-run action and no WiFi password storage
 - `/onboarding/status` returns `ready: true`
 
 ## Conversation quality gates

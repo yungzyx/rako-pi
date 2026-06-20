@@ -21,6 +21,7 @@ from channels.whatsapp.service import (
 from config import Settings
 from db.database import Database
 from mobile.service import MobileService, focus_start_to_dict, status_to_dict, task_list_to_dict
+from product.setup_flow import build_setup_flow, setup_flow_to_dict
 from product.user_config import (
     UserConfigService,
     channels_to_dict,
@@ -182,6 +183,16 @@ def create_app() -> Any:
         service: UserConfigService = user_config_dep,
     ) -> dict[str, Any]:
         return onboarding_status_to_dict(service.onboarding_status())
+
+    @app.get("/setup/flow")
+    async def setup_flow(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            return setup_flow_to_dict(build_setup_flow(db, settings))
+        finally:
+            db.close()
 
     @app.get("/user/profile")
     async def get_user_profile(

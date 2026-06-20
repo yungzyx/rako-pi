@@ -200,6 +200,10 @@ class WhatsAppService:
         if pending_result is not None:
             return pending_result
 
+        memory_result = self._handle_memory_command(clean_text, from_number=from_number)
+        if memory_result is not None:
+            return memory_result
+
         mood = _classify_mood(clean_text)
         if mood is not None:
             self._store_mood(mood=mood, now=now)
@@ -275,6 +279,74 @@ class WhatsAppService:
                 action="MENU_MOOD",
                 response_text="Dime rápido cómo estás: bien, normal o bajo.",
             )
+        return None
+
+    def _handle_memory_command(
+        self,
+        text: str,
+        *,
+        from_number: str,
+    ) -> WhatsAppInboundResult | None:
+        normalized = text.lower().strip()
+        config = UserConfigService(self._db)
+        for prefix in ("rako recuerda que ", "recuerda que ", "rako recuerda ", "recuerda "):
+            if normalized.startswith(prefix):
+                original_text = text[len(prefix) :].strip()
+                if not original_text:
+                    return self._reply(
+                        to=from_number,
+                        action="MEMORY_HELP",
+                        response_text="Dime algo concreto, por ejemplo: recuerda que prefiero bloques de 25 minutos.",
+                    )
+                memory = config.add_memory(text=original_text, category="preference")
+                return self._reply(
+                    to=from_number,
+                    action="MEMORY_ADDED",
+                    response_text=f"Listo, lo guardé: {memory.text}",
+                )
+
+        if normalized in {
+            "memoria",
+            "mis recuerdos",
+            "que sabes de mi",
+            "qué sabes de mí",
+            "qué sabes de mi",
+        }:
+            memories = config.list_memory()
+            if not memories:
+                return self._reply(
+                    to=from_number,
+                    action="MEMORY_LIST",
+                    response_text="Todavía no tengo recuerdos guardados sobre tus preferencias.",
+                )
+            lines = [f"- {memory.text}" for memory in memories[:5]]
+            return self._reply(
+                to=from_number,
+                action="MEMORY_LIST",
+                response_text="Esto tengo guardado:\n" + "\n".join(lines),
+            )
+
+        for prefix in ("rako olvida que ", "olvida que ", "rako olvida ", "olvida "):
+            if normalized.startswith(prefix):
+                query = text[len(prefix) :].strip()
+                if not query:
+                    return self._reply(
+                        to=from_number,
+                        action="MEMORY_DELETE_HELP",
+                        response_text="Dime qué recuerdo borrar, por ejemplo: olvida bloques de 25 minutos.",
+                    )
+                deleted = _delete_memory_matching(config, query)
+                if deleted:
+                    return self._reply(
+                        to=from_number,
+                        action="MEMORY_DELETED",
+                        response_text="Listo, borré ese recuerdo.",
+                    )
+                return self._reply(
+                    to=from_number,
+                    action="MEMORY_NOT_FOUND",
+                    response_text="No encontré un recuerdo que coincida con eso.",
+                )
         return None
 
     def _handle_pending(
@@ -495,6 +567,16 @@ def _looks_like_duration_only(text: str) -> bool:
         return False
     allowed = {"min", "mins", "minuto", "minutos"}
     return all(token.isdigit() or token in allowed for token in tokens)
+
+
+def _delete_memory_matching(config: UserConfigService, query: str) -> bool:
+    clean_query = query.strip().lower()
+    if not clean_query:
+        return False
+    for memory in config.list_memory():
+        if clean_query in memory.text.lower():
+            return config.delete_memory(memory.id)
+    return False
 
 
 def _pending_key(number: str) -> str:

@@ -126,7 +126,7 @@ Manual acceptance:
 Near term:
 
 - real WhatsApp Cloud API adapter
-- setup app or local setup web page for WiFi and pairing
+- setup app or local setup web page backed by `/setup/flow`
 - systemd timer for `smart-checkin`
 - better OLED focus/mindfulness animations
 - audio calibration profile per board

@@ -68,6 +68,28 @@ def test_handle_inbound_records_low_mood_and_replies(db_conn) -> None:
     assert client.sent[-1].kind == "MOOD_RECORDED"
 
 
+def test_handle_inbound_manages_editable_memory(db_conn) -> None:
+    db = Database(db_conn)
+    client = InMemoryWhatsAppClient()
+    service = WhatsAppService(db, client)
+
+    added = service.handle_inbound(
+        from_number="+56912345678",
+        text="recuerda que prefiero bloques de 25 minutos",
+    )
+    listed = service.handle_inbound(from_number="+56912345678", text="qué sabes de mí")
+    deleted = service.handle_inbound(from_number="+56912345678", text="olvida bloques de 25")
+    listed_after_delete = service.handle_inbound(from_number="+56912345678", text="memoria")
+
+    assert added.action == "MEMORY_ADDED"
+    assert "prefiero bloques de 25 minutos" in added.response_text
+    assert listed.action == "MEMORY_LIST"
+    assert "prefiero bloques de 25 minutos" in listed.response_text
+    assert deleted.action == "MEMORY_DELETED"
+    assert listed_after_delete.action == "MEMORY_LIST"
+    assert "Todavía no tengo recuerdos" in listed_after_delete.response_text
+
+
 def test_handle_inbound_starts_focus_from_whatsapp_text(db_conn) -> None:
     db = Database(db_conn)
     client = InMemoryWhatsAppClient()

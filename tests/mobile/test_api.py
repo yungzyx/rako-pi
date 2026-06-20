@@ -84,6 +84,21 @@ def test_user_config_endpoints_support_product_onboarding(monkeypatch, tmp_path)
     assert ready.json()["ready"] is True
 
 
+def test_setup_flow_endpoint_shows_next_first_run_action(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    initial = client.get("/setup/flow")
+    client.patch("/user/profile", json={"preferred_name": "Nico"})
+    updated = client.get("/setup/flow")
+
+    assert initial.status_code == 200
+    assert initial.json()["next_step_id"] == "profile"
+    assert initial.json()["steps"][0]["title"] == "Perfil del estudiante"
+    assert updated.json()["next_step_id"] == "wifi"
+
+
 def test_user_memory_endpoint_requires_sensitive_memory_consent(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
