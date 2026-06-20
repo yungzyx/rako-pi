@@ -183,6 +183,8 @@ GET  /health
 GET  /setup
 GET  /status
 GET  /setup/flow
+GET  /factory/report
+GET  /update/status
 GET  /onboarding/status
 GET  /coach/plan
 GET  /tasks?pending_only=true&limit=20
@@ -197,6 +199,8 @@ PATCH /user/channels    {"wifi_ssid": "Casa", "whatsapp_number": "+569..."}
 GET  /user/memory
 POST /user/memory       {"text": "Prefiero bloques de 25 minutos", "category": "routine"}
 DELETE /user/memory/{id}
+GET  /user/export
+POST /user/delete-all
 POST /focus/start   {"title": "cálculo", "minutes": 30}
 POST /focus/cancel
 POST /whatsapp/checkin   {"to": "+56912345678"}
@@ -215,7 +219,14 @@ celular o notebook del usuario. Si expones el API en la red local, usa
 El inbound de WhatsApp también entiende memoria editable con frases como
 `recuerda que prefiero bloques de 25 minutos`, `qué sabes de mí` y
 `olvida bloques de 25`. En el menú de acciones, la opción `5` devuelve un plan
-rápido de estudio con bloque sugerido sin exponer títulos privados por WhatsApp.
+rápido de estudio con bloque sugerido sin exponer títulos privados por WhatsApp;
+la opción `6` muestra configuración. También entiende `pausar mensajes`,
+`reanudar mensajes`, `exportar mis datos` y `borrar mis datos` con confirmación.
+`/user/export` y `/user/delete-all` cubren perfil, consentimiento, canales y
+memoria editable; no borran tareas ni logs operacionales.
+`/factory/report` resume setup, checklist de entrega y bloqueos para producción.
+`/update/status` reporta versión/canal/build en modo solo lectura; aplicar OTA
+queda pendiente hasta tener releases firmadas y rollback.
 
 Por defecto escucha en `127.0.0.1:8765`. Puedes cambiarlo con
 `RAKO_API_HOST` y `RAKO_API_PORT`. Si defines `RAKO_API_TOKEN`, todos los

@@ -22,7 +22,9 @@ from config import Settings
 from db.database import Database
 from mobile.service import MobileService, focus_start_to_dict, status_to_dict, task_list_to_dict
 from mobile.setup_page import render_setup_page
+from product.factory_report import build_factory_report, factory_report_to_dict
 from product.setup_flow import build_setup_flow, setup_flow_to_dict
+from product.update_status import build_update_status, current_app_version, update_status_to_dict
 from product.user_config import (
     UserConfigService,
     channels_to_dict,
@@ -100,7 +102,8 @@ def create_app() -> Any:
         raise RuntimeError("Install fastapi and uvicorn to run the mobile API") from exc
 
     settings = Settings()
-    app = FastAPI(title="Rako Local API", version="0.1.0")
+    app_version = current_app_version()
+    app = FastAPI(title="Rako Local API", version=app_version)
 
     async def require_api_token(
         authorization: str | None = Header(default=None),
@@ -208,6 +211,24 @@ def create_app() -> Any:
         finally:
             db.close()
 
+    @app.get("/factory/report")
+    async def factory_report(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            return factory_report_to_dict(
+                build_factory_report(db, settings, app_version=app_version)
+            )
+        finally:
+            db.close()
+
+    @app.get("/update/status")
+    async def update_status(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        return update_status_to_dict(build_update_status())
+
     @app.get("/user/profile")
     async def get_user_profile(
         _: None = auth_dep,
@@ -263,6 +284,24 @@ def create_app() -> Any:
         service: UserConfigService = user_config_dep,
     ) -> dict[str, Any]:
         return {"items": [memory_to_dict(item) for item in service.list_memory()]}
+
+    @app.get("/user/export")
+    async def export_user_data(
+        _: None = auth_dep,
+        service: UserConfigService = user_config_dep,
+    ) -> dict[str, Any]:
+        return service.export_user_data()
+
+    @app.post("/user/delete-all")
+    async def delete_user_data(
+        _: None = auth_dep,
+        service: UserConfigService = user_config_dep,
+    ) -> dict[str, Any]:
+        deleted = service.delete_user_data()
+        return {
+            "deleted": deleted,
+            "deleted_count": sum(1 for was_deleted in deleted.values() if was_deleted),
+        }
 
     @app.post("/user/memory")
     async def add_user_memory(

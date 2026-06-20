@@ -151,6 +151,57 @@ def test_user_memory_endpoint_requires_sensitive_memory_consent(monkeypatch, tmp
     assert deleted.json()["deleted"] is True
 
 
+def test_user_export_and_delete_all_endpoints_manage_product_data(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+    client.patch("/user/profile", json={"preferred_name": "Nico", "university": "UDD"})
+    client.patch("/user/channels", json={"wifi_ssid": "Casa", "whatsapp_number": "+56912345678"})
+    client.patch("/user/consent", json={"whatsapp_enabled": True})
+    client.post("/user/memory", json={"text": "Prefiero bloques cortos"})
+
+    exported = client.get("/user/export")
+    deleted = client.post("/user/delete-all")
+    exported_after_delete = client.get("/user/export")
+
+    assert exported.status_code == 200
+    assert exported.json()["profile"]["preferred_name"] == "Nico"
+    assert exported.json()["memory"][0]["text"] == "Prefiero bloques cortos"
+    assert deleted.json()["deleted_count"] == 4
+    assert exported_after_delete.json()["profile"]["preferred_name"] is None
+    assert exported_after_delete.json()["memory"] == []
+
+
+def test_factory_report_endpoint_summarizes_unit_readiness(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.get("/factory/report")
+
+    assert response.status_code == 200
+    assert response.json()["device_id"] == "rako-test-001"
+    assert response.json()["ready_for_handoff"] is False
+    assert response.json()["next_setup_step_id"] == "profile"
+    assert "acceptance" in response.json()
+
+
+def test_update_status_endpoint_is_read_only(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_RELEASE_CHANNEL", "beta")
+    monkeypatch.setenv("RAKO_BUILD_SHA", "abc123")
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.get("/update/status")
+
+    assert response.status_code == 200
+    assert response.json()["release_channel"] == "beta"
+    assert response.json()["build_sha"] == "abc123"
+    assert response.json()["update_apply_enabled"] is False
+
+
 def test_whatsapp_checkin_endpoint_returns_outbound_message(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.delenv("RAKO_API_TOKEN", raising=False)

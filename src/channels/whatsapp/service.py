@@ -139,7 +139,8 @@ class WhatsAppService:
             "2. Foco de 25 minutos\n"
             "3. Revisar progreso\n"
             "4. Check-in de ánimo\n"
-            "5. Plan rápido"
+            "5. Plan rápido\n"
+            "6. Configuración"
         )
         return self._client.send_text(
             to=to,
@@ -205,6 +206,10 @@ class WhatsAppService:
         memory_result = self._handle_memory_command(clean_text, from_number=from_number)
         if memory_result is not None:
             return memory_result
+
+        config_result = self._handle_config_command(clean_text, from_number=from_number, now=now)
+        if config_result is not None:
+            return config_result
 
         mood = _classify_mood(clean_text)
         if mood is not None:
@@ -288,6 +293,12 @@ class WhatsAppService:
                 action="MENU_PLAN",
                 response_text=build_external_study_plan_message(plan),
             )
+        if normalized in {"6", "configuración", "configuracion", "ajustes"}:
+            return self._reply(
+                to=from_number,
+                action="CONFIG_STATUS",
+                response_text=_config_status_message(UserConfigService(self._db)),
+            )
         return None
 
     def _handle_memory_command(
@@ -358,6 +369,82 @@ class WhatsAppService:
                 )
         return None
 
+    def _handle_config_command(
+        self,
+        text: str,
+        *,
+        from_number: str,
+        now: datetime,
+    ) -> WhatsAppInboundResult | None:
+        normalized = text.lower().strip()
+        config = UserConfigService(self._db)
+        if normalized in {
+            "pausar mensajes",
+            "pausa mensajes",
+            "no me escribas",
+            "silenciar rako",
+            "silenciar",
+        }:
+            config.update_consent({"proactive_messages_enabled": False})
+            return self._reply(
+                to=from_number,
+                action="MESSAGES_PAUSED",
+                response_text=(
+                    "Listo, pausé los mensajes proactivos. "
+                    "Puedes escribirme igual cuando quieras. Para volver: reanudar mensajes."
+                ),
+            )
+
+        if normalized in {
+            "reanudar mensajes",
+            "activar mensajes",
+            "volver a escribirme",
+            "reactivar rako",
+        }:
+            if not config.whatsapp_can_send():
+                return self._reply(
+                    to=from_number,
+                    action="CONSENT_REQUIRED",
+                    response_text=(
+                        "Antes necesito que WhatsApp esté activado en la configuración de Rako."
+                    ),
+                )
+            config.update_consent({"proactive_messages_enabled": True})
+            return self._reply(
+                to=from_number,
+                action="MESSAGES_RESUMED",
+                response_text="Listo, reanudé los mensajes proactivos de estudio.",
+            )
+
+        if normalized in {"configuración", "configuracion", "ajustes", "mi configuración"}:
+            return self._reply(
+                to=from_number,
+                action="CONFIG_STATUS",
+                response_text=_config_status_message(config),
+            )
+
+        if normalized in {"exportar mis datos", "mis datos", "datos"}:
+            return self._reply(
+                to=from_number,
+                action="USER_DATA_EXPORT",
+                response_text=_compact_user_data_message(config.export_user_data()),
+            )
+
+        if normalized in {"borrar mis datos", "eliminar mis datos"}:
+            self._store_pending(
+                from_number,
+                {"action": "delete_user_data", "expires_at": _pending_expires_at(now)},
+            )
+            return self._reply(
+                to=from_number,
+                action="DELETE_USER_DATA_CONFIRM",
+                response_text=(
+                    "Puedo borrar perfil, consentimiento, canales y memoria editable. "
+                    "Para confirmar, responde: confirmar borrar mis datos."
+                ),
+            )
+        return None
+
     def _handle_pending(
         self,
         text: str,
@@ -388,6 +475,24 @@ class WhatsAppService:
         if action == "focus_setup":
             return self._handle_pending_focus(
                 text, from_number=from_number, now=now, pending=pending
+            )
+        if action == "delete_user_data":
+            if text.lower().strip() != "confirmar borrar mis datos":
+                return self._reply(
+                    to=from_number,
+                    action="DELETE_USER_DATA_CONFIRM",
+                    response_text=(
+                        "No borré nada. Para confirmar, responde exactamente: "
+                        "confirmar borrar mis datos."
+                    ),
+                )
+            deleted = UserConfigService(self._db).delete_user_data()
+            self._clear_pending(from_number)
+            deleted_count = sum(1 for was_deleted in deleted.values() if was_deleted)
+            return self._reply(
+                to=from_number,
+                action="USER_DATA_DELETED",
+                response_text=f"Listo, borré {deleted_count} bloques de configuración personal.",
             )
         return None
 
@@ -586,6 +691,44 @@ def _delete_memory_matching(config: UserConfigService, query: str) -> bool:
         if clean_query in memory.text.lower():
             return config.delete_memory(memory.id)
     return False
+
+
+def _config_status_message(config: UserConfigService) -> str:
+    consent = config.get_consent()
+    channels = config.get_channels()
+    return (
+        "Configuración actual:\n"
+        f"- WhatsApp: {_yes_no(consent.whatsapp_enabled and bool(channels.whatsapp_number))}\n"
+        f"- Mensajes proactivos: {_yes_no(config.proactive_messages_can_send())}\n"
+        f"- Reportes de progreso: {_yes_no(config.progress_reports_can_send())}\n"
+        f"- Memorias guardadas: {len(config.list_memory())}\n"
+        "Comandos útiles: pausar mensajes, reanudar mensajes, exportar mis datos, borrar mis datos."
+    )
+
+
+def _compact_user_data_message(export: dict[str, object]) -> str:
+    profile = export.get("profile")
+    consent = export.get("consent")
+    channels = export.get("channels")
+    memory = export.get("memory")
+    preferred_name = profile.get("preferred_name") if isinstance(profile, dict) else None
+    university = profile.get("university") if isinstance(profile, dict) else None
+    whatsapp_enabled = consent.get("whatsapp_enabled") if isinstance(consent, dict) else False
+    wifi_ssid = channels.get("wifi_ssid") if isinstance(channels, dict) else None
+    memory_count = len(memory) if isinstance(memory, list) else 0
+    return (
+        "Resumen de tus datos locales:\n"
+        f"- Nombre: {preferred_name or 'sin configurar'}\n"
+        f"- Universidad: {university or 'sin configurar'}\n"
+        f"- WiFi guardado: {wifi_ssid or 'sin configurar'}\n"
+        f"- WhatsApp activo: {_yes_no(bool(whatsapp_enabled))}\n"
+        f"- Memorias: {memory_count}\n"
+        "Desde la API local puedes exportar el detalle completo en /user/export."
+    )
+
+
+def _yes_no(value: bool) -> str:
+    return "sí" if value else "no"
 
 
 def _pending_key(number: str) -> str:

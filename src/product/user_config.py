@@ -20,6 +20,7 @@ PROFILE_KEY = "product.user_profile"
 CONSENT_KEY = "product.privacy_consent"
 CHANNELS_KEY = "product.channels"
 MEMORY_KEY = "product.editable_memory"
+PRODUCT_CONFIG_KEYS = (PROFILE_KEY, CONSENT_KEY, CHANNELS_KEY, MEMORY_KEY)
 
 MemoryCategory = Literal["study", "routine", "motivation", "preference", "boundary"]
 MemorySensitivity = Literal["normal", "sensitive"]
@@ -204,6 +205,27 @@ class UserConfigService:
             return False
         self._set_json(MEMORY_KEY, [asdict(item) for item in kept])
         return True
+
+    def export_user_data(self) -> dict[str, Any]:
+        """Return the user-owned product data, without secrets or raw logs."""
+
+        status = self.onboarding_status()
+        return {
+            "profile": user_profile_to_dict(status.profile),
+            "consent": consent_to_dict(status.consent),
+            "channels": channels_to_dict(status.channels),
+            "memory": [memory_to_dict(item) for item in self.list_memory()],
+            "onboarding": onboarding_status_to_dict(status),
+        }
+
+    def delete_user_data(self) -> dict[str, bool]:
+        """Delete profile, consent, channels, and editable memory.
+
+        This intentionally leaves study tasks, mood samples, and operational logs in place.
+        Those are separate product domains with their own retention policy.
+        """
+
+        return {key: self._db.config.delete(key) for key in PRODUCT_CONFIG_KEYS}
 
     def onboarding_status(self) -> OnboardingStatus:
         profile = self.get_profile()

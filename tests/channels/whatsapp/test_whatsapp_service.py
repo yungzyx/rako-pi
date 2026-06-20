@@ -194,6 +194,7 @@ def test_send_action_menu_offers_clear_choices(db_conn) -> None:
     assert "1. Elegir una tarea corta" in message.text
     assert "4. Check-in de ánimo" in message.text
     assert "5. Plan rápido" in message.text
+    assert "6. Configuración" in message.text
 
 
 def test_handle_inbound_menu_choice_returns_progress(db_conn) -> None:
@@ -281,3 +282,59 @@ def test_handle_inbound_menu_mood_guides_next_reply(db_conn) -> None:
     assert "bien, normal o bajo" in unclear.response_text
     assert mood.action == "MOOD_RECORDED"
     assert mood.stored_mood == "low"
+
+
+def test_handle_inbound_can_pause_and_resume_proactive_messages(db_conn) -> None:
+    db = Database(db_conn)
+    _enable_proactive_whatsapp(db)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    paused = service.handle_inbound(from_number="+56912345678", text="pausar mensajes")
+    paused_message = service.send_smart_checkin(to="+56912345678")
+    resumed = service.handle_inbound(from_number="+56912345678", text="reanudar mensajes")
+
+    assert paused.action == "MESSAGES_PAUSED"
+    assert paused_message.kind == "CONSENT_REQUIRED"
+    assert resumed.action == "MESSAGES_RESUMED"
+    assert UserConfigService(db).proactive_messages_can_send() is True
+
+
+def test_handle_inbound_shows_config_and_user_data_export(db_conn) -> None:
+    db = Database(db_conn)
+    config = UserConfigService(db)
+    config.update_profile({"preferred_name": "Nico", "university": "UDD"})
+    config.update_channels({"wifi_ssid": "Casa", "whatsapp_number": "+56912345678"})
+    config.update_consent({"whatsapp_enabled": True})
+    config.add_memory(text="Prefiero bloques cortos")
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    status = service.handle_inbound(from_number="+56912345678", text="configuración")
+    exported = service.handle_inbound(from_number="+56912345678", text="exportar mis datos")
+
+    assert status.action == "CONFIG_STATUS"
+    assert "WhatsApp: sí" in status.response_text
+    assert "Memorias guardadas: 1" in status.response_text
+    assert exported.action == "USER_DATA_EXPORT"
+    assert "Nombre: Nico" in exported.response_text
+    assert "WiFi guardado: Casa" in exported.response_text
+
+
+def test_handle_inbound_deletes_user_data_only_after_confirmation(db_conn) -> None:
+    db = Database(db_conn)
+    config = UserConfigService(db)
+    config.update_profile({"preferred_name": "Nico"})
+    config.update_channels({"wifi_ssid": "Casa"})
+    config.update_consent({"whatsapp_enabled": True})
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    prompt = service.handle_inbound(from_number="+56912345678", text="borrar mis datos")
+    rejected = service.handle_inbound(from_number="+56912345678", text="no", now=None)
+    confirmed = service.handle_inbound(
+        from_number="+56912345678",
+        text="confirmar borrar mis datos",
+    )
+
+    assert prompt.action == "DELETE_USER_DATA_CONFIRM"
+    assert rejected.action == "DELETE_USER_DATA_CONFIRM"
+    assert confirmed.action == "USER_DATA_DELETED"
+    assert UserConfigService(db).get_profile().preferred_name is None

@@ -58,3 +58,23 @@ def test_editable_memory_requires_consent_for_sensitive_items(db_conn) -> None:
     assert service.list_memory()[0].text == "Prefiero bloques de 25 minutos"
     assert service.delete_memory(memory.id) is True
     assert service.list_memory() == ()
+
+
+def test_user_data_export_and_delete_are_limited_to_product_config(db_conn) -> None:
+    db = Database(db_conn)
+    service = UserConfigService(db)
+    service.update_profile({"preferred_name": "Nico", "university": "UDD"})
+    service.update_channels({"wifi_ssid": "Casa", "whatsapp_number": "+56912345678"})
+    service.update_consent({"whatsapp_enabled": True})
+    service.add_memory(text="Prefiero estudiar temprano")
+    db.config.set("operational.log.marker", "keep-me")
+
+    exported = service.export_user_data()
+    deleted = service.delete_user_data()
+
+    assert exported["profile"]["preferred_name"] == "Nico"
+    assert exported["channels"]["wifi_ssid"] == "Casa"
+    assert exported["memory"][0]["text"] == "Prefiero estudiar temprano"
+    assert all(deleted.values())
+    assert service.export_user_data()["profile"]["preferred_name"] is None
+    assert db.config.get("operational.log.marker") == "keep-me"
