@@ -24,8 +24,8 @@ from PIL import Image, ImageDraw
 
 WIDTH = 128
 HEIGHT = 64
-LEFT_EYE = (21, 18, 49, 46)
-RIGHT_EYE = (79, 18, 107, 46)
+LEFT_EYE = (19, 17, 51, 47)
+RIGHT_EYE = (77, 17, 109, 47)
 
 FrameFn = Callable[[ImageDraw.ImageDraw, float], None]
 
@@ -49,12 +49,57 @@ def canvas() -> tuple[Image.Image, ImageDraw.ImageDraw]:
 
 
 def eye(
-    draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], *, pupil: tuple[int, int] = (0, 0)
+    draw: ImageDraw.ImageDraw,
+    box: tuple[int, int, int, int],
+    *,
+    pupil: tuple[int, int] = (0, 0),
+    openness: float = 1.0,
 ) -> None:
-    draw.rounded_rectangle(box, radius=10, outline=255, fill=255)
-    cx = (box[0] + box[2]) // 2 + pupil[0]
-    cy = (box[1] + box[3]) // 2 + pupil[1]
-    draw.ellipse((cx - 4, cy - 4, cx + 4, cy + 4), fill=0)
+    openness = max(0.15, min(1.0, openness))
+    cx = (box[0] + box[2]) // 2
+    cy = (box[1] + box[3]) // 2
+    half_h = max(3, int(((box[3] - box[1]) / 2) * openness))
+    eye_box = (box[0], cy - half_h, box[2], cy + half_h)
+    draw.rounded_rectangle(eye_box, radius=9, outline=255, fill=255)
+    # Soft eyelid: trimming the top corners makes the face less stare-like.
+    if openness > 0.55:
+        draw.arc(
+            (box[0] + 2, eye_box[1] - 6, box[2] - 2, eye_box[1] + 16), 190, 350, fill=0, width=2
+        )
+    px = cx + pupil[0]
+    py = cy + pupil[1]
+    draw.ellipse((px - 4, py - 4, px + 4, py + 4), fill=0)
+    draw.point((px - 1, py - 2), fill=255)
+
+
+def soft_eye(
+    draw: ImageDraw.ImageDraw,
+    box: tuple[int, int, int, int],
+    *,
+    pupil: tuple[int, int] = (0, 0),
+    t: float = 0.0,
+    attentive: bool = False,
+) -> None:
+    blink_cycle = t % 5.2
+    openness = 0.18 if blink_cycle < 0.08 else 0.86 + 0.06 * math.sin(t * 1.8)
+    if attentive:
+        openness = min(1.0, openness + 0.1)
+    eye(draw, box, pupil=pupil, openness=openness)
+
+
+def cheek(draw: ImageDraw.ImageDraw, x: int, y: int, phase: float = 0.0) -> None:
+    width = 8 + int(2 * (0.5 + 0.5 * math.sin(phase)))
+    draw.arc((x - width, y - 3, x + width, y + 5), 15, 165, fill=255, width=1)
+
+
+def gentle_smile(draw: ImageDraw.ImageDraw, *, y: int = 51, width: int = 28) -> None:
+    left = 64 - width // 2
+    right = 64 + width // 2
+    draw.arc((left, y - 8, right, y + 8), 20, 160, fill=255, width=2)
+
+
+def breathe_offset(t: float, amount: int = 2) -> int:
+    return int(amount * math.sin(t * 1.7))
 
 
 def closed_eye(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], *, tilt: int = 0) -> None:
@@ -75,28 +120,29 @@ def mouth(draw: ImageDraw.ImageDraw, kind: str = "smile") -> None:
         draw.line((52, 54, 76, 54), fill=255, width=2)
     elif kind == "o":
         draw.ellipse((59, 48, 69, 58), outline=255, width=2)
+    elif kind == "small":
+        draw.arc((55, 47, 73, 57), 20, 160, fill=255, width=2)
 
 
 def draw_neutral(draw: ImageDraw.ImageDraw, t: float) -> None:
-    blink = int(t * 10) % 35 == 0
-    if blink:
-        closed_eye(draw, LEFT_EYE)
-        closed_eye(draw, RIGHT_EYE)
-    else:
-        eye(draw, LEFT_EYE)
-        eye(draw, RIGHT_EYE)
+    y = breathe_offset(t, amount=1)
+    soft_eye(draw, _shift(LEFT_EYE, 0, y), t=t)
+    soft_eye(draw, _shift(RIGHT_EYE, 0, y), t=t + 0.03)
+    gentle_smile(draw, y=52)
 
 
 def draw_happy(draw: ImageDraw.ImageDraw, t: float) -> None:
-    bounce = int(2 * math.sin(t * 8))
-    closed_eye(draw, (21, 16 + bounce, 49, 44 + bounce), tilt=-2)
-    closed_eye(draw, (79, 16 + bounce, 107, 44 + bounce), tilt=2)
-    mouth(draw, "smile")
+    bounce = int(2 * math.sin(t * 5))
+    closed_eye(draw, (21, 15 + bounce, 51, 43 + bounce), tilt=-2)
+    closed_eye(draw, (77, 15 + bounce, 107, 43 + bounce), tilt=2)
+    cheek(draw, 29, 43 + bounce, phase=t * 3)
+    cheek(draw, 99, 43 + bounce, phase=t * 3 + 1)
+    gentle_smile(draw, y=50 + bounce, width=34)
 
 
 def draw_sad(draw: ImageDraw.ImageDraw, t: float) -> None:
-    eye(draw, (21, 22, 49, 47), pupil=(0, 3))
-    eye(draw, (79, 22, 107, 47), pupil=(0, 3))
+    eye(draw, (21, 22, 51, 47), pupil=(0, 3), openness=0.65)
+    eye(draw, (77, 22, 107, 47), pupil=(0, 3), openness=0.65)
     brow(draw, 20, 15, 50, 22)
     brow(draw, 78, 22, 108, 15)
     mouth(draw, "sad")
@@ -105,8 +151,9 @@ def draw_sad(draw: ImageDraw.ImageDraw, t: float) -> None:
 
 
 def draw_sleepy(draw: ImageDraw.ImageDraw, t: float) -> None:
-    closed_eye(draw, LEFT_EYE)
-    closed_eye(draw, RIGHT_EYE)
+    y = breathe_offset(t, amount=1)
+    closed_eye(draw, _shift(LEFT_EYE, 0, y))
+    closed_eye(draw, _shift(RIGHT_EYE, 0, y))
     mouth(draw, "flat")
     z = int((t * 12) % 24)
     draw.text((94, 8 - z // 3), "z", fill=255)
@@ -114,29 +161,28 @@ def draw_sleepy(draw: ImageDraw.ImageDraw, t: float) -> None:
 
 
 def draw_bored(draw: ImageDraw.ImageDraw, t: float) -> None:
-    draw.rounded_rectangle((21, 28, 49, 42), radius=5, fill=255)
-    draw.rounded_rectangle((79, 28, 107, 42), radius=5, fill=255)
-    draw.rectangle((25, 28, 45, 34), fill=0)
-    draw.rectangle((83, 28, 103, 34), fill=0)
+    eye(draw, (21, 25, 51, 43), pupil=(-2, 2), openness=0.5)
+    eye(draw, (77, 25, 107, 43), pupil=(-2, 2), openness=0.5)
     mouth(draw, "flat")
 
 
 def draw_surprised(draw: ImageDraw.ImageDraw, t: float) -> None:
-    eye(draw, (18, 12, 52, 50), pupil=(0, 0))
-    eye(draw, (76, 12, 110, 50), pupil=(0, 0))
+    eye(draw, (17, 12, 53, 50), pupil=(0, 0), openness=1.0)
+    eye(draw, (75, 12, 111, 50), pupil=(0, 0), openness=1.0)
     mouth(draw, "o")
 
 
 def draw_wink(draw: ImageDraw.ImageDraw, t: float) -> None:
-    eye(draw, LEFT_EYE, pupil=(2, 0))
+    soft_eye(draw, LEFT_EYE, pupil=(2, 0), t=t, attentive=True)
     closed_eye(draw, RIGHT_EYE, tilt=1)
-    mouth(draw, "smile")
+    cheek(draw, 95, 43, phase=t)
+    gentle_smile(draw)
 
 
 def draw_thinking(draw: ImageDraw.ImageDraw, t: float) -> None:
     offset = int(6 * math.sin(t * 2))
-    eye(draw, LEFT_EYE, pupil=(offset // 2, -1))
-    eye(draw, RIGHT_EYE, pupil=(offset // 2, -1))
+    soft_eye(draw, LEFT_EYE, pupil=(offset // 2, -1), t=t)
+    soft_eye(draw, RIGHT_EYE, pupil=(offset // 2, -1), t=t + 0.08)
     for i in range(3):
         r = 1 + i
         x = 92 + i * 10
@@ -146,25 +192,28 @@ def draw_thinking(draw: ImageDraw.ImageDraw, t: float) -> None:
 
 def draw_listening(draw: ImageDraw.ImageDraw, t: float) -> None:
     pulse = int(4 * (0.5 + 0.5 * math.sin(t * 8)))
-    eye(draw, LEFT_EYE, pupil=(0, 0))
-    eye(draw, RIGHT_EYE, pupil=(0, 0))
-    draw.arc((4, 20 - pulse, 20, 44 + pulse), -60, 60, fill=255, width=2)
-    draw.arc((108, 20 - pulse, 124, 44 + pulse), 120, 240, fill=255, width=2)
+    soft_eye(draw, LEFT_EYE, pupil=(-1, 0), t=t, attentive=True)
+    soft_eye(draw, RIGHT_EYE, pupil=(1, 0), t=t, attentive=True)
+    draw.arc((5, 22 - pulse, 21, 42 + pulse), -55, 55, fill=255, width=1)
+    draw.arc((107, 22 - pulse, 123, 42 + pulse), 125, 235, fill=255, width=1)
+    draw.arc((0, 16 - pulse, 28, 48 + pulse), -45, 45, fill=255, width=1)
+    draw.arc((100, 16 - pulse, 128, 48 + pulse), 135, 225, fill=255, width=1)
 
 
 def draw_speaking(draw: ImageDraw.ImageDraw, t: float) -> None:
-    eye(draw, LEFT_EYE, pupil=(0, -1))
-    eye(draw, RIGHT_EYE, pupil=(0, -1))
-    level = int(8 * (0.5 + 0.5 * math.sin(t * 18)))
-    draw.rounded_rectangle(
-        (50, 48 - level // 2, 78, 56 + level // 2), radius=4, outline=255, width=2
-    )
+    soft_eye(draw, LEFT_EYE, pupil=(0, -1), t=t)
+    soft_eye(draw, RIGHT_EYE, pupil=(0, -1), t=t + 0.05)
+    level = 4 + int(8 * (0.5 + 0.5 * math.sin(t * 16)))
+    draw.rounded_rectangle((55, 47, 73, 47 + level), radius=5, outline=255, width=2)
+    draw.line((58, 51 + level // 2, 70, 51 + level // 2), fill=255, width=1)
 
 
 def draw_love(draw: ImageDraw.ImageDraw, t: float) -> None:
     heart(draw, 34, 31, 9)
     heart(draw, 92, 31, 9)
-    mouth(draw, "smile")
+    cheek(draw, 24, 45, phase=t)
+    cheek(draw, 104, 45, phase=t + 1)
+    gentle_smile(draw, y=51, width=34)
 
 
 def heart(draw: ImageDraw.ImageDraw, cx: int, cy: int, s: int) -> None:
@@ -174,11 +223,15 @@ def heart(draw: ImageDraw.ImageDraw, cx: int, cy: int, s: int) -> None:
 
 
 def draw_angry(draw: ImageDraw.ImageDraw, t: float) -> None:
-    eye(draw, LEFT_EYE, pupil=(0, 1))
-    eye(draw, RIGHT_EYE, pupil=(0, 1))
+    eye(draw, LEFT_EYE, pupil=(0, 1), openness=0.72)
+    eye(draw, RIGHT_EYE, pupil=(0, 1), openness=0.72)
     brow(draw, 18, 14, 52, 25)
     brow(draw, 76, 25, 110, 14)
     draw.line((52, 54, 76, 54), fill=255, width=3)
+
+
+def _shift(box: tuple[int, int, int, int], dx: int, dy: int) -> tuple[int, int, int, int]:
+    return (box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy)
 
 
 EXPRESSIONS: dict[str, Expression] = {
