@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
+
 from fastapi.testclient import TestClient
 
 from mobile.api import create_app
@@ -41,6 +44,20 @@ def test_setup_page_is_public_and_uses_setup_flow(monkeypatch, tmp_path) -> None
     assert "Configurar Rako" in response.text
     assert 'fetch("/setup/flow"' in response.text
     assert "secret" not in response.text
+
+
+def test_factory_page_is_public_shell_and_uses_factory_endpoints(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_API_TOKEN", "secret")
+    client = TestClient(create_app())
+
+    response = client.get("/factory")
+
+    assert response.status_code == 200
+    assert "Rako Factory" in response.text
+    assert 'fetchJson("/factory/report")' in response.text
+    assert 'fetchJson("/update/status")' in response.text
+    assert "Bearer secret" not in response.text
 
 
 def test_tasks_endpoint_lists_mobile_focus_tasks(monkeypatch, tmp_path) -> None:
@@ -126,6 +143,38 @@ def test_setup_flow_endpoint_shows_next_first_run_action(monkeypatch, tmp_path) 
     assert initial.json()["next_step_id"] == "profile"
     assert initial.json()["steps"][0]["title"] == "Perfil del estudiante"
     assert updated.json()["next_step_id"] == "wifi"
+
+
+def test_setup_wifi_endpoint_stores_ssid_without_password(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/setup/wifi",
+        json={"ssid": "Casa", "password": "super-secret", "apply": False},
+    )
+    channels = client.get("/user/channels")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "stored"
+    assert response.json()["ssid"] == "Casa"
+    assert channels.json()["wifi_ssid"] == "Casa"
+    assert "super-secret" not in str(channels.json())
+
+
+def test_setup_wifi_endpoint_blocks_apply_until_enabled(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/setup/wifi",
+        json={"ssid": "Casa", "password": "super-secret", "apply": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "blocked"
 
 
 def test_user_memory_endpoint_requires_sensitive_memory_consent(monkeypatch, tmp_path) -> None:
@@ -274,3 +323,78 @@ def test_whatsapp_inbound_endpoint_records_mood(monkeypatch, tmp_path) -> None:
     assert response.status_code == 200
     assert response.json()["action"] == "MOOD_RECORDED"
     assert response.json()["stored_mood"] == "good"
+
+
+def test_whatsapp_webhook_verification(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("WHATSAPP_CLOUD_VERIFY_TOKEN", "verify-me")
+    client = TestClient(create_app())
+
+    response = client.get(
+        "/whatsapp/webhook",
+        params={
+            "hub.mode": "subscribe",
+            "hub.verify_token": "verify-me",
+            "hub.challenge": "challenge-123",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.text == "challenge-123"
+
+
+def test_whatsapp_webhook_processes_text_message_in_dev(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/whatsapp/webhook",
+        json={
+            "entry": [
+                {
+                    "changes": [
+                        {
+                            "value": {
+                                "messages": [
+                                    {
+                                        "id": "wamid.1",
+                                        "from": "56912345678",
+                                        "text": {"body": "estoy bien"},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["processed"] == 1
+    assert response.json()["results"][0]["action"] == "MOOD_RECORDED"
+
+
+def test_whatsapp_webhook_requires_signature_outside_dev(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_ENV", "prod")
+    monkeypatch.setenv("RAKO_API_TOKEN", "secret")
+    monkeypatch.setenv("WHATSAPP_CLOUD_APP_SECRET", "app-secret")
+    client = TestClient(create_app())
+    body = b'{"entry":[]}'
+    digest = hmac.new(b"app-secret", body, hashlib.sha256).hexdigest()
+
+    rejected = client.post("/whatsapp/webhook", content=body)
+    accepted = client.post(
+        "/whatsapp/webhook",
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": f"sha256={digest}",
+        },
+    )
+
+    assert rejected.status_code == 403
+    assert accepted.status_code == 200
+    assert accepted.json()["processed"] == 0

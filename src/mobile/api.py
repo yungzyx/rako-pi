@@ -11,15 +11,22 @@ from collections.abc import AsyncIterator
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+from starlette.requests import Request
 
-from channels.whatsapp.client import InMemoryWhatsAppClient
+from channels.whatsapp.client import InMemoryWhatsAppClient, WhatsAppClient, WhatsAppCloudClient
 from channels.whatsapp.service import (
     WhatsAppService,
     inbound_result_to_dict,
     outbound_message_to_dict,
 )
+from channels.whatsapp.webhook import (
+    extract_text_messages,
+    verify_meta_signature,
+    verify_webhook_challenge,
+)
 from config import Settings
 from db.database import Database
+from mobile.factory_page import render_factory_page
 from mobile.service import MobileService, focus_start_to_dict, status_to_dict, task_list_to_dict
 from mobile.setup_page import render_setup_page
 from product.factory_report import build_factory_report, factory_report_to_dict
@@ -33,6 +40,7 @@ from product.user_config import (
     onboarding_status_to_dict,
     user_profile_to_dict,
 )
+from product.wifi_setup import WiFiSetupService, wifi_setup_result_to_dict
 from productivity.progress import build_progress_summary, progress_summary_to_dict
 from productivity.study_plan import build_study_plan, study_plan_to_dict
 
@@ -87,6 +95,12 @@ class MemoryCreateRequest(BaseModel):
     sensitivity: Literal["normal", "sensitive"] = "normal"
 
 
+class WiFiSetupRequest(BaseModel):
+    ssid: str = Field(min_length=1, max_length=64)
+    password: str | None = Field(default=None, max_length=128)
+    apply: bool = False
+
+
 def create_app() -> Any:
     try:
         from fastapi import (
@@ -97,7 +111,7 @@ def create_app() -> Any:
             Query,
             status,
         )
-        from fastapi.responses import HTMLResponse
+        from fastapi.responses import HTMLResponse, PlainTextResponse
     except ImportError as exc:  # pragma: no cover - depends on optional HTTP deps
         raise RuntimeError("Install fastapi and uvicorn to run the mobile API") from exc
 
@@ -133,7 +147,7 @@ def create_app() -> Any:
     async def build_whatsapp_service() -> AsyncIterator[WhatsAppService]:
         db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
         try:
-            yield WhatsAppService(db, InMemoryWhatsAppClient())
+            yield WhatsAppService(db, _build_whatsapp_client(settings))
         finally:
             db.close()
 
@@ -156,6 +170,10 @@ def create_app() -> Any:
     @app.get("/setup", response_class=HTMLResponse)
     async def setup_page() -> str:
         return render_setup_page()
+
+    @app.get("/factory", response_class=HTMLResponse)
+    async def factory_page() -> str:
+        return render_factory_page()
 
     @app.get("/status")
     async def get_status(
@@ -208,6 +226,28 @@ def create_app() -> Any:
         db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
         try:
             return setup_flow_to_dict(build_setup_flow(db, settings))
+        finally:
+            db.close()
+
+    @app.post("/setup/wifi")
+    async def setup_wifi(
+        request: WiFiSetupRequest,
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            service = WiFiSetupService(db, apply_enabled=settings.rako_wifi_apply_enabled)
+            try:
+                result = service.configure(
+                    ssid=request.ssid,
+                    password=request.password,
+                    apply=request.apply,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+                ) from exc
+            return wifi_setup_result_to_dict(result)
         finally:
             db.close()
 
@@ -380,4 +420,69 @@ def create_app() -> Any:
             service.handle_inbound(from_number=request.from_number, text=request.text)
         )
 
+    @app.get("/whatsapp/webhook", response_class=PlainTextResponse)
+    async def whatsapp_webhook_verify(
+        hub_mode: str | None = Query(default=None, alias="hub.mode"),
+        hub_verify_token: str | None = Query(default=None, alias="hub.verify_token"),
+        hub_challenge: str | None = Query(default=None, alias="hub.challenge"),
+    ) -> str:
+        challenge = verify_webhook_challenge(
+            mode=hub_mode,
+            verify_token=hub_verify_token,
+            challenge=hub_challenge,
+            expected_verify_token=settings.whatsapp_cloud_verify_token,
+        )
+        if challenge is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="invalid token")
+        return challenge
+
+    @app.post("/whatsapp/webhook")
+    async def whatsapp_webhook_receive(
+        request: Request,
+        x_hub_signature_256: str | None = Header(default=None, alias="X-Hub-Signature-256"),
+    ) -> dict[str, Any]:
+        body = await request.body()
+        if settings.rako_env != "dev" and not settings.whatsapp_cloud_app_secret:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="WHATSAPP_CLOUD_APP_SECRET is required outside dev",
+            )
+        if not verify_meta_signature(
+            body=body,
+            signature_header=x_hub_signature_256,
+            app_secret=settings.whatsapp_cloud_app_secret,
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="invalid signature")
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            return {"processed": 0}
+        messages = extract_text_messages(payload)
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            service = WhatsAppService(db, _build_whatsapp_client(settings))
+            results = [
+                inbound_result_to_dict(
+                    service.handle_inbound(from_number=message.from_number, text=message.text)
+                )
+                for message in messages
+            ]
+            return {"processed": len(results), "results": results}
+        finally:
+            db.close()
+
     return app
+
+
+def _build_whatsapp_client(settings: Settings) -> WhatsAppClient:
+    if (
+        settings.whatsapp_client == "cloud"
+        and settings.whatsapp_cloud_access_token
+        and settings.whatsapp_cloud_phone_number_id
+    ):
+        return WhatsAppCloudClient(
+            access_token=settings.whatsapp_cloud_access_token,
+            phone_number_id=settings.whatsapp_cloud_phone_number_id,
+            api_version=settings.whatsapp_cloud_api_version,
+            timeout_s=settings.whatsapp_cloud_timeout_s,
+        )
+    return InMemoryWhatsAppClient()

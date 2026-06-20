@@ -181,8 +181,10 @@ Endpoints iniciales:
 ```text
 GET  /health
 GET  /setup
+GET  /factory
 GET  /status
 GET  /setup/flow
+POST /setup/wifi       {"ssid": "Casa", "password": "...", "apply": false}
 GET  /factory/report
 GET  /update/status
 GET  /onboarding/status
@@ -207,6 +209,8 @@ POST /whatsapp/checkin   {"to": "+56912345678"}
 POST /whatsapp/progress  {"to": "+56912345678", "period": "today"}
 POST /whatsapp/actions   {"to": "+56912345678"}
 POST /whatsapp/inbound   {"from_number": "+56912345678", "text": "estoy bien"}
+GET  /whatsapp/webhook
+POST /whatsapp/webhook
 ```
 
 `/setup/flow` está pensado para primer encendido o app de configuración: entrega
@@ -215,6 +219,9 @@ son opcionales o manuales antes de asignar una placa.
 `/setup` muestra una página local autocontenida para revisar ese flujo desde el
 celular o notebook del usuario. Si expones el API en la red local, usa
 `RAKO_API_TOKEN` y escribe el token en la pantalla de setup.
+`/setup/wifi` puede guardar el SSID del usuario y, si `apply=true`, llamar a
+NetworkManager con `nmcli`; por seguridad solo aplica cambios reales cuando
+`RAKO_WIFI_APPLY_ENABLED=1`. La contraseña WiFi no se guarda en SQLite.
 
 El inbound de WhatsApp también entiende memoria editable con frases como
 `recuerda que prefiero bloques de 25 minutos`, `qué sabes de mí` y
@@ -225,6 +232,8 @@ la opción `6` muestra configuración. También entiende `pausar mensajes`,
 `/user/export` y `/user/delete-all` cubren perfil, consentimiento, canales y
 memoria editable; no borran tareas ni logs operacionales.
 `/factory/report` resume setup, checklist de entrega y bloqueos para producción.
+`/factory` muestra un panel local para revisar una placa: entrega, setup,
+bloqueos, checks manuales, versión y build.
 `/update/status` reporta versión/canal/build en modo solo lectura; aplicar OTA
 queda pendiente hasta tener releases firmadas y rollback.
 
@@ -238,6 +247,21 @@ inicio de foco y bypass de crisis antes de conectar WhatsApp Cloud API real.
 Los mensajes salientes por WhatsApp requieren opt-in local en `/user/consent`
 y número configurado en `/user/channels`. El SSID WiFi se puede guardar para
 diagnóstico/onboarding, pero la contraseña WiFi no se persiste en SQLite.
+
+Para usar WhatsApp Cloud API real:
+
+```bash
+WHATSAPP_CLIENT=cloud
+WHATSAPP_CLOUD_ACCESS_TOKEN=...
+WHATSAPP_CLOUD_PHONE_NUMBER_ID=...
+WHATSAPP_CLOUD_VERIFY_TOKEN=...
+WHATSAPP_CLOUD_APP_SECRET=...
+```
+
+`GET /whatsapp/webhook` sirve para la verificación de Meta. `POST
+/whatsapp/webhook` procesa mensajes de texto entrantes; en `staging`/`prod`
+exige firma `X-Hub-Signature-256` cuando `WHATSAPP_CLOUD_APP_SECRET` está
+configurado.
 
 ### Smart check-ins
 

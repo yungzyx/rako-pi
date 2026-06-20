@@ -68,6 +68,20 @@ class Settings(BaseSettings):
     # En staging/prod es obligatorio; en dev se permite omitirlo para pruebas locales.
     rako_api_token: str | None = None
 
+    # --- Setup WiFi ---
+    # Por seguridad, el API puede registrar el SSID para onboarding, pero solo
+    # ejecuta `nmcli` cuando este flag está activo.
+    rako_wifi_apply_enabled: bool = False
+
+    # --- WhatsApp ---
+    whatsapp_client: Literal["memory", "cloud"] = "memory"
+    whatsapp_cloud_access_token: str | None = None
+    whatsapp_cloud_phone_number_id: str | None = None
+    whatsapp_cloud_api_version: str = "v20.0"
+    whatsapp_cloud_verify_token: str | None = None
+    whatsapp_cloud_app_secret: str | None = None
+    whatsapp_cloud_timeout_s: float = 10.0
+
     # --- Wake word ---
     # `text_stt` es fallback dev: transcribe audio con STT y busca texto.
     # Para producto, preferir `porcupine` con keyword custom entrenada para Rako.
