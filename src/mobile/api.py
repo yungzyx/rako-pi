@@ -21,6 +21,7 @@ from channels.whatsapp.service import (
 from config import Settings
 from db.database import Database
 from mobile.service import MobileService, focus_start_to_dict, status_to_dict, task_list_to_dict
+from mobile.setup_page import render_setup_page
 from product.setup_flow import build_setup_flow, setup_flow_to_dict
 from product.user_config import (
     UserConfigService,
@@ -93,6 +94,7 @@ def create_app() -> Any:
             Query,
             status,
         )
+        from fastapi.responses import HTMLResponse
     except ImportError as exc:  # pragma: no cover - depends on optional HTTP deps
         raise RuntimeError("Install fastapi and uvicorn to run the mobile API") from exc
 
@@ -146,6 +148,10 @@ def create_app() -> Any:
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/setup", response_class=HTMLResponse)
+    async def setup_page() -> str:
+        return render_setup_page()
 
     @app.get("/status")
     async def get_status(

@@ -29,6 +29,20 @@ def test_status_requires_token_when_configured(monkeypatch, tmp_path) -> None:
     assert valid.json()["state"] == "ready"
 
 
+def test_setup_page_is_public_and_uses_setup_flow(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_API_TOKEN", "secret")
+    client = TestClient(create_app())
+
+    response = client.get("/setup")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "Configurar Rako" in response.text
+    assert 'fetch("/setup/flow"' in response.text
+    assert "secret" not in response.text
+
+
 def test_tasks_endpoint_lists_mobile_focus_tasks(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.delenv("RAKO_API_TOKEN", raising=False)

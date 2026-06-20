@@ -180,6 +180,7 @@ Endpoints iniciales:
 
 ```text
 GET  /health
+GET  /setup
 GET  /status
 GET  /setup/flow
 GET  /onboarding/status
@@ -206,6 +207,9 @@ POST /whatsapp/inbound   {"from_number": "+56912345678", "text": "estoy bien"}
 `/setup/flow` está pensado para primer encendido o app de configuración: entrega
 pasos, porcentaje de avance, próximo bloqueo, notas de privacidad y qué partes
 son opcionales o manuales antes de asignar una placa.
+`/setup` muestra una página local autocontenida para revisar ese flujo desde el
+celular o notebook del usuario. Si expones el API en la red local, usa
+`RAKO_API_TOKEN` y escribe el token en la pantalla de setup.
 
 El inbound de WhatsApp también entiende memoria editable con frases como
 `recuerda que prefiero bloques de 25 minutos`, `qué sabes de mí` y
