@@ -32,6 +32,7 @@ from bootstrap import build_pi_application
 from config import Settings
 from hardware.oled_runtime import OledEyeController
 from hardware.oled_states import RakoVisualState
+from orchestrator.context import build_user_context
 from orchestrator.memory import ConversationMemory
 from orchestrator.orchestrator import TurnInput, TurnKind
 from orchestrator.types import default_user_context
@@ -341,7 +342,11 @@ def _handle_press(
         emotion_history=(),
         last_high_distress_at=None,
         last_interaction_at=None,
-        user_context=default_user_context(now, recent_conversation=app_holder["memory"].lines()),
+        user_context=build_user_context(
+            app.db,
+            now,
+            recent_conversation=app_holder["memory"].lines(),
+        ),
         now=now,
     )
     llm_started = time.monotonic()

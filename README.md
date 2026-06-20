@@ -208,6 +208,29 @@ Los mensajes salientes por WhatsApp requieren opt-in local en `/user/consent`
 y número configurado en `/user/channels`. El SSID WiFi se puede guardar para
 diagnóstico/onboarding, pero la contraseña WiFi no se persiste en SQLite.
 
+### Provisionar placas nuevas
+
+Después de `scripts/setup_pi.sh`, cada placa puede quedar asignada a un usuario
+con configuración local reproducible:
+
+```bash
+./scripts/rako-provision \
+  --name "Nico" \
+  --university "UDD" \
+  --program "Ingeniería" \
+  --wifi-ssid "Casa" \
+  --whatsapp-number "+56912345678" \
+  --enable-whatsapp \
+  --enable-progress \
+  --memory "Prefiere bloques de foco de 25 minutos"
+```
+
+`rako-provision` escribe perfil, consentimiento, canales y memoria editable en
+SQLite. No guarda contraseñas WiFi ni secretos de APIs.
+
+Para el flujo completo de instalación y QA por placa, ver
+[`PRODUCTION_PLAN.md`](./PRODUCTION_PLAN.md).
+
 ---
 
 ## Tests

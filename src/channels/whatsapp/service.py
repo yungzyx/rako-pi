@@ -27,6 +27,7 @@ from safety.responses import pick_response
 from safety.types import CrisisInput, CrisisLevel
 
 _LAST_CHECKIN_KEY = "whatsapp.last_checkin"
+_PENDING_TTL_SECONDS = 15 * 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +148,7 @@ class WhatsAppService:
             )
         )
         if crisis_signal.level is CrisisLevel.CRISIS:
+            self._clear_pending(from_number)
             response = pick_response(crisis_signal)
             return self._reply(
                 to=from_number,
@@ -154,6 +156,10 @@ class WhatsAppService:
                 response_text=response.text,
                 crisis=True,
             )
+
+        pending_result = self._handle_pending(clean_text, from_number=from_number, now=now)
+        if pending_result is not None:
+            return pending_result
 
         mood = _classify_mood(clean_text)
         if mood is not None:
@@ -204,6 +210,10 @@ class WhatsAppService:
             )
             return self._reply(to=from_number, action="MENU_TASK", response_text=response)
         if normalized in {"2", "foco", "pomodoro"}:
+            self._store_pending(
+                from_number,
+                {"action": "focus_setup", "expires_at": _pending_expires_at(now)},
+            )
             return self._reply(
                 to=from_number,
                 action="MENU_FOCUS",
@@ -217,12 +227,138 @@ class WhatsAppService:
                 response_text=build_external_progress_message(summary),
             )
         if normalized in {"4", "ánimo", "animo", "mood"}:
+            self._store_pending(
+                from_number,
+                {"action": "mood_checkin", "expires_at": _pending_expires_at(now)},
+            )
             return self._reply(
                 to=from_number,
                 action="MENU_MOOD",
                 response_text="Dime rápido cómo estás: bien, normal o bajo.",
             )
         return None
+
+    def _handle_pending(
+        self,
+        text: str,
+        *,
+        from_number: str,
+        now: datetime,
+    ) -> WhatsAppInboundResult | None:
+        pending = self._read_pending(from_number, now=now)
+        if pending is None:
+            return None
+        action = pending.get("action")
+        if action == "mood_checkin":
+            mood = _classify_mood(text)
+            if mood is None:
+                return self._reply(
+                    to=from_number,
+                    action="MENU_MOOD",
+                    response_text="Respóndeme con una de estas tres: bien, normal o bajo.",
+                )
+            self._clear_pending(from_number)
+            self._store_mood(mood=mood, now=now)
+            return self._reply(
+                to=from_number,
+                action="MOOD_RECORDED",
+                response_text=_mood_response(mood),
+                stored_mood=mood,
+            )
+        if action == "focus_setup":
+            return self._handle_pending_focus(
+                text, from_number=from_number, now=now, pending=pending
+            )
+        return None
+
+    def _handle_pending_focus(
+        self,
+        text: str,
+        *,
+        from_number: str,
+        now: datetime,
+        pending: dict[str, object],
+    ) -> WhatsAppInboundResult:
+        minutes = _extract_minutes(text)
+        if minutes is not None and _looks_like_duration_only(text):
+            saved_title = pending.get("title")
+            if isinstance(saved_title, str) and saved_title.strip():
+                focus = maybe_start_focus_from_transcript(
+                    f"estudiar {saved_title} {minutes} minutos",
+                    db=self._db,
+                    now=now,
+                )
+                if focus is not None and focus.session is not None:
+                    self._clear_pending(from_number)
+                    return self._reply(
+                        to=from_number,
+                        action="FOCUS",
+                        response_text=focus.response_text,
+                        focus_session_id=focus.session.id,
+                    )
+            updated = {
+                "action": "focus_setup",
+                "minutes": minutes,
+                "expires_at": _pending_expires_at(now),
+            }
+            self._store_pending(from_number, updated)
+            return self._reply(
+                to=from_number,
+                action="MENU_FOCUS",
+                response_text=f"Perfecto, {minutes} minutos. ¿Qué actividad hacemos?",
+            )
+
+        saved_minutes = pending.get("minutes")
+        focus_text = text
+        if isinstance(saved_minutes, int):
+            focus_text = f"{text} {saved_minutes} minutos"
+
+        focus = maybe_start_focus_from_transcript(focus_text, db=self._db, now=now)
+        if focus is not None and focus.session is not None:
+            self._clear_pending(from_number)
+            return self._reply(
+                to=from_number,
+                action="FOCUS",
+                response_text=focus.response_text,
+                focus_session_id=focus.session.id,
+            )
+        if focus is not None and focus.needs_duration:
+            self._store_pending(
+                from_number,
+                {
+                    "action": "focus_setup",
+                    "title": focus.suggested_title,
+                    "expires_at": _pending_expires_at(now),
+                },
+            )
+            return self._reply(
+                to=from_number,
+                action="MENU_FOCUS",
+                response_text=focus.response_text,
+            )
+        clean_title = text.strip()
+        if clean_title and _extract_minutes(clean_title) is None:
+            self._store_pending(
+                from_number,
+                {
+                    "action": "focus_setup",
+                    "title": clean_title,
+                    "expires_at": _pending_expires_at(now),
+                },
+            )
+            return self._reply(
+                to=from_number,
+                action="MENU_FOCUS",
+                response_text=(
+                    f"Dale. ¿Por cuántos minutos quieres hacer {clean_title}? "
+                    "Si quieres, te recomiendo 25 minutos para partir."
+                ),
+            )
+        return self._reply(
+            to=from_number,
+            action="MENU_FOCUS",
+            response_text="Dime algo como: estudiar cálculo 25 minutos.",
+        )
 
     def _reply(
         self,
@@ -258,6 +394,30 @@ class WhatsAppService:
             )
         )
 
+    def _store_pending(self, number: str, payload: dict[str, object]) -> None:
+        self._db.config.set(_pending_key(number), json.dumps(payload, ensure_ascii=False))
+
+    def _read_pending(self, number: str, *, now: datetime) -> dict[str, object] | None:
+        raw = self._db.config.get(_pending_key(number))
+        if raw is None:
+            return None
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            self._clear_pending(number)
+            return None
+        if not isinstance(payload, dict):
+            self._clear_pending(number)
+            return None
+        expires_at = payload.get("expires_at")
+        if isinstance(expires_at, str) and datetime.fromisoformat(expires_at) <= now:
+            self._clear_pending(number)
+            return None
+        return payload
+
+    def _clear_pending(self, number: str) -> None:
+        self._db.config.delete(_pending_key(number))
+
 
 def inbound_result_to_dict(result: WhatsAppInboundResult) -> dict[str, object]:
     return asdict(result)
@@ -279,6 +439,32 @@ def _classify_mood(text: str) -> str | None:
     if any(word in lowered for word in ("bien", "motivado", "motivada", "tranquilo", "tranquila")):
         return "good"
     return None
+
+
+def _extract_minutes(text: str) -> int | None:
+    for token in text.replace(",", " ").split():
+        if token.isdigit():
+            minutes = int(token)
+            if 1 <= minutes <= 180:
+                return minutes
+    return None
+
+
+def _looks_like_duration_only(text: str) -> bool:
+    tokens = [token for token in text.lower().replace(",", " ").split() if token]
+    if not tokens:
+        return False
+    allowed = {"min", "mins", "minuto", "minutos"}
+    return all(token.isdigit() or token in allowed for token in tokens)
+
+
+def _pending_key(number: str) -> str:
+    safe_number = "".join(char for char in number if char.isalnum())
+    return f"whatsapp.pending.{safe_number}"
+
+
+def _pending_expires_at(now: datetime) -> str:
+    return (now + timedelta(seconds=_PENDING_TTL_SECONDS)).isoformat()
 
 
 def _mood_vector(mood: str) -> EmotionalVector:

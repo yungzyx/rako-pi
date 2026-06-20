@@ -131,3 +131,58 @@ def test_handle_inbound_menu_choice_returns_progress(db_conn) -> None:
     assert result.action == "MENU_PROGRESS"
     assert "programar" not in result.response_text
     assert "completaste 1 tarea" in result.response_text
+
+
+def test_handle_inbound_menu_focus_keeps_pending_duration(db_conn) -> None:
+    db = Database(db_conn)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+    now = datetime(2026, 6, 10, 16, 0, tzinfo=UTC)
+
+    prompt = service.handle_inbound(from_number="+56912345678", text="2", now=now)
+    minutes = service.handle_inbound(from_number="+56912345678", text="25", now=now)
+    focus = service.handle_inbound(
+        from_number="+56912345678",
+        text="estudiar cálculo",
+        now=now,
+    )
+
+    assert prompt.action == "MENU_FOCUS"
+    assert minutes.action == "MENU_FOCUS"
+    assert "Qué actividad" in minutes.response_text
+    assert focus.action == "FOCUS"
+    assert focus.focus_session_id is not None
+    assert "25 minutos para cálculo" in focus.response_text
+
+
+def test_handle_inbound_menu_focus_keeps_pending_title(db_conn) -> None:
+    db = Database(db_conn)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+    now = datetime(2026, 6, 10, 16, 0, tzinfo=UTC)
+
+    service.handle_inbound(from_number="+56912345678", text="2", now=now)
+    title = service.handle_inbound(
+        from_number="+56912345678",
+        text="estudiar química",
+        now=now,
+    )
+    focus = service.handle_inbound(from_number="+56912345678", text="30 minutos", now=now)
+
+    assert title.action == "MENU_FOCUS"
+    assert "Por cuántos minutos" in title.response_text
+    assert focus.action == "FOCUS"
+    assert "30 minutos para química" in focus.response_text
+
+
+def test_handle_inbound_menu_mood_guides_next_reply(db_conn) -> None:
+    db = Database(db_conn)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+    now = datetime(2026, 6, 10, 16, 0, tzinfo=UTC)
+
+    service.handle_inbound(from_number="+56912345678", text="4", now=now)
+    unclear = service.handle_inbound(from_number="+56912345678", text="meh", now=now)
+    mood = service.handle_inbound(from_number="+56912345678", text="bajo", now=now)
+
+    assert unclear.action == "MENU_MOOD"
+    assert "bien, normal o bajo" in unclear.response_text
+    assert mood.action == "MOOD_RECORDED"
+    assert mood.stored_mood == "low"

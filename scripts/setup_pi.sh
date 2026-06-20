@@ -47,10 +47,10 @@ print(f"{sys.version_info.major}.{sys.version_info.minor}")
 PY
 )"
 case "$PYTHON_VERSION" in
-  3.11|3.12|3.13)
+  3.12|3.13)
     ;;
   *)
-    echo "ERROR: Python $PYTHON_VERSION no soportado. Requiere 3.11, 3.12 o 3.13." >&2
+    echo "ERROR: Python $PYTHON_VERSION no soportado. Requiere 3.12 o 3.13." >&2
     exit 1
     ;;
 esac
@@ -125,13 +125,17 @@ Próximos pasos:
        ./scripts/rako.sh demo-turn "hola Rako"
        ./scripts/rako.sh demo-crisis-panic
 
-  3. Para autostart en boot:
+  3. Provisionar este Rako para un usuario:
+       ./scripts/rako-provision --name "Nico" --wifi-ssid "Casa" \\
+         --whatsapp-number "+569..." --enable-whatsapp --enable-progress
+
+  4. Para autostart en boot:
        sudo cp systemd/rako.service /etc/systemd/system/
        sudo systemctl daemon-reload
        sudo systemctl enable rako
        sudo systemctl start rako
 
-  4. Ver logs:
+  5. Ver logs:
        journalctl -u rako -f
 
 EOF

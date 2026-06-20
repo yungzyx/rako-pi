@@ -117,6 +117,22 @@ def test_format_user_context_includes_recent_conversation_when_present() -> None
     assert "Dale, partimos" in formatted
 
 
+def test_format_user_context_includes_editable_memory_when_present() -> None:
+    ctx = UserContext(
+        pending_task_count=1,
+        recent_completion_count=0,
+        robot_level=1,
+        time_of_day="tarde",
+        recent_mood_summary=None,
+        user_memory=("routine: Prefiere bloques de 25 minutos",),
+    )
+
+    formatted = format_user_context(ctx)
+
+    assert "Memoria editable" in formatted
+    assert "Prefiere bloques de 25 minutos" in formatted
+
+
 def test_build_user_message_combines_query_chunks_and_context() -> None:
     chunks = (Chunk(id="01#0", text="Respira profundo.", metadata={}),)
     ctx = UserContext(
@@ -149,6 +165,22 @@ def test_build_user_message_tells_llm_to_continue_existing_topic() -> None:
     assert "continúa algo" in message
     assert "sin volver a saludar" in message
     assert "Partamos por límites" in message
+
+
+def test_build_user_message_guides_memory_without_literal_repetition() -> None:
+    ctx = UserContext(
+        pending_task_count=1,
+        recent_completion_count=0,
+        robot_level=1,
+        time_of_day="tarde",
+        recent_mood_summary=None,
+        user_memory=("motivation: Le sirven instrucciones directas y cortas",),
+    )
+
+    message = build_user_message(query="ayúdame a partir", chunks=(), context=ctx)
+
+    assert "memoria editable" in message.lower()
+    assert "no la cites literalmente" in message
 
 
 def test_build_user_message_guides_task_breakdowns_and_suggestions() -> None:

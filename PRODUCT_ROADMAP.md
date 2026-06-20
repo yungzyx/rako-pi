@@ -125,5 +125,8 @@ app can guide the user without guessing.
 - Channel consent gates for WhatsApp outbound messages.
 - Mobile API endpoints for profile, consent, channels, memory, and onboarding
   status.
+- `rako-provision` CLI for repeatable setup on new boards.
+- LLM context uses local aggregate progress and non-sensitive editable memory.
+- WhatsApp menu flows keep short-lived pending state for focus and mood replies.
 - Next: pair device to cloud account, signed OTA updates, WhatsApp Cloud API
   adapter, and app-side WiFi provisioning.

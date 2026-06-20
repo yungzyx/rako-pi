@@ -21,6 +21,7 @@ class UserContext:
     time_of_day: str
     recent_mood_summary: str | None
     recent_conversation: tuple[str, ...] = ()
+    user_memory: tuple[str, ...] = ()
 
 
 def default_user_context(
@@ -44,4 +45,5 @@ def default_user_context(
         time_of_day=tod,
         recent_mood_summary=None,
         recent_conversation=tuple(recent_conversation),
+        user_memory=(),
     )

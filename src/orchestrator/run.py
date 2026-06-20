@@ -25,9 +25,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from hardware.types import HardwareEvent, HardwareEventKind, LEDState
+from orchestrator.context import build_user_context
 from orchestrator.memory import ConversationMemory
 from orchestrator.orchestrator import TurnInput
-from orchestrator.types import default_user_context
 from safety.types import PanicSource
 
 _log = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ class RunLoop:
             emotion_history=(),
             last_high_distress_at=None,
             last_interaction_at=None,
-            user_context=default_user_context(now),
+            user_context=build_user_context(self._app.db, now),
             now=now,
         )
         result = self._app.orchestrator.handle_turn(turn)
@@ -150,7 +150,11 @@ class RunLoop:
             emotion_history=(),
             last_high_distress_at=None,
             last_interaction_at=now,
-            user_context=default_user_context(now, recent_conversation=self._memory.lines()),
+            user_context=build_user_context(
+                self._app.db,
+                now,
+                recent_conversation=self._memory.lines(),
+            ),
             now=now,
         )
         result = self._app.orchestrator.handle_turn(turn)
