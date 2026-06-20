@@ -184,6 +184,7 @@ GET  /setup
 GET  /status
 GET  /setup/flow
 GET  /onboarding/status
+GET  /coach/plan
 GET  /tasks?pending_only=true&limit=20
 GET  /progress/today
 GET  /progress/week
@@ -213,7 +214,8 @@ celular o notebook del usuario. Si expones el API en la red local, usa
 
 El inbound de WhatsApp también entiende memoria editable con frases como
 `recuerda que prefiero bloques de 25 minutos`, `qué sabes de mí` y
-`olvida bloques de 25`.
+`olvida bloques de 25`. En el menú de acciones, la opción `5` devuelve un plan
+rápido de estudio con bloque sugerido sin exponer títulos privados por WhatsApp.
 
 Por defecto escucha en `127.0.0.1:8765`. Puedes cambiarlo con
 `RAKO_API_HOST` y `RAKO_API_PORT`. Si defines `RAKO_API_TOKEN`, todos los

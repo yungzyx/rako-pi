@@ -32,6 +32,7 @@ from product.user_config import (
     user_profile_to_dict,
 )
 from productivity.progress import build_progress_summary, progress_summary_to_dict
+from productivity.study_plan import build_study_plan, study_plan_to_dict
 
 
 class StartFocusRequest(BaseModel):
@@ -182,6 +183,13 @@ def create_app() -> Any:
         service: MobileService = service_dep,
     ) -> dict[str, Any]:
         return progress_summary_to_dict(build_progress_summary(service.db, period="week"))
+
+    @app.get("/coach/plan")
+    async def coach_plan(
+        _: None = auth_dep,
+        service: MobileService = service_dep,
+    ) -> dict[str, Any]:
+        return study_plan_to_dict(build_study_plan(service.db))
 
     @app.get("/onboarding/status")
     async def onboarding_status(

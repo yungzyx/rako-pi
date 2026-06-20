@@ -59,6 +59,7 @@ python scripts/checks.py safety
 - focus command starts a timer
 - WhatsApp check-in requires consent
 - WhatsApp menu `2 -> 25 -> estudiar cálculo` starts focus
+- WhatsApp menu `5` returns a privacy-safe study plan
 - crisis phrase uses curated response
 - `/setup/flow` shows the next first-run action and no WiFi password storage
 - `/onboarding/status` returns `ready: true`

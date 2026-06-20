@@ -193,6 +193,7 @@ def test_send_action_menu_offers_clear_choices(db_conn) -> None:
     assert message.kind == "ACTION_MENU"
     assert "1. Elegir una tarea corta" in message.text
     assert "4. Check-in de ánimo" in message.text
+    assert "5. Plan rápido" in message.text
 
 
 def test_handle_inbound_menu_choice_returns_progress(db_conn) -> None:
@@ -207,6 +208,24 @@ def test_handle_inbound_menu_choice_returns_progress(db_conn) -> None:
     assert result.action == "MENU_PROGRESS"
     assert "programar" not in result.response_text
     assert "completaste 1 tarea" in result.response_text
+
+
+def test_handle_inbound_menu_choice_returns_privacy_safe_study_plan(db_conn) -> None:
+    db = Database(db_conn)
+    db.tasks.create(
+        create_focus_task("preparar prueba privada", datetime(2026, 6, 10, 16, 0, tzinfo=UTC))
+    )
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    result = service.handle_inbound(
+        from_number="+56912345678",
+        text="5",
+        now=datetime(2026, 6, 10, 16, 0, tzinfo=UTC),
+    )
+
+    assert result.action == "MENU_PLAN"
+    assert "Bloque sugerido" in result.response_text
+    assert "preparar prueba privada" not in result.response_text
 
 
 def test_handle_inbound_menu_focus_keeps_pending_duration(db_conn) -> None:

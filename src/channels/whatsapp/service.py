@@ -23,6 +23,7 @@ from productivity.progress import (
     build_progress_summary,
 )
 from productivity.runtime import maybe_start_focus_from_transcript
+from productivity.study_plan import build_external_study_plan_message, build_study_plan
 from safety.detector import detect_crisis
 from safety.responses import pick_response
 from safety.types import CrisisInput, CrisisLevel
@@ -137,7 +138,8 @@ class WhatsAppService:
             "1. Elegir una tarea corta\n"
             "2. Foco de 25 minutos\n"
             "3. Revisar progreso\n"
-            "4. Check-in de ánimo"
+            "4. Check-in de ánimo\n"
+            "5. Plan rápido"
         )
         return self._client.send_text(
             to=to,
@@ -278,6 +280,13 @@ class WhatsAppService:
                 to=from_number,
                 action="MENU_MOOD",
                 response_text="Dime rápido cómo estás: bien, normal o bajo.",
+            )
+        if normalized in {"5", "plan", "plan rápido", "plan rapido", "planear"}:
+            plan = build_study_plan(self._db, now=now)
+            return self._reply(
+                to=from_number,
+                action="MENU_PLAN",
+                response_text=build_external_study_plan_message(plan),
             )
         return None
 

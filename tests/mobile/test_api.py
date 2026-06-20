@@ -70,6 +70,21 @@ def test_progress_endpoint_summarizes_tasks(monkeypatch, tmp_path) -> None:
     assert response.json()["next_task_title"] == "cálculo"
 
 
+def test_coach_plan_endpoint_recommends_next_study_action(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    empty = client.get("/coach/plan")
+    client.post("/focus/start", json={"title": "cálculo", "minutes": 30})
+    active = client.get("/coach/plan")
+
+    assert empty.status_code == 200
+    assert empty.json()["kind"] == "PLAN_FIRST_STEP"
+    assert active.json()["kind"] == "RESUME_ACTIVE_TASK"
+    assert active.json()["recommended_minutes"] == 25
+
+
 def test_user_config_endpoints_support_product_onboarding(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
