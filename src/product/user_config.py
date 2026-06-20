@@ -238,6 +238,10 @@ class UserConfigService:
         consent = self.get_consent()
         return self.whatsapp_can_send() and consent.progress_reports_enabled
 
+    def proactive_messages_can_send(self) -> bool:
+        consent = self.get_consent()
+        return self.whatsapp_can_send() and consent.proactive_messages_enabled
+
     def _set_json(self, key: str, payload: object) -> None:
         self._db.config.set(key, json.dumps(payload, ensure_ascii=False, sort_keys=True))
 

@@ -71,6 +71,26 @@ Every release should test:
 - sensitive memory: never sent to LLM context
 - crisis/scope: bypass LLM when crisis is detected
 
+## Product capability plan
+
+For a multi-user product, Rako should grow around small, consented capabilities
+that work the same on every board:
+
+- Provisioning: each device must have a local profile, device/user identity,
+  WiFi setup state, WhatsApp number, trusted contact, wellbeing unit, and
+  explicit consent flags.
+- Memory: store editable normal memories locally; never send sensitive memory
+  to external channels unless the user explicitly enables that category.
+- Proactive coaching: choose the next WhatsApp touchpoint from local signals:
+  recent low mood, completed work, active tasks, pending tasks, or no plan.
+- Progress visibility: send privacy-safe counts by default; task titles stay
+  inside authenticated local/mobile views.
+- Safety escalation: crisis handling must use curated text and local resources
+  first, with trusted contact/wellbeing escalation only when configured and
+  consented.
+- Fleet readiness: installation scripts, systemd units, health checks, support
+  bundles, OTA/rollback, and per-board acceptance tests must be repeatable.
+
 ## WhatsApp product gates
 
 Outbound WhatsApp must be opt-in:
@@ -92,6 +112,13 @@ Disallowed outbound payloads:
 - sensitive memory
 - crisis details beyond curated resources
 
+Smart check-ins must also be opt-in:
+
+- `whatsapp_enabled=true`
+- `proactive_messages_enabled=true`
+- Progress celebration requires `progress_reports_enabled=true`
+- Messages may include counts and general next actions, never task titles
+
 ## Next production milestones
 
 1. WhatsApp Cloud API adapter with template support.
@@ -101,3 +128,6 @@ Disallowed outbound payloads:
 5. Sanitized support bundle for debugging deployed devices.
 6. Systemd units checked into repo and installed by `setup_pi.sh`.
 7. Hardware fixture checklist for speaker/mic/OLED/button before shipping.
+8. Admin/factory dashboard for assigning devices to users and checking readiness.
+9. Consent review screen where users can pause WhatsApp, progress, proactive
+   messages, memory, and wellbeing escalation independently.

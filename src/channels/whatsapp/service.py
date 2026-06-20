@@ -16,6 +16,7 @@ from db.database import Database
 from db.types import EmotionalStateRecord
 from emotion.types import EmotionalVector
 from product.user_config import UserConfigService
+from productivity.coaching import build_coaching_recommendation
 from productivity.progress import (
     ProgressPeriod,
     build_external_progress_message,
@@ -83,6 +84,44 @@ class WhatsAppService:
             kind="PROGRESS_REPORT",
             metadata={"period": period, "sent_at": now.isoformat()},
         )
+
+    def send_smart_checkin(
+        self,
+        *,
+        to: str,
+        now: datetime | None = None,
+    ) -> WhatsAppOutboundMessage:
+        now = _ensure_aware(now or datetime.now(UTC))
+        config = UserConfigService(self._db)
+        if not config.proactive_messages_can_send():
+            return self._consent_required(to=to, now=now)
+        recommendation = build_coaching_recommendation(
+            self._db,
+            now=now,
+            include_progress=config.progress_reports_can_send(),
+        )
+        message = self._client.send_text(
+            to=to,
+            text=recommendation.text,
+            kind="SMART_CHECKIN",
+            metadata={
+                "sent_at": now.isoformat(),
+                "recommendation": recommendation.kind,
+                **recommendation.metadata,
+            },
+        )
+        self._db.config.set(
+            _LAST_CHECKIN_KEY,
+            json.dumps(
+                {
+                    "to": to,
+                    "sent_at": now.isoformat(),
+                    "kind": recommendation.kind,
+                },
+                ensure_ascii=False,
+            ),
+        )
+        return message
 
     def send_action_menu(
         self,

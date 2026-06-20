@@ -16,6 +16,18 @@ def _enable_whatsapp(db: Database, *, progress: bool = False) -> None:
     config.update_consent({"whatsapp_enabled": True, "progress_reports_enabled": progress})
 
 
+def _enable_proactive_whatsapp(db: Database, *, progress: bool = False) -> None:
+    config = UserConfigService(db)
+    config.update_channels({"whatsapp_number": "+56912345678"})
+    config.update_consent(
+        {
+            "whatsapp_enabled": True,
+            "proactive_messages_enabled": True,
+            "progress_reports_enabled": progress,
+        }
+    )
+
+
 def test_send_checkin_uses_safe_short_prompt(db_conn) -> None:
     db = Database(db_conn)
     _enable_whatsapp(db)
@@ -105,6 +117,48 @@ def test_send_progress_report_uses_real_task_progress(db_conn) -> None:
     assert "completaste 1 tarea" in message.text
     assert "leer papers" not in message.text
     assert "tarea pequeña" in message.text
+
+
+def test_send_smart_checkin_requires_proactive_consent(db_conn) -> None:
+    db = Database(db_conn)
+    _enable_whatsapp(db)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    message = service.send_smart_checkin(to="+56912345678")
+
+    assert message.kind == "CONSENT_REQUIRED"
+
+
+def test_send_smart_checkin_uses_progress_only_with_consent(db_conn) -> None:
+    db = Database(db_conn)
+    _enable_proactive_whatsapp(db, progress=False)
+    now = datetime(2026, 6, 10, 16, 0, tzinfo=UTC)
+    task = db.tasks.create(create_focus_task("estudiar ramo privado", now))
+    db.tasks.update_status(task.id, TaskStatus.DONE, completed_at=now)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    message = service.send_smart_checkin(to="+56912345678", now=now)
+
+    assert message.kind == "SMART_CHECKIN"
+    assert message.metadata["recommendation"] == "PLANNING_NUDGE"
+    assert "completaste" not in message.text
+    assert "estudiar ramo privado" not in message.text
+
+
+def test_send_smart_checkin_can_send_private_safe_progress(db_conn) -> None:
+    db = Database(db_conn)
+    _enable_proactive_whatsapp(db, progress=True)
+    now = datetime(2026, 6, 10, 16, 0, tzinfo=UTC)
+    task = db.tasks.create(create_focus_task("preparar prueba secreta", now))
+    db.tasks.update_status(task.id, TaskStatus.DONE, completed_at=now)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    message = service.send_smart_checkin(to="+56912345678", now=now)
+
+    assert message.kind == "SMART_CHECKIN"
+    assert message.metadata["recommendation"] == "PROGRESS_CELEBRATION"
+    assert "completaste 1 tarea" in message.text
+    assert "preparar prueba secreta" not in message.text
 
 
 def test_send_action_menu_offers_clear_choices(db_conn) -> None:
