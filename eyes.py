@@ -18,8 +18,6 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from luma.core.interface.serial import i2c
-from luma.oled.device import ssd1306
 from PIL import Image, ImageDraw
 
 WIDTH = 128
@@ -39,6 +37,9 @@ class Expression:
 
 
 def open_device():
+    from luma.core.interface.serial import i2c
+    from luma.oled.device import ssd1306
+
     serial = i2c(port=1, address=0x3C)
     return ssd1306(serial)
 
