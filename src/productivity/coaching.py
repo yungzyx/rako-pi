@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from db.database import Database
+from productivity.mindfulness import pick_mindfulness_exercise
 from productivity.progress import build_progress_summary
 
 CoachingKind = Literal[
@@ -38,27 +39,33 @@ def build_coaching_recommendation(
     now = _ensure_aware(now or datetime.now(UTC))
     recent_mood = db.emotional_states.list_in_window(end=now, lookback=timedelta(hours=12))
     if recent_mood and recent_mood[-1].vector.valence <= -0.35:
+        exercise = pick_mindfulness_exercise(context="low_mood", max_minutes=3)
         return CoachingRecommendation(
             kind="LOW_MOOD_SUPPORT",
             text=(
                 "Hoy bajemos la exigencia. Te propongo partir con 10 minutos suaves "
-                "o elegir una sola tarea pequeña."
+                f"o hacer {exercise.title.lower()} de {exercise.minutes} minutos."
             ),
-            metadata={"reason": "recent_low_mood"},
+            metadata={
+                "reason": "recent_low_mood",
+                "mindfulness_exercise": exercise.id,
+            },
         )
 
     summary = build_progress_summary(db, now=now, period="today")
     if include_progress and summary.tasks_completed > 0:
         task_word = "tarea" if summary.tasks_completed == 1 else "tareas"
+        exercise = pick_mindfulness_exercise(context="after_focus", max_minutes=2)
         return CoachingRecommendation(
             kind="PROGRESS_CELEBRATION",
             text=(
                 f"Buen avance: hoy completaste {summary.tasks_completed} {task_word}. "
-                "Podemos cerrar con un bloque corto o dejar listo el siguiente paso."
+                f"Podemos cerrar con {exercise.title.lower()} o dejar listo el siguiente paso."
             ),
             metadata={
                 "reason": "completed_tasks_today",
                 "tasks_completed": summary.tasks_completed,
+                "mindfulness_exercise": exercise.id,
             },
         )
 

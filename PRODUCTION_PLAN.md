@@ -83,6 +83,8 @@ that work the same on every board:
   to external channels unless the user explicitly enables that category.
 - Proactive coaching: choose the next WhatsApp touchpoint from local signals:
   recent low mood, completed work, active tasks, pending tasks, or no plan.
+- Mindfulness breaks: keep a local library of short, safe exercises such as
+  breath awareness, short body scan, mindful walking, and stretch/breathe.
 - Progress visibility: send privacy-safe counts by default; task titles stay
   inside authenticated local/mobile views.
 - Safety escalation: crisis handling must use curated text and local resources
@@ -118,6 +120,22 @@ Smart check-ins must also be opt-in:
 - `proactive_messages_enabled=true`
 - Progress celebration requires `progress_reports_enabled=true`
 - Messages may include counts and general next actions, never task titles
+- Scheduler should avoid quiet hours, throttle repeated sends, and skip if the
+  user interacted recently.
+
+## Mindfulness content notes
+
+The first local exercise library is based on common guidance from Mayo Clinic,
+NHS/Guys and St Thomas, and APA resources:
+
+- mindful breathing as a short stress reset
+- body scan to notice body sensations and tension
+- sitting meditation/awareness of breath
+- mindful walking and gentle stretch/breathe as study breaks
+
+Rako should frame these as study-support practices, not therapy. If an exercise
+is painful, uncomfortable, or the user signals crisis, Rako should stop the
+exercise path and use the safety protocol.
 
 ## Next production milestones
 
