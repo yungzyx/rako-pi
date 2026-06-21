@@ -11,6 +11,7 @@ import argparse
 import subprocess
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 RUFF_TARGETS: tuple[str, ...] = (
     "src",
@@ -44,12 +45,38 @@ SAFETY_TESTS: tuple[str, ...] = (
     "tests/test_db_journal.py",
 )
 
+HYGIENE_MARKERS: tuple[str, ...] = (
+    "TODO " + "completo",
+    chr(40) + "TODO" + chr(41),
+    "FIX" + "ME",
+    "X" * 3,
+    "HA" + "CK",
+)
+
+HYGIENE_TARGETS: tuple[str, ...] = (
+    "README.md",
+    "PRODUCT_JOURNEY.md",
+    "PRODUCTION_PLAN.md",
+    "src",
+    "scripts",
+    "tests",
+)
+
+REQUIRED_GITIGNORE_PATTERNS: tuple[str, ...] = (
+    ".env",
+    "secrets/",
+    "data/",
+    "chroma_db/",
+    "coverage.xml",
+    "tmp-*.dts",
+)
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run Rako quality checks")
     parser.add_argument(
         "command",
-        choices=("lint", "test", "safety", "all"),
+        choices=("lint", "test", "safety", "hygiene", "all"),
         help="Check group to run",
     )
     args = parser.parse_args(argv)
@@ -60,6 +87,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         _run_tests()
     if args.command in {"safety", "all"}:
         _run_safety()
+    if args.command in {"hygiene", "all"}:
+        _run_hygiene()
     return 0
 
 
@@ -84,6 +113,64 @@ def _run_tests() -> None:
 
 def _run_safety() -> None:
     _run((sys.executable, "-m", "pytest", "-v", *SAFETY_TESTS))
+
+
+def _run_hygiene() -> None:
+    violations = _find_hygiene_violations(Path.cwd())
+    if violations:
+        print("Hygiene check failed:", file=sys.stderr)
+        for violation in violations:
+            print(f"  - {violation}", file=sys.stderr)
+        raise SystemExit(1)
+    print("Hygiene check passed")
+
+
+def _find_hygiene_violations(repo_root: Path) -> list[str]:
+    violations: list[str] = []
+    violations.extend(_find_stale_markers(repo_root))
+    violations.extend(_find_missing_gitignore_patterns(repo_root))
+    return violations
+
+
+def _find_stale_markers(repo_root: Path) -> list[str]:
+    violations: list[str] = []
+    for target in HYGIENE_TARGETS:
+        path = repo_root / target
+        if path.is_file():
+            _scan_text_file(path, repo_root, violations)
+        elif path.is_dir():
+            for child in sorted(path.rglob("*")):
+                if child.is_file() and "__pycache__" not in child.parts:
+                    _scan_text_file(child, repo_root, violations)
+    return violations
+
+
+def _scan_text_file(path: Path, repo_root: Path, violations: list[str]) -> None:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except UnicodeDecodeError:
+        return
+    for line_no, line in enumerate(lines, start=1):
+        for marker in HYGIENE_MARKERS:
+            if marker in line:
+                rel_path = path.relative_to(repo_root)
+                violations.append(f"{rel_path}:{line_no}: stale marker {marker!r}")
+
+
+def _find_missing_gitignore_patterns(repo_root: Path) -> list[str]:
+    gitignore = repo_root / ".gitignore"
+    if not gitignore.exists():
+        return [".gitignore is missing"]
+    patterns = {
+        line.strip()
+        for line in gitignore.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    return [
+        f".gitignore missing required pattern {pattern!r}"
+        for pattern in REQUIRED_GITIGNORE_PATTERNS
+        if pattern not in patterns
+    ]
 
 
 def _run(command: Sequence[str]) -> None:

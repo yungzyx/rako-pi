@@ -4,7 +4,7 @@ Subcomandos:
 
   demo-turn TEXT          Procesa un turno con TEXT como input del usuario.
   demo-crisis-panic       Simula presión del botón pánico físico.
-  reindex-rag             Re-indexa la vault de Obsidian (TODO completo).
+  reindex-rag             Re-indexa la vault de Obsidian.
   purge-all               Borra TODO el historial e identidad del usuario.
 
 Uso (mac/dev):
@@ -52,7 +52,7 @@ def cli(argv: list[str] | None = None) -> int:
 
     sub.add_parser("demo-crisis-panic", help="Simula el botón pánico físico.")
 
-    sub.add_parser("reindex-rag", help="Re-indexa la vault Obsidian (TODO).")
+    sub.add_parser("reindex-rag", help="Re-indexa la vault Obsidian.")
 
     sub.add_parser("purge-all", help="Borra todo el historial e identidad.")
 

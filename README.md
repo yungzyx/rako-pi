@@ -450,6 +450,7 @@ Para el flujo completo de instalación y QA por placa, ver
 python scripts/checks.py lint                 # Ruff + format check, igual que CI
 python scripts/checks.py test                 # suite completa + cobertura, igual que CI
 python scripts/checks.py safety               # fixtures críticos de seguridad
+python scripts/checks.py hygiene              # marcadores obsoletos e ignores críticos
 python scripts/checks.py all                  # todo el harness local
 ```
 
