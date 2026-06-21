@@ -178,6 +178,20 @@ def test_setup_wifi_endpoint_blocks_apply_until_enabled(monkeypatch, tmp_path) -
     assert response.json()["status"] == "blocked"
 
 
+def test_setup_hotspot_plan_endpoint_is_read_only(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.get("/setup/hotspot/plan")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "disabled"
+    assert response.json()["ssid"] == "Rako-Setup-est001"
+    assert "<temporary-setup-password>" in response.json()["commands"][1]
+
+
 def test_user_memory_endpoint_requires_sensitive_memory_consent(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
@@ -235,6 +249,24 @@ def test_factory_report_endpoint_summarizes_unit_readiness(monkeypatch, tmp_path
     assert response.json()["ready_for_handoff"] is False
     assert response.json()["next_setup_step_id"] == "profile"
     assert "acceptance" in response.json()
+
+
+def test_factory_provisioning_plan_endpoint_lists_blockers(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.get("/factory/provisioning-plan")
+
+    assert response.status_code == 200
+    assert response.json()["device_id"] == "rako-test-001"
+    assert response.json()["ready_for_image"] is False
+    assert response.json()["hotspot"]["status"] == "disabled"
+    assert any(
+        step["name"] == "acceptance checklist" and step["status"] == "fail"
+        for step in response.json()["steps"]
+    )
 
 
 def test_device_identity_and_heartbeat_endpoints_support_factory_tracking(

@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     # Por seguridad, el API puede registrar el SSID para onboarding, pero solo
     # ejecuta `nmcli` cuando este flag está activo.
     rako_wifi_apply_enabled: bool = False
+    rako_setup_hotspot_enabled: bool = False
+    rako_setup_hotspot_ssid_prefix: str = "Rako-Setup"
+    rako_setup_hotspot_interface: str = "wlan0"
+    rako_setup_hotspot_url: str = "http://10.42.0.1:8765/setup"
 
     # --- WhatsApp ---
     whatsapp_client: Literal["memory", "cloud"] = "memory"

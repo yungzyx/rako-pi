@@ -36,6 +36,8 @@ from product.device_registry import (
     reassignment_reset_to_dict,
 )
 from product.factory_report import build_factory_report, factory_report_to_dict
+from product.hotspot_setup import build_hotspot_plan, hotspot_plan_to_dict
+from product.provisioning_plan import build_provisioning_plan, provisioning_plan_to_dict
 from product.setup_flow import build_setup_flow, setup_flow_to_dict
 from product.update_status import (
     build_update_plan,
@@ -274,6 +276,12 @@ def create_app() -> Any:
         finally:
             db.close()
 
+    @app.get("/setup/hotspot/plan")
+    async def setup_hotspot_plan(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        return hotspot_plan_to_dict(build_hotspot_plan(settings))
+
     @app.get("/factory/report")
     async def factory_report(
         _: None = auth_dep,
@@ -283,6 +291,16 @@ def create_app() -> Any:
             return factory_report_to_dict(
                 build_factory_report(db, settings, app_version=app_version)
             )
+        finally:
+            db.close()
+
+    @app.get("/factory/provisioning-plan")
+    async def factory_provisioning_plan(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            return provisioning_plan_to_dict(build_provisioning_plan(db, settings))
         finally:
             db.close()
 

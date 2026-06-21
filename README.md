@@ -69,8 +69,9 @@ pip install -r requirements.txt
 ```
 
 Provisionar GPIO, audio I/O y servicios cloud según `.env.example`.
-`scripts/setup_pi.sh` (vacío) consolidará el flujo cuando arranque la
-implementación.
+Para preparar varias placas, usa primero `/factory/provisioning-plan` y
+`rako-doctor --factory`; ambos muestran bloqueos antes de clonar o entregar una
+unidad.
 
 ### Ejecutar Rako físico desde terminal
 
@@ -185,7 +186,9 @@ GET  /factory
 GET  /status
 GET  /setup/flow
 POST /setup/wifi       {"ssid": "Casa", "password": "...", "apply": false}
+GET  /setup/hotspot/plan
 GET  /factory/report
+GET  /factory/provisioning-plan
 GET  /update/status
 GET  /update/plan
 GET  /device/identity
@@ -227,6 +230,9 @@ celular o notebook del usuario. Si expones el API en la red local, usa
 `/setup/wifi` puede guardar el SSID del usuario y, si `apply=true`, llamar a
 NetworkManager con `nmcli`; por seguridad solo aplica cambios reales cuando
 `RAKO_WIFI_APPLY_ENABLED=1`. La contraseña WiFi no se guarda en SQLite.
+`/setup/hotspot/plan` genera el SSID de primer encendido y los comandos seguros
+para levantar un hotspot de configuración. No inicia NetworkManager por sí solo;
+usa placeholders para la clave temporal y exige `RAKO_API_TOKEN` fuera de dev.
 
 El inbound de WhatsApp también entiende memoria editable con frases como
 `recuerda que prefiero bloques de 25 minutos`, `qué sabes de mí` y
@@ -237,6 +243,9 @@ la opción `6` muestra configuración. También entiende `pausar mensajes`,
 `/user/export` y `/user/delete-all` cubren perfil, consentimiento, canales y
 memoria editable; no borran tareas ni logs operacionales.
 `/factory/report` resume setup, checklist de entrega y bloqueos para producción.
+`/factory/provisioning-plan` junta identidad de placa, seguridad local, hotspot,
+WhatsApp, OTA y checklist de aceptación para decidir si una imagen está lista
+para clonar o si una unidad está lista para handoff.
 `/factory` muestra un panel local para revisar una placa: entrega, setup,
 bloqueos, checks manuales, identidad, último heartbeat, versión y build.
 `/device/identity` permite registrar serial, lote y asignación visible de una
