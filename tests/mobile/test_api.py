@@ -308,6 +308,18 @@ def test_factory_provisioning_plan_endpoint_lists_blockers(monkeypatch, tmp_path
     )
 
 
+def test_factory_install_plan_endpoint_lists_dry_run_commands(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.get("/factory/install-plan")
+
+    assert response.status_code == 200
+    assert response.json()["ready_to_run"] is False
+    assert any(step["name"] == "systemd api" for step in response.json()["steps"])
+
+
 def test_fleet_security_and_hardware_endpoints_support_factory_ops(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
@@ -328,6 +340,21 @@ def test_fleet_security_and_hardware_endpoints_support_factory_ops(monkeypatch, 
     assert "microphone" in recorded.json()["records"][0]["name"]
     assert snapshot.json()["device_id"] == "rako-test-001"
     assert "hardware" in snapshot.json()
+
+
+def test_support_bundle_endpoint_is_sanitized(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-secret")
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.get("/support/bundle")
+
+    assert response.status_code == 200
+    assert response.json()["device_id"] == "rako-test-001"
+    assert response.json()["env_presence"]["openai_api_key"] is True
+    assert "sk-secret" not in str(response.json())
 
 
 def test_device_identity_and_heartbeat_endpoints_support_factory_tracking(
@@ -494,6 +521,18 @@ def test_whatsapp_actions_endpoint_returns_menu(monkeypatch, tmp_path) -> None:
     assert response.status_code == 200
     assert response.json()["kind"] == "ACTION_MENU"
     assert "Foco de 25 minutos" in response.json()["text"]
+
+
+def test_whatsapp_templates_endpoint_lists_meta_templates(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.get("/whatsapp/templates")
+
+    assert response.status_code == 200
+    assert response.json()["templates"][0]["name"].startswith("rako_")
+    assert "sensitive memory" in response.json()["notes"][1]
 
 
 def test_whatsapp_inbound_endpoint_records_mood(monkeypatch, tmp_path) -> None:

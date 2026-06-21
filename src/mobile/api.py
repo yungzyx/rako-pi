@@ -47,6 +47,7 @@ from product.hotspot_setup import (
     hotspot_action_result_to_dict,
     hotspot_plan_to_dict,
 )
+from product.install_plan import build_install_plan, install_plan_to_dict
 from product.provisioning_plan import build_provisioning_plan, provisioning_plan_to_dict
 from product.security_audit import build_security_audit, security_audit_to_dict
 from product.setup_flow import build_setup_flow, setup_flow_to_dict
@@ -55,6 +56,7 @@ from product.setup_qr import (
     render_setup_card_svg,
     setup_qr_payload_to_dict,
 )
+from product.support_bundle import build_support_bundle, support_bundle_to_dict
 from product.update_status import (
     apply_update,
     build_update_plan,
@@ -72,6 +74,7 @@ from product.user_config import (
     onboarding_status_to_dict,
     user_profile_to_dict,
 )
+from product.whatsapp_templates import whatsapp_templates_to_dict
 from product.wifi_setup import WiFiSetupService, wifi_setup_result_to_dict
 from productivity.progress import build_progress_summary, progress_summary_to_dict
 from productivity.study_plan import build_study_plan, study_plan_to_dict
@@ -373,6 +376,12 @@ def create_app() -> Any:
         finally:
             db.close()
 
+    @app.get("/factory/install-plan")
+    async def factory_install_plan(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        return install_plan_to_dict(build_install_plan(settings))
+
     @app.get("/fleet/snapshot")
     async def fleet_snapshot(
         _: None = auth_dep,
@@ -381,6 +390,18 @@ def create_app() -> Any:
         try:
             return fleet_snapshot_to_dict(
                 build_fleet_snapshot(db, settings, app_version=app_version)
+            )
+        finally:
+            db.close()
+
+    @app.get("/support/bundle")
+    async def support_bundle(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            return support_bundle_to_dict(
+                build_support_bundle(db, settings, app_version=app_version)
             )
         finally:
             db.close()
@@ -634,6 +655,12 @@ def create_app() -> Any:
         service: WhatsAppService = whatsapp_dep,
     ) -> dict[str, Any]:
         return outbound_message_to_dict(service.send_action_menu(to=request.to))
+
+    @app.get("/whatsapp/templates")
+    async def whatsapp_templates(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        return whatsapp_templates_to_dict()
 
     @app.post("/whatsapp/inbound")
     async def whatsapp_inbound(

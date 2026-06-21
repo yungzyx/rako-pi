@@ -193,8 +193,10 @@ GET  /setup/qr
 GET  /setup/qr.svg
 GET  /factory/report
 GET  /factory/provisioning-plan
+GET  /factory/install-plan
 GET  /fleet/snapshot
 GET  /security/audit
+GET  /support/bundle
 GET  /hardware/checks
 POST /hardware/checks {"name": "microphone", "status": "pass", "detail": "clear"}
 GET  /update/status
@@ -225,6 +227,7 @@ POST /focus/cancel
 POST /whatsapp/checkin   {"to": "+56912345678"}
 POST /whatsapp/progress  {"to": "+56912345678", "period": "today"}
 POST /whatsapp/actions   {"to": "+56912345678"}
+GET  /whatsapp/templates
 POST /whatsapp/inbound   {"from_number": "+56912345678", "text": "estoy bien"}
 GET  /whatsapp/webhook
 POST /whatsapp/webhook
@@ -259,11 +262,16 @@ memoria editable; no borran tareas ni logs operacionales.
 `/factory/provisioning-plan` junta identidad de placa, seguridad local, hotspot,
 WhatsApp, OTA y checklist de aceptación para decidir si una imagen está lista
 para clonar o si una unidad está lista para handoff.
+`/factory/install-plan` devuelve comandos dry-run para preparar una Pi nueva:
+paquetes, venv, systemd, audio y seguridad de `.env`.
 `/fleet/snapshot` resume una placa en formato útil para un dashboard central:
 identidad, asignación, heartbeat, hardware, seguridad, factory y versión.
 `/security/audit` revisa token local, cifrado SQLite, WhatsApp Cloud, OTA y
 hotspot. `/hardware/checks` permite registrar validaciones físicas reales de
 micrófono, parlante, OLED, botón, foco y bypass de crisis.
+`/support/bundle` entrega un JSON sanitizado para soporte remoto sin API keys,
+contraseñas, transcripciones ni memoria editable. También se puede generar con
+`./scripts/rako-support-bundle --output /tmp/rako-support.json`.
 `/factory` muestra un panel local para revisar una placa: entrega, setup,
 bloqueos, checks manuales, identidad, último heartbeat, versión y build.
 `/device/identity` permite registrar serial, lote y asignación visible de una
@@ -316,6 +324,8 @@ WHATSAPP_CLOUD_APP_SECRET=...
 /whatsapp/webhook` procesa mensajes de texto entrantes; en `staging`/`prod`
 exige firma `X-Hub-Signature-256` cuando `WHATSAPP_CLOUD_APP_SECRET` está
 configurado.
+`/whatsapp/templates` lista plantillas privacy-safe listas para enviar a Meta
+antes de habilitar mensajes proactivos fuera de la ventana de 24 horas.
 
 ### Smart check-ins
 
