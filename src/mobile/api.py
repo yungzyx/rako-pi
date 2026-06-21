@@ -36,13 +36,31 @@ from product.device_registry import (
     reassignment_reset_to_dict,
 )
 from product.factory_report import build_factory_report, factory_report_to_dict
-from product.hotspot_setup import build_hotspot_plan, hotspot_plan_to_dict
+from product.fleet_snapshot import build_fleet_snapshot, fleet_snapshot_to_dict
+from product.hardware_validation import (
+    HardwareValidationService,
+    hardware_validation_summary_to_dict,
+)
+from product.hotspot_setup import (
+    HotspotSetupService,
+    build_hotspot_plan,
+    hotspot_action_result_to_dict,
+    hotspot_plan_to_dict,
+)
 from product.provisioning_plan import build_provisioning_plan, provisioning_plan_to_dict
+from product.security_audit import build_security_audit, security_audit_to_dict
 from product.setup_flow import build_setup_flow, setup_flow_to_dict
+from product.setup_qr import (
+    build_setup_qr_payload,
+    render_setup_card_svg,
+    setup_qr_payload_to_dict,
+)
 from product.update_status import (
+    apply_update,
     build_update_plan,
     build_update_status,
     current_app_version,
+    update_apply_result_to_dict,
     update_plan_to_dict,
     update_status_to_dict,
 )
@@ -115,6 +133,11 @@ class WiFiSetupRequest(BaseModel):
     apply: bool = False
 
 
+class HotspotActionRequest(BaseModel):
+    password: str | None = Field(default=None, min_length=8, max_length=64)
+    apply: bool = False
+
+
 class DeviceProvisionRequest(BaseModel):
     serial: str | None = Field(default=None, max_length=80)
     lot: str | None = Field(default=None, max_length=80)
@@ -124,6 +147,17 @@ class DeviceProvisionRequest(BaseModel):
 class DeviceHeartbeatRequest(BaseModel):
     status: str = Field(default="ok", max_length=40)
     detail: str | None = Field(default=None, max_length=240)
+
+
+class HardwareCheckRequest(BaseModel):
+    name: Literal["microphone", "speaker", "oled", "button", "focus_flow", "crisis_bypass"]
+    status: Literal["pass", "fail"]
+    detail: str = Field(default="", max_length=240)
+
+
+class UpdateApplyRequest(BaseModel):
+    artifact_path: str | None = Field(default=None, max_length=500)
+    apply: bool = False
 
 
 def create_app() -> Any:
@@ -136,7 +170,7 @@ def create_app() -> Any:
             Query,
             status,
         )
-        from fastapi.responses import HTMLResponse, PlainTextResponse
+        from fastapi.responses import HTMLResponse, PlainTextResponse, Response
     except ImportError as exc:  # pragma: no cover - depends on optional HTTP deps
         raise RuntimeError("Install fastapi and uvicorn to run the mobile API") from exc
 
@@ -282,6 +316,41 @@ def create_app() -> Any:
     ) -> dict[str, Any]:
         return hotspot_plan_to_dict(build_hotspot_plan(settings))
 
+    @app.post("/setup/hotspot/start")
+    async def setup_hotspot_start(
+        request: HotspotActionRequest,
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        return hotspot_action_result_to_dict(
+            HotspotSetupService(settings).start(password=request.password, apply=request.apply)
+        )
+
+    @app.post("/setup/hotspot/stop")
+    async def setup_hotspot_stop(
+        request: HotspotActionRequest,
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        return hotspot_action_result_to_dict(
+            HotspotSetupService(settings).stop(apply=request.apply)
+        )
+
+    @app.get("/setup/qr")
+    async def setup_qr(
+        serial: str | None = Query(default=None, max_length=80),
+        lot: str | None = Query(default=None, max_length=80),
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        return setup_qr_payload_to_dict(build_setup_qr_payload(settings, serial=serial, lot=lot))
+
+    @app.get("/setup/qr.svg")
+    async def setup_qr_svg(
+        serial: str | None = Query(default=None, max_length=80),
+        lot: str | None = Query(default=None, max_length=80),
+        _: None = auth_dep,
+    ) -> Response:
+        payload = build_setup_qr_payload(settings, serial=serial, lot=lot)
+        return Response(content=render_setup_card_svg(payload), media_type="image/svg+xml")
+
     @app.get("/factory/report")
     async def factory_report(
         _: None = auth_dep,
@@ -301,6 +370,50 @@ def create_app() -> Any:
         db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
         try:
             return provisioning_plan_to_dict(build_provisioning_plan(db, settings))
+        finally:
+            db.close()
+
+    @app.get("/fleet/snapshot")
+    async def fleet_snapshot(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            return fleet_snapshot_to_dict(
+                build_fleet_snapshot(db, settings, app_version=app_version)
+            )
+        finally:
+            db.close()
+
+    @app.get("/security/audit")
+    async def security_audit(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        return security_audit_to_dict(build_security_audit(settings))
+
+    @app.get("/hardware/checks")
+    async def hardware_checks(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            return hardware_validation_summary_to_dict(HardwareValidationService(db).summary())
+        finally:
+            db.close()
+
+    @app.post("/hardware/checks")
+    async def record_hardware_check(
+        request: HardwareCheckRequest,
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            summary = HardwareValidationService(db).record(
+                name=request.name,
+                status=request.status,
+                detail=request.detail,
+            )
+            return hardware_validation_summary_to_dict(summary)
         finally:
             db.close()
 
@@ -371,6 +484,15 @@ def create_app() -> Any:
         _: None = auth_dep,
     ) -> dict[str, Any]:
         return update_plan_to_dict(build_update_plan(settings))
+
+    @app.post("/update/apply")
+    async def update_apply(
+        request: UpdateApplyRequest,
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        return update_apply_result_to_dict(
+            apply_update(settings, artifact_path=request.artifact_path, apply=request.apply)
+        )
 
     @app.get("/user/profile")
     async def get_user_profile(

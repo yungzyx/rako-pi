@@ -198,6 +198,39 @@ def test_setup_hotspot_plan_endpoint_is_read_only(monkeypatch, tmp_path) -> None
     assert "<temporary-setup-password>" in response.json()["commands"][1]
 
 
+def test_setup_hotspot_start_endpoint_blocks_real_apply_by_default(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/setup/hotspot/start",
+        json={"password": "temporary-123", "apply": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "blocked"
+
+
+def test_setup_qr_endpoints_do_not_expose_token(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
+    monkeypatch.setenv("RAKO_API_TOKEN", "secret")
+    client = TestClient(create_app())
+
+    payload = client.get("/setup/qr", headers={"Authorization": "Bearer secret"})
+    svg = client.get("/setup/qr.svg", headers={"Authorization": "Bearer secret"})
+
+    assert payload.status_code == 200
+    assert payload.json()["includes_secret"] is False
+    assert "Bearer secret" not in str(payload.json())
+    assert "RAKO_API_TOKEN" not in str(payload.json())
+    assert svg.status_code == 200
+    assert "image/svg+xml" in svg.headers["content-type"]
+    assert "Bearer secret" not in svg.text
+    assert "RAKO_API_TOKEN" not in svg.text
+
+
 def test_user_memory_endpoint_requires_sensitive_memory_consent(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
@@ -273,6 +306,28 @@ def test_factory_provisioning_plan_endpoint_lists_blockers(monkeypatch, tmp_path
         step["name"] == "acceptance checklist" and step["status"] == "fail"
         for step in response.json()["steps"]
     )
+
+
+def test_fleet_security_and_hardware_endpoints_support_factory_ops(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    security = client.get("/security/audit")
+    initial_hardware = client.get("/hardware/checks")
+    recorded = client.post(
+        "/hardware/checks",
+        json={"name": "microphone", "status": "pass", "detail": "clear"},
+    )
+    snapshot = client.get("/fleet/snapshot")
+
+    assert security.status_code == 200
+    assert "checks" in security.json()
+    assert initial_hardware.json()["ready"] is False
+    assert "microphone" in recorded.json()["records"][0]["name"]
+    assert snapshot.json()["device_id"] == "rako-test-001"
+    assert "hardware" in snapshot.json()
 
 
 def test_device_identity_and_heartbeat_endpoints_support_factory_tracking(
@@ -369,6 +424,17 @@ def test_update_plan_endpoint_evaluates_manifest(monkeypatch, tmp_path) -> None:
     assert response.json()["decision"] == "available"
     assert response.json()["target_version"] == "0.2.0"
     assert "Verify artifact SHA-256 before unpacking." in response.json()["steps"]
+
+
+def test_update_apply_endpoint_is_blocked_by_default(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.post("/update/apply", json={"apply": True})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "blocked"
 
 
 def test_whatsapp_checkin_endpoint_returns_outbound_message(monkeypatch, tmp_path) -> None:

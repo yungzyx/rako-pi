@@ -19,6 +19,7 @@ from config import Settings
 
 ReleaseChannel = Literal["stable", "beta", "dev"]
 UpdateDecision = Literal["up_to_date", "available", "blocked", "not_configured", "invalid"]
+UpdateApplyStatus = Literal["blocked", "verified", "failed"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +54,14 @@ class UpdatePlan:
     steps: tuple[str, ...]
     reasons: tuple[str, ...]
     manifest: UpdateManifest | None
+
+
+@dataclass(frozen=True, slots=True)
+class UpdateApplyResult:
+    status: UpdateApplyStatus
+    target_version: str | None
+    detail: str
+    artifact_path: str | None
 
 
 def build_update_status(
@@ -160,6 +169,55 @@ def update_plan_to_dict(plan: UpdatePlan) -> dict[str, Any]:
     return payload
 
 
+def apply_update(
+    settings: Settings,
+    *,
+    artifact_path: str | None = None,
+    apply: bool = False,
+) -> UpdateApplyResult:
+    plan = build_update_plan(settings)
+    if plan.decision != "available" or plan.manifest is None:
+        return UpdateApplyResult(
+            status="blocked",
+            target_version=plan.target_version,
+            detail=f"Update cannot be applied because plan is {plan.decision}.",
+            artifact_path=None,
+        )
+    if not settings.rako_update_apply_enabled or not apply:
+        return UpdateApplyResult(
+            status="blocked",
+            target_version=plan.target_version,
+            detail="Set apply=true and RAKO_UPDATE_APPLY_ENABLED=1 after staging the artifact.",
+            artifact_path=None,
+        )
+    path = _resolve_artifact_path(artifact_path or plan.manifest.artifact_url)
+    if path is None or not path.exists():
+        return UpdateApplyResult(
+            status="failed",
+            target_version=plan.target_version,
+            detail="Artifact must be a local path or file:// URL for verified apply.",
+            artifact_path=str(path) if path else None,
+        )
+    digest = artifact_sha256(path)
+    if digest != plan.manifest.artifact_sha256:
+        return UpdateApplyResult(
+            status="failed",
+            target_version=plan.target_version,
+            detail="Artifact SHA-256 does not match manifest.",
+            artifact_path=str(path),
+        )
+    return UpdateApplyResult(
+        status="verified",
+        target_version=plan.target_version,
+        detail="Artifact verified. Installation switch/rollback is intentionally manual in this build.",
+        artifact_path=str(path),
+    )
+
+
+def update_apply_result_to_dict(result: UpdateApplyResult) -> dict[str, Any]:
+    return asdict(result)
+
+
 def load_update_manifest(settings: Settings) -> UpdateManifest | None:
     if not settings.rako_update_manifest_path:
         return None
@@ -196,6 +254,14 @@ def artifact_sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _resolve_artifact_path(value: str) -> Path | None:
+    if value.startswith("file://"):
+        return Path(value.removeprefix("file://")).expanduser()
+    if "://" in value:
+        return None
+    return Path(value).expanduser()
 
 
 def current_app_version(*, repo_root: Path | None = None) -> str:

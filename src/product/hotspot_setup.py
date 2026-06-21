@@ -7,12 +7,16 @@ explicitly enabled for a production image.
 
 from __future__ import annotations
 
+import subprocess
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 from config import Settings
 
 HotspotPlanStatus = Literal["ready", "disabled", "needs_token"]
+HotspotActionStatus = Literal["started", "stopped", "blocked", "failed"]
+CommandRunner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +29,107 @@ class HotspotPlan:
     requires_api_token: bool
     warnings: tuple[str, ...]
     commands: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class HotspotActionResult:
+    status: HotspotActionStatus
+    ssid: str
+    applied: bool
+    detail: str
+    command: tuple[str, ...] | None = None
+
+
+class HotspotSetupService:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        runner: CommandRunner | None = None,
+    ) -> None:
+        self._settings = settings
+        self._runner = runner or _run_command
+
+    def start(self, *, password: str | None = None, apply: bool = False) -> HotspotActionResult:
+        plan = build_hotspot_plan(self._settings)
+        if plan.status == "needs_token":
+            return HotspotActionResult(
+                status="blocked",
+                ssid=plan.ssid,
+                applied=False,
+                detail="RAKO_API_TOKEN is required before exposing setup.",
+            )
+        if not self._settings.rako_setup_hotspot_enabled or not apply:
+            return HotspotActionResult(
+                status="blocked",
+                ssid=plan.ssid,
+                applied=False,
+                detail="Hotspot apply is disabled. Use apply=true and RAKO_SETUP_HOTSPOT_ENABLED=1.",
+            )
+        if not password:
+            return HotspotActionResult(
+                status="blocked",
+                ssid=plan.ssid,
+                applied=False,
+                detail="A temporary hotspot password is required and is never stored.",
+            )
+        command = (
+            "nmcli",
+            "device",
+            "wifi",
+            "hotspot",
+            "ifname",
+            plan.interface,
+            "ssid",
+            plan.ssid,
+            "password",
+            password,
+        )
+        try:
+            self._runner(command)
+        except (OSError, subprocess.SubprocessError) as exc:
+            return HotspotActionResult(
+                status="failed",
+                ssid=plan.ssid,
+                applied=False,
+                detail=f"NetworkManager failed: {exc}",
+                command=_redacted_command(command),
+            )
+        return HotspotActionResult(
+            status="started",
+            ssid=plan.ssid,
+            applied=True,
+            detail=f"Hotspot started. Open {plan.setup_url}.",
+            command=_redacted_command(command),
+        )
+
+    def stop(self, *, apply: bool = False) -> HotspotActionResult:
+        plan = build_hotspot_plan(self._settings)
+        if not self._settings.rako_setup_hotspot_enabled or not apply:
+            return HotspotActionResult(
+                status="blocked",
+                ssid=plan.ssid,
+                applied=False,
+                detail="Hotspot stop is dry-run unless apply=true and RAKO_SETUP_HOTSPOT_ENABLED=1.",
+            )
+        command = ("nmcli", "connection", "down", "Hotspot")
+        try:
+            self._runner(command)
+        except (OSError, subprocess.SubprocessError) as exc:
+            return HotspotActionResult(
+                status="failed",
+                ssid=plan.ssid,
+                applied=False,
+                detail=f"NetworkManager failed: {exc}",
+                command=command,
+            )
+        return HotspotActionResult(
+            status="stopped",
+            ssid=plan.ssid,
+            applied=True,
+            detail="Hotspot connection stopped.",
+            command=command,
+        )
 
 
 def build_hotspot_plan(settings: Settings) -> HotspotPlan:
@@ -73,6 +178,31 @@ def build_hotspot_plan(settings: Settings) -> HotspotPlan:
 
 def hotspot_plan_to_dict(plan: HotspotPlan) -> dict[str, Any]:
     return asdict(plan)
+
+
+def hotspot_action_result_to_dict(result: HotspotActionResult) -> dict[str, Any]:
+    payload = asdict(result)
+    if result.command is not None:
+        payload["command"] = list(result.command)
+    return payload
+
+
+def _run_command(command: Sequence[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        list(command),
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=45,
+    )
+
+
+def _redacted_command(command: Sequence[str]) -> tuple[str, ...]:
+    redacted = list(command)
+    for index, value in enumerate(redacted):
+        if value == "password" and index + 1 < len(redacted):
+            redacted[index + 1] = "<temporary-setup-password>"
+    return tuple(redacted)
 
 
 def _device_suffix(device_id: str | None) -> str:

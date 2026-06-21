@@ -4,6 +4,7 @@ import json
 
 from config import Settings
 from product.update_status import (
+    apply_update,
     artifact_sha256,
     build_update_plan,
     build_update_status,
@@ -114,3 +115,53 @@ def test_artifact_sha256(tmp_path) -> None:
     digest = artifact_sha256(artifact)
 
     assert digest == "a9823fe541607cf561158375077a75630f5b7f0ca839cdc830b1cef182a2b03d"
+
+
+def test_apply_update_is_blocked_without_apply_flag(tmp_path) -> None:
+    artifact = tmp_path / "artifact.txt"
+    artifact.write_text("rako", encoding="utf-8")
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "version": "0.2.0",
+                "channel": "stable",
+                "artifact_url": str(artifact),
+                "artifact_sha256": artifact_sha256(artifact),
+            }
+        ),
+        encoding="utf-8",
+    )
+    settings = Settings(_env_file=None, rako_update_manifest_path=str(manifest_path))
+
+    result = apply_update(settings)
+
+    assert result.status == "blocked"
+    assert result.target_version == "0.2.0"
+
+
+def test_apply_update_verifies_local_artifact_when_enabled(tmp_path) -> None:
+    artifact = tmp_path / "artifact.txt"
+    artifact.write_text("rako", encoding="utf-8")
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "version": "0.2.0",
+                "channel": "stable",
+                "artifact_url": f"file://{artifact}",
+                "artifact_sha256": artifact_sha256(artifact),
+            }
+        ),
+        encoding="utf-8",
+    )
+    settings = Settings(
+        _env_file=None,
+        rako_update_manifest_path=str(manifest_path),
+        rako_update_apply_enabled=True,
+    )
+
+    result = apply_update(settings, apply=True)
+
+    assert result.status == "verified"
+    assert result.artifact_path == str(artifact)

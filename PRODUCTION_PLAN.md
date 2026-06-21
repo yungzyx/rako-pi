@@ -21,8 +21,20 @@ cd ~/rako-pi
 - `ELEVENLABS_VOICE_ID`
 - `RAKO_API_TOKEN`
 - `SQLITE_ENCRYPTION_KEY`
+- `RAKO_DEVICE_ID`
+- `RAKO_SETUP_HOTSPOT_ENABLED=true` when using first-run phone setup
 
-6. Provision the user/device:
+Generate per-board values and setup card before handoff:
+
+```bash
+./scripts/rako-factory-image \
+  --serial "SN-001" \
+  --lot "pilot-a" \
+  --write-env /tmp/rako-unit.env \
+  --write-card-svg /tmp/rako-setup-card.svg
+```
+
+6. Provision the user/device manually or through `/setup`:
 
 ```bash
 ./scripts/rako-provision \
@@ -63,6 +75,12 @@ python scripts/checks.py safety
 - crisis phrase uses curated response
 - `/setup/flow` shows the next first-run action and no WiFi password storage
 - `/onboarding/status` returns `ready: true`
+- `/setup/qr.svg` renders a printable setup card without secrets
+- `/security/audit` has no failures
+- `/hardware/checks` has pass records for microphone, speaker, OLED, button,
+  focus flow, and crisis bypass
+- `/fleet/snapshot` includes assignment, heartbeat, hardware, security, update,
+  factory, and provisioning state
 
 ## Conversation quality gates
 
@@ -95,6 +113,14 @@ that work the same on every board:
   consented.
 - Fleet readiness: installation scripts, systemd units, health checks, support
   bundles, OTA/rollback, and per-board acceptance tests must be repeatable.
+- Factory setup: each unit should expose `/setup`, `/setup/qr`, `/factory`,
+  `/factory/provisioning-plan`, `/fleet/snapshot`, `/security/audit`, and
+  `/hardware/checks` locally before delivery.
+- Hotspot setup: `/setup/hotspot/start` and `/setup/hotspot/stop` can operate
+  NetworkManager only when `RAKO_SETUP_HOTSPOT_ENABLED=1` and `apply=true`.
+- OTA: `/update/apply` verifies a local artifact against the manifest hash when
+  `RAKO_UPDATE_APPLY_ENABLED=1`; release switching remains manual until signed
+  rollout/rollback is implemented end-to-end.
 
 ## WhatsApp product gates
 
@@ -142,13 +168,12 @@ exercise path and use the safety protocol.
 
 ## Next production milestones
 
-1. WhatsApp Cloud API adapter with template support.
-2. Mobile setup app for WiFi provisioning and QR pairing.
-3. Signed OTA update + rollback.
+1. WhatsApp Cloud API template approval and production webhook deployment.
+2. Real scannable QR image generation in factory packaging if SVG payload card is not enough.
+3. Signed OTA release switching + automatic rollback.
 4. Device identity and cloud account binding.
 5. Sanitized support bundle for debugging deployed devices.
-6. Systemd units checked into repo and installed by `setup_pi.sh`.
-7. Hardware fixture checklist for speaker/mic/OLED/button before shipping.
-8. Admin/factory dashboard for assigning devices to users and checking readiness.
-9. Consent review screen where users can pause WhatsApp, progress, proactive
+6. Systemd units installed automatically by `setup_pi.sh`.
+7. Central cloud dashboard consuming `/fleet/snapshot` from many devices.
+8. Consent review screen where users can pause WhatsApp, progress, proactive
    messages, memory, and wellbeing escalation independently.

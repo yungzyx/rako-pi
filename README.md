@@ -187,10 +187,19 @@ GET  /status
 GET  /setup/flow
 POST /setup/wifi       {"ssid": "Casa", "password": "...", "apply": false}
 GET  /setup/hotspot/plan
+POST /setup/hotspot/start {"password": "temporal...", "apply": false}
+POST /setup/hotspot/stop  {"apply": false}
+GET  /setup/qr
+GET  /setup/qr.svg
 GET  /factory/report
 GET  /factory/provisioning-plan
+GET  /fleet/snapshot
+GET  /security/audit
+GET  /hardware/checks
+POST /hardware/checks {"name": "microphone", "status": "pass", "detail": "clear"}
 GET  /update/status
 GET  /update/plan
+POST /update/apply {"artifact_path": "/tmp/rako.tar.gz", "apply": false}
 GET  /device/identity
 PATCH /device/identity {"serial": "SN-001", "lot": "pilot-a", "assigned_user_label": "nico@udd"}
 POST /device/heartbeat {"status": "ok", "detail": "factory bench"}
@@ -232,8 +241,11 @@ la red local, usa `RAKO_API_TOKEN` y escribe el token en la pantalla de setup.
 NetworkManager con `nmcli`; por seguridad solo aplica cambios reales cuando
 `RAKO_WIFI_APPLY_ENABLED=1`. La contraseña WiFi no se guarda en SQLite.
 `/setup/hotspot/plan` genera el SSID de primer encendido y los comandos seguros
-para levantar un hotspot de configuración. No inicia NetworkManager por sí solo;
-usa placeholders para la clave temporal y exige `RAKO_API_TOKEN` fuera de dev.
+para levantar un hotspot de configuración. `/setup/hotspot/start` y
+`/setup/hotspot/stop` pueden ejecutar `nmcli`, pero solo si envías `apply=true`
+y `RAKO_SETUP_HOTSPOT_ENABLED=1`; la clave temporal no se guarda y se redacta
+en respuestas. `/setup/qr` entrega el payload estable de setup sin secretos y
+`/setup/qr.svg` una tarjeta imprimible para pegar/entregar con cada unidad.
 
 El inbound de WhatsApp también entiende memoria editable con frases como
 `recuerda que prefiero bloques de 25 minutos`, `qué sabes de mí` y
@@ -247,6 +259,11 @@ memoria editable; no borran tareas ni logs operacionales.
 `/factory/provisioning-plan` junta identidad de placa, seguridad local, hotspot,
 WhatsApp, OTA y checklist de aceptación para decidir si una imagen está lista
 para clonar o si una unidad está lista para handoff.
+`/fleet/snapshot` resume una placa en formato útil para un dashboard central:
+identidad, asignación, heartbeat, hardware, seguridad, factory y versión.
+`/security/audit` revisa token local, cifrado SQLite, WhatsApp Cloud, OTA y
+hotspot. `/hardware/checks` permite registrar validaciones físicas reales de
+micrófono, parlante, OLED, botón, foco y bypass de crisis.
 `/factory` muestra un panel local para revisar una placa: entrega, setup,
 bloqueos, checks manuales, identidad, último heartbeat, versión y build.
 `/device/identity` permite registrar serial, lote y asignación visible de una
@@ -255,9 +272,10 @@ borra datos del alumno anterior y tareas/estado local, pero preserva identidad
 de placa y heartbeat para poder reasignarla sin mezclar memorias.
 `/update/status` reporta versión/canal/build. `/update/plan` evalúa un manifest
 OTA local configurado con `RAKO_UPDATE_MANIFEST_PATH`, valida canal, versión y
-SHA-256 del artefacto, y devuelve los pasos de instalación segura. Aplicar OTA
-sigue bloqueado por defecto con `RAKO_UPDATE_APPLY_ENABLED=0` hasta completar
-releases firmadas, healthcheck e instalación con rollback.
+SHA-256 del artefacto, y devuelve los pasos de instalación segura.
+`/update/apply` verifica un artefacto local contra el manifest cuando
+`RAKO_UPDATE_APPLY_ENABLED=1` y `apply=true`; el cambio atómico de release y
+rollback siguen siendo manuales hasta tener releases firmadas end-to-end.
 
 Ejemplo de manifest:
 
@@ -316,6 +334,20 @@ activa `progress_reports_enabled=true`, Rako puede celebrar progreso con conteos
 seguros; no envía títulos de tareas por WhatsApp.
 
 ### Provisionar placas nuevas
+
+Para preparar valores por placa, QR/tarjeta de setup y checklist post-flash:
+
+```bash
+./scripts/rako-factory-image \
+  --serial "SN-001" \
+  --lot "pilot-a" \
+  --write-env /tmp/rako-unit.env \
+  --write-card-svg /tmp/rako-setup-card.svg
+```
+
+Por defecto imprime valores y no toca `.env`; `--write-env` debe usarse solo en
+la placa objetivo o en el pipeline de imagen. El SVG no incluye token ni clave
+WiFi.
 
 Después de `scripts/setup_pi.sh`, cada placa puede quedar asignada a un usuario
 con configuración local reproducible:
