@@ -185,6 +185,7 @@ GET  /setup
 GET  /factory
 GET  /status
 GET  /setup/flow
+POST /setup/first-run  {"profile": {...}, "consent": {...}, "channels": {...}, "memories": []}
 POST /setup/wifi       {"ssid": "Casa", "password": "...", "apply": false}
 GET  /setup/hotspot/plan
 POST /setup/hotspot/start {"password": "temporal...", "apply": false}
@@ -194,6 +195,7 @@ GET  /setup/qr.svg
 GET  /factory/report
 GET  /factory/provisioning-plan
 GET  /factory/install-plan
+POST /factory/install-plan/apply {"step": "systemd api", "apply": false}
 GET  /fleet/snapshot
 GET  /security/audit
 GET  /support/bundle
@@ -240,6 +242,10 @@ son opcionales o manuales antes de asignar una placa.
 consentimiento, WhatsApp, WiFi SSID, memoria inicial y revisar checks de
 hardware/fábrica desde el celular o notebook del usuario. Si expones el API en
 la red local, usa `RAKO_API_TOKEN` y escribe el token en la pantalla de setup.
+La misma página incluye “setup completo”, que llama a `/setup/first-run` para
+guardar perfil, consentimiento, canales, memoria inicial e identidad de placa en
+una sola operación. Si se entrega contraseña WiFi, solo se usa para conectar con
+`nmcli` cuando `apply_wifi=true` y `RAKO_WIFI_APPLY_ENABLED=1`; no se persiste.
 `/setup/wifi` puede guardar el SSID del usuario y, si `apply=true`, llamar a
 NetworkManager con `nmcli`; por seguridad solo aplica cambios reales cuando
 `RAKO_WIFI_APPLY_ENABLED=1`. La contraseña WiFi no se guarda en SQLite.
@@ -264,6 +270,9 @@ WhatsApp, OTA y checklist de aceptación para decidir si una imagen está lista
 para clonar o si una unidad está lista para handoff.
 `/factory/install-plan` devuelve comandos dry-run para preparar una Pi nueva:
 paquetes, venv, systemd, audio y seguridad de `.env`.
+`/factory/install-plan/apply` ejecuta el mismo plan solo cuando `apply=true`;
+por defecto responde en dry-run. Los pasos manuales se saltan y los bloqueados
+impiden aplicar, para evitar tocar una placa incompleta por accidente.
 `/fleet/snapshot` resume una placa en formato útil para un dashboard central:
 identidad, asignación, heartbeat, hardware, seguridad, factory y versión.
 `/security/audit` revisa token local, cifrado SQLite, WhatsApp Cloud, OTA y
@@ -363,6 +372,26 @@ Después de `scripts/setup_pi.sh`, cada placa puede quedar asignada a un usuario
 con configuración local reproducible:
 
 ```bash
+./scripts/rako-first-run \
+  --name "Nico" \
+  --university "UDD" \
+  --program "Ingeniería" \
+  --wifi-ssid "Casa" \
+  --whatsapp-number "+56912345678" \
+  --enable-whatsapp \
+  --enable-progress \
+  --serial "SN-001" \
+  --lot "pilot-a" \
+  --assigned-user-label "nico@udd" \
+  --memory "Prefiere bloques de foco de 25 minutos"
+```
+
+`rako-first-run` es el camino recomendado para entrega: agrupa perfil,
+consentimiento, canales, memoria inicial e identidad de placa. Si necesitas
+solo actualizar datos de usuario sin tocar identidad, puedes usar el comando
+granular:
+
+```bash
 ./scripts/rako-provision \
   --name "Nico" \
   --university "UDD" \
@@ -376,6 +405,18 @@ con configuración local reproducible:
 
 `rako-provision` escribe perfil, consentimiento, canales y memoria editable en
 SQLite. No guarda contraseñas WiFi ni secretos de APIs.
+
+Para revisar o aplicar pasos de instalación:
+
+```bash
+./scripts/rako-install
+./scripts/rako-install --step "systemd api"
+./scripts/rako-install --apply --step "systemd api"
+```
+
+Sin `--apply`, `rako-install` no ejecuta nada. Con `--apply`, solo ejecuta pasos
+`ready`; los pasos `manual` quedan para operador y los `blocked` detienen el
+proceso.
 
 Para el flujo completo de instalación y QA por placa, ver
 [`PRODUCTION_PLAN.md`](./PRODUCTION_PLAN.md).

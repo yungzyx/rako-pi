@@ -299,6 +299,33 @@ def render_setup_page() -> str:
       </form>
     </section>
 
+    <section class="panel stack">
+      <h2>Setup completo</h2>
+      <p>Guarda perfil, canales, consentimiento y una memoria inicial en una sola operación. Si completas el campo de contraseña WiFi, solo se usa para conectar ahora y no se almacena.</p>
+      <div class="row">
+        <div>
+          <label for="wifi_password">Contraseña WiFi temporal</label>
+          <input id="wifi_password" type="password" autocomplete="off" maxlength="128" placeholder="Opcional, no se guarda">
+        </div>
+        <div>
+          <label for="serial">Serial de placa</label>
+          <input id="serial" maxlength="80" placeholder="SN-001">
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="lot">Lote</label>
+          <input id="lot" maxlength="80" placeholder="pilot-a">
+        </div>
+        <div>
+          <label for="assigned_user_label">Etiqueta usuario</label>
+          <input id="assigned_user_label" maxlength="120" placeholder="nico@udd">
+        </div>
+      </div>
+      <label><input id="apply_wifi" type="checkbox"> Aplicar WiFi ahora con nmcli</label>
+      <button id="save-all" type="button">Guardar setup completo</button>
+    </section>
+
     <section class="panel">
       <div class="topline">
         <div>
@@ -346,6 +373,12 @@ def render_setup_page() -> str:
     const channelsForm = document.querySelector("#channels-form");
     const consentForm = document.querySelector("#consent-form");
     const memoryForm = document.querySelector("#memory-form");
+    const saveAllButton = document.querySelector("#save-all");
+    const wifiPasswordInput = document.querySelector("#wifi_password");
+    const applyWifiInput = document.querySelector("#apply_wifi");
+    const serialInput = document.querySelector("#serial");
+    const lotInput = document.querySelector("#lot");
+    const assignedUserLabelInput = document.querySelector("#assigned_user_label");
 
     function headers(extra = {}) {
       const token = tokenInput.value.trim();
@@ -385,6 +418,21 @@ def render_setup_page() -> str:
         data[input.name] = input.checked;
       }
       return data;
+    }
+
+    function collectFirstRun() {
+      const memory = collectText(memoryForm);
+      return {
+        profile: collectText(profileForm),
+        channels: collectText(channelsForm),
+        consent: collectConsent(consentForm),
+        memories: memory.text ? [memory] : [],
+        wifi_password: wifiPasswordInput.value.trim() || null,
+        apply_wifi: applyWifiInput.checked,
+        serial: serialInput.value.trim() || null,
+        lot: lotInput.value.trim() || null,
+        assigned_user_label: assignedUserLabelInput.value.trim() || null,
+      };
     }
 
     function setMessage(text, kind = "") {
@@ -533,6 +581,25 @@ def render_setup_page() -> str:
         setMessage(error.message, "error");
       } finally {
         button.disabled = false;
+      }
+    });
+    saveAllButton.addEventListener("click", async () => {
+      saveAllButton.disabled = true;
+      try {
+        const result = await fetchJson("/setup/first-run", {
+          method: "POST",
+          body: JSON.stringify(collectFirstRun()),
+        });
+        setMessage(result.ready ? "Setup completo listo." : result.next_actions.join(" · "), result.ready ? "success" : "error");
+        memoryForm.reset();
+        memoryForm.elements.category.value = "preference";
+        memoryForm.elements.sensitivity.value = "normal";
+        wifiPasswordInput.value = "";
+        await loadFlow();
+      } catch (error) {
+        setMessage(error.message, "error");
+      } finally {
+        saveAllButton.disabled = false;
       }
     });
     hotspotButton.addEventListener("click", async () => {

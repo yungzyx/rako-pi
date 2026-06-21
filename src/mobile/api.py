@@ -36,6 +36,12 @@ from product.device_registry import (
     reassignment_reset_to_dict,
 )
 from product.factory_report import build_factory_report, factory_report_to_dict
+from product.first_run import (
+    FirstRunMemory,
+    FirstRunPayload,
+    apply_first_run_setup,
+    first_run_result_to_dict,
+)
 from product.fleet_snapshot import build_fleet_snapshot, fleet_snapshot_to_dict
 from product.hardware_validation import (
     HardwareValidationService,
@@ -48,6 +54,7 @@ from product.hotspot_setup import (
     hotspot_plan_to_dict,
 )
 from product.install_plan import build_install_plan, install_plan_to_dict
+from product.install_runner import execute_install_plan, install_execution_to_dict
 from product.provisioning_plan import build_provisioning_plan, provisioning_plan_to_dict
 from product.security_audit import build_security_audit, security_audit_to_dict
 from product.setup_flow import build_setup_flow, setup_flow_to_dict
@@ -141,6 +148,24 @@ class HotspotActionRequest(BaseModel):
     apply: bool = False
 
 
+class FirstRunMemoryRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=240)
+    category: Literal["study", "routine", "motivation", "preference", "boundary"] = "preference"
+    sensitivity: Literal["normal", "sensitive"] = "normal"
+
+
+class FirstRunSetupRequest(BaseModel):
+    profile: UserProfileRequest = Field(default_factory=UserProfileRequest)
+    consent: PrivacyConsentRequest = Field(default_factory=PrivacyConsentRequest)
+    channels: ChannelConfigRequest = Field(default_factory=ChannelConfigRequest)
+    memories: list[FirstRunMemoryRequest] = Field(default_factory=list, max_length=20)
+    wifi_password: str | None = Field(default=None, max_length=128)
+    apply_wifi: bool = False
+    serial: str | None = Field(default=None, max_length=80)
+    lot: str | None = Field(default=None, max_length=80)
+    assigned_user_label: str | None = Field(default=None, max_length=120)
+
+
 class DeviceProvisionRequest(BaseModel):
     serial: str | None = Field(default=None, max_length=80)
     lot: str | None = Field(default=None, max_length=80)
@@ -161,6 +186,11 @@ class HardwareCheckRequest(BaseModel):
 class UpdateApplyRequest(BaseModel):
     artifact_path: str | None = Field(default=None, max_length=500)
     apply: bool = False
+
+
+class InstallApplyRequest(BaseModel):
+    apply: bool = False
+    step: str | None = Field(default=None, max_length=80)
 
 
 def create_app() -> Any:
@@ -354,6 +384,23 @@ def create_app() -> Any:
         payload = build_setup_qr_payload(settings, serial=serial, lot=lot)
         return Response(content=render_setup_card_svg(payload), media_type="image/svg+xml")
 
+    @app.post("/setup/first-run")
+    async def setup_first_run(
+        request: FirstRunSetupRequest,
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            try:
+                result = apply_first_run_setup(db, settings, _first_run_payload(request))
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+                ) from exc
+            return first_run_result_to_dict(result)
+        finally:
+            db.close()
+
     @app.get("/factory/report")
     async def factory_report(
         _: None = auth_dep,
@@ -381,6 +428,15 @@ def create_app() -> Any:
         _: None = auth_dep,
     ) -> dict[str, Any]:
         return install_plan_to_dict(build_install_plan(settings))
+
+    @app.post("/factory/install-plan/apply")
+    async def factory_install_plan_apply(
+        request: InstallApplyRequest,
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        return install_execution_to_dict(
+            execute_install_plan(settings, apply=request.apply, step=request.step)
+        )
 
     @app.get("/fleet/snapshot")
     async def fleet_snapshot(
@@ -738,3 +794,24 @@ def _build_whatsapp_client(settings: Settings) -> WhatsAppClient:
             timeout_s=settings.whatsapp_cloud_timeout_s,
         )
     return InMemoryWhatsAppClient()
+
+
+def _first_run_payload(request: FirstRunSetupRequest) -> FirstRunPayload:
+    return FirstRunPayload(
+        profile=request.profile.model_dump(exclude_none=True),
+        consent=request.consent.model_dump(exclude_none=True),
+        channels=request.channels.model_dump(exclude_none=True),
+        memories=tuple(
+            FirstRunMemory(
+                text=memory.text,
+                category=memory.category,
+                sensitivity=memory.sensitivity,
+            )
+            for memory in request.memories
+        ),
+        wifi_password=request.wifi_password,
+        apply_wifi=request.apply_wifi,
+        serial=request.serial,
+        lot=request.lot,
+        assigned_user_label=request.assigned_user_label,
+    )

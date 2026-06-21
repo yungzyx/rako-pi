@@ -320,6 +320,45 @@ def test_factory_install_plan_endpoint_lists_dry_run_commands(monkeypatch, tmp_p
     assert any(step["name"] == "systemd api" for step in response.json()["steps"])
 
 
+def test_setup_first_run_endpoint_configures_user_in_one_request(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/setup/first-run",
+        json={
+            "profile": {"preferred_name": "Nico", "university": "UDD"},
+            "consent": {"whatsapp_enabled": True, "progress_reports_enabled": True},
+            "channels": {"wifi_ssid": "Casa", "whatsapp_number": "+56912345678"},
+            "memories": [{"text": "Prefiere bloques de 25 minutos"}],
+            "serial": "SN-001",
+            "lot": "pilot-a",
+            "assigned_user_label": "nico@udd",
+        },
+    )
+    status = client.get("/onboarding/status")
+
+    assert response.status_code == 200
+    assert response.json()["ready"] is True
+    assert response.json()["identity"]["serial"] == "SN-001"
+    assert response.json()["memories_added"] == 1
+    assert status.json()["ready"] is True
+
+
+def test_install_plan_apply_endpoint_is_dry_run_by_default(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.post("/factory/install-plan/apply", json={"step": "systemd api"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "dry_run"
+    assert response.json()["executed"] == []
+
+
 def test_fleet_security_and_hardware_endpoints_support_factory_ops(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
