@@ -29,6 +29,12 @@ from db.database import Database
 from mobile.factory_page import render_factory_page
 from mobile.service import MobileService, focus_start_to_dict, status_to_dict, task_list_to_dict
 from mobile.setup_page import render_setup_page
+from product.device_registry import (
+    DeviceRegistryService,
+    device_heartbeat_to_dict,
+    device_identity_to_dict,
+    reassignment_reset_to_dict,
+)
 from product.factory_report import build_factory_report, factory_report_to_dict
 from product.setup_flow import build_setup_flow, setup_flow_to_dict
 from product.update_status import build_update_status, current_app_version, update_status_to_dict
@@ -99,6 +105,17 @@ class WiFiSetupRequest(BaseModel):
     ssid: str = Field(min_length=1, max_length=64)
     password: str | None = Field(default=None, max_length=128)
     apply: bool = False
+
+
+class DeviceProvisionRequest(BaseModel):
+    serial: str | None = Field(default=None, max_length=80)
+    lot: str | None = Field(default=None, max_length=80)
+    assigned_user_label: str | None = Field(default=None, max_length=120)
+
+
+class DeviceHeartbeatRequest(BaseModel):
+    status: str = Field(default="ok", max_length=40)
+    detail: str | None = Field(default=None, max_length=240)
 
 
 def create_app() -> Any:
@@ -259,6 +276,62 @@ def create_app() -> Any:
         try:
             return factory_report_to_dict(
                 build_factory_report(db, settings, app_version=app_version)
+            )
+        finally:
+            db.close()
+
+    @app.get("/device/identity")
+    async def device_identity(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            return device_identity_to_dict(DeviceRegistryService(db, settings).get_identity())
+        finally:
+            db.close()
+
+    @app.patch("/device/identity")
+    async def update_device_identity(
+        request: DeviceProvisionRequest,
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            identity = DeviceRegistryService(db, settings).provision(
+                serial=request.serial,
+                lot=request.lot,
+                assigned_user_label=request.assigned_user_label,
+            )
+            return device_identity_to_dict(identity)
+        finally:
+            db.close()
+
+    @app.post("/device/heartbeat")
+    async def device_heartbeat(
+        request: DeviceHeartbeatRequest,
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            heartbeat = DeviceRegistryService(db, settings).heartbeat(
+                app_version=app_version,
+                status=request.status,
+                detail=request.detail,
+            )
+            payload = device_heartbeat_to_dict(heartbeat)
+            assert payload is not None
+            return payload
+        finally:
+            db.close()
+
+    @app.post("/device/reset-user")
+    async def reset_device_user(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            return reassignment_reset_to_dict(
+                DeviceRegistryService(db, settings).reset_for_reassignment()
             )
         finally:
             db.close()

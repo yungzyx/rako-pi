@@ -187,6 +187,10 @@ GET  /setup/flow
 POST /setup/wifi       {"ssid": "Casa", "password": "...", "apply": false}
 GET  /factory/report
 GET  /update/status
+GET  /device/identity
+PATCH /device/identity {"serial": "SN-001", "lot": "pilot-a", "assigned_user_label": "nico@udd"}
+POST /device/heartbeat {"status": "ok", "detail": "factory bench"}
+POST /device/reset-user
 GET  /onboarding/status
 GET  /coach/plan
 GET  /tasks?pending_only=true&limit=20
@@ -233,7 +237,11 @@ la opción `6` muestra configuración. También entiende `pausar mensajes`,
 memoria editable; no borran tareas ni logs operacionales.
 `/factory/report` resume setup, checklist de entrega y bloqueos para producción.
 `/factory` muestra un panel local para revisar una placa: entrega, setup,
-bloqueos, checks manuales, versión y build.
+bloqueos, checks manuales, identidad, último heartbeat, versión y build.
+`/device/identity` permite registrar serial, lote y asignación visible de una
+placa. `/device/heartbeat` registra el último pulso local. `/device/reset-user`
+borra datos del alumno anterior y tareas/estado local, pero preserva identidad
+de placa y heartbeat para poder reasignarla sin mezclar memorias.
 `/update/status` reporta versión/canal/build en modo solo lectura; aplicar OTA
 queda pendiente hasta tener releases firmadas y rollback.
 

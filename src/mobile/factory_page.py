@@ -155,6 +155,8 @@ def render_factory_page() -> str:
     <section class="panel">
       <h2>Dispositivo</h2>
       <p id="device">Cargando...</p>
+      <p id="assignment">Cargando asignación...</p>
+      <p id="heartbeat">Cargando heartbeat...</p>
       <p id="update">Cargando versión...</p>
     </section>
 
@@ -193,10 +195,16 @@ def render_factory_page() -> str:
       document.querySelector("#failures").textContent = report.automatic_failures;
       document.querySelector("#failures").className = report.automatic_failures ? "fail" : "ok";
       document.querySelector("#manual").textContent = report.manual_items;
+      const identity = report.identity || {};
+      const heartbeat = report.heartbeat || {};
       document.querySelector("#device").textContent =
-        `ID: ${report.device_id || "sin ID"} · env: ${report.environment} · generado: ${report.generated_at}`;
+        `ID: ${report.device_id || "sin ID"} · serial: ${identity.serial || "sin serial"} · lote: ${identity.lot || "sin lote"}`;
+      document.querySelector("#assignment").textContent =
+        `Asignado a: ${identity.assigned_user_label || "sin asignar"} · env: ${report.environment}`;
+      document.querySelector("#heartbeat").textContent =
+        heartbeat.at ? `Último heartbeat: ${heartbeat.at} · ${heartbeat.status}` : "Sin heartbeat registrado";
       document.querySelector("#update").textContent =
-        `Versión: ${update.app_version} · canal: ${update.release_channel} · build: ${update.build_sha || "sin build"}`;
+        `Versión: ${update.app_version} · canal: ${update.release_channel} · build: ${update.build_sha || "sin build"} · generado: ${report.generated_at}`;
       items.replaceChildren(...report.acceptance.items.map((item) => {
         const row = document.createElement("tr");
         row.innerHTML = `<td>${item.category}</td><td>${item.name}</td><td class="${item.status}">${item.status}</td><td>${item.detail}</td>`;

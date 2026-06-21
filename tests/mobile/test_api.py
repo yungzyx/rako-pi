@@ -236,6 +236,63 @@ def test_factory_report_endpoint_summarizes_unit_readiness(monkeypatch, tmp_path
     assert "acceptance" in response.json()
 
 
+def test_device_identity_and_heartbeat_endpoints_support_factory_tracking(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    initial = client.get("/device/identity")
+    provisioned = client.patch(
+        "/device/identity",
+        json={"serial": "SN-001", "lot": "pilot-a", "assigned_user_label": "nico@udd"},
+    )
+    heartbeat = client.post("/device/heartbeat", json={"status": "ok", "detail": "bench"})
+    report = client.get("/factory/report")
+
+    assert initial.json()["device_id"] == "rako-test-001"
+    assert provisioned.json()["serial"] == "SN-001"
+    assert provisioned.json()["lot"] == "pilot-a"
+    assert heartbeat.json()["status"] == "ok"
+    assert heartbeat.json()["detail"] == "bench"
+    assert report.json()["identity"]["assigned_user_label"] == "nico@udd"
+    assert report.json()["heartbeat"]["status"] == "ok"
+
+
+def test_reset_user_endpoint_clears_assignment_data_but_keeps_device_identity(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+    client.patch(
+        "/device/identity",
+        json={"serial": "SN-001", "lot": "pilot-a", "assigned_user_label": "nico@udd"},
+    )
+    client.post("/device/heartbeat", json={"status": "ok"})
+    client.patch("/user/profile", json={"preferred_name": "Nico"})
+    client.patch("/user/channels", json={"wifi_ssid": "Casa", "whatsapp_number": "+56912345678"})
+    client.patch("/user/consent", json={"whatsapp_enabled": True})
+    client.post("/focus/start", json={"title": "cálculo", "minutes": 25})
+
+    reset = client.post("/device/reset-user")
+    identity = client.get("/device/identity")
+    profile = client.get("/user/profile")
+    tasks = client.get("/tasks")
+    report = client.get("/factory/report")
+
+    assert reset.status_code == 200
+    assert reset.json()["identity"]["serial"] == "SN-001"
+    assert "tasks" in reset.json()["purged_domains"]
+    assert identity.json()["serial"] == "SN-001"
+    assert profile.json()["preferred_name"] is None
+    assert tasks.json()["tasks"] == []
+    assert report.json()["heartbeat"]["status"] == "ok"
+
+
 def test_update_status_endpoint_is_read_only(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.setenv("RAKO_RELEASE_CHANNEL", "beta")

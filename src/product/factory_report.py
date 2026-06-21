@@ -8,6 +8,11 @@ from typing import Any
 
 from config import Settings
 from db.database import Database
+from product.device_registry import (
+    DeviceRegistryService,
+    device_heartbeat_to_dict,
+    device_identity_to_dict,
+)
 from product.factory_acceptance import (
     acceptance_checklist_to_dict,
     build_factory_acceptance_checklist,
@@ -19,6 +24,8 @@ from product.setup_flow import build_setup_flow, setup_flow_to_dict
 class FactoryReport:
     generated_at: str
     device_id: str | None
+    identity: dict[str, Any]
+    heartbeat: dict[str, Any] | None
     environment: str
     app_version: str
     ready_for_handoff: bool
@@ -39,11 +46,15 @@ def build_factory_report(
     now: datetime | None = None,
 ) -> FactoryReport:
     generated_at = _ensure_aware(now or datetime.now(UTC)).isoformat()
+    registry = DeviceRegistryService(db, settings)
+    identity = registry.get_identity()
     setup = build_setup_flow(db, settings)
     acceptance = build_factory_acceptance_checklist(db, settings)
     return FactoryReport(
         generated_at=generated_at,
-        device_id=settings.rako_device_id,
+        device_id=identity.device_id,
+        identity=device_identity_to_dict(identity),
+        heartbeat=device_heartbeat_to_dict(registry.get_heartbeat()),
         environment=settings.rako_env,
         app_version=app_version,
         ready_for_handoff=acceptance.ready_for_handoff,

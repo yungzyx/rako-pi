@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from config import Settings
 from db.database import Database
+from product.device_registry import DeviceRegistryService
 from product.factory_report import build_factory_report, factory_report_to_dict
 from product.user_config import UserConfigService
 
@@ -20,6 +21,8 @@ def test_factory_report_summarizes_setup_and_acceptance(db_conn) -> None:
     )
 
     assert report.device_id == "rako-001"
+    assert report.identity["device_id"] == "rako-001"
+    assert report.heartbeat is None
     assert report.environment == "prod"
     assert report.ready_for_handoff is False
     assert report.setup_ready is False
@@ -64,3 +67,19 @@ def test_factory_report_is_ready_when_product_setup_is_complete(db_conn) -> None
     assert payload["setup_ready"] is True
     assert payload["automatic_failures"] == 0
     assert payload["manual_items"] == 6
+
+
+def test_factory_report_includes_provisioning_and_heartbeat(db_conn) -> None:
+    db = Database(db_conn)
+    settings = Settings(_env_file=None, rako_env="prod", rako_device_id="rako-001")
+
+    registry = DeviceRegistryService(db, settings)
+    registry.provision(serial="SN-001", lot="pilot-a", assigned_user_label="nico@udd")
+    registry.heartbeat(app_version="0.1.0", status="ok")
+
+    payload = factory_report_to_dict(build_factory_report(db, settings, app_version="0.1.0"))
+
+    assert payload["identity"]["serial"] == "SN-001"
+    assert payload["identity"]["lot"] == "pilot-a"
+    assert payload["identity"]["assigned_user_label"] == "nico@udd"
+    assert payload["heartbeat"]["status"] == "ok"
