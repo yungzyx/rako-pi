@@ -45,6 +45,23 @@ SAFETY_TESTS: tuple[str, ...] = (
     "tests/test_db_journal.py",
 )
 
+STRESS_TEST_TARGETS: tuple[str, ...] = (
+    "tests/channels/whatsapp",
+    "tests/mobile",
+    "tests/product",
+    "tests/productivity",
+    "tests/test_hardware_event_bus.py",
+    "tests/test_hardware_oled_runtime.py",
+    "tests/test_main.py",
+    "tests/test_orchestrator.py",
+    "tests/test_orchestrator_run.py",
+    "tests/test_sync_coordinator.py",
+    "tests/test_sync_queue.py",
+    "tests/test_voice_stt.py",
+    "tests/test_voice_tts.py",
+    "tests/test_voice_wake_audio.py",
+)
+
 HYGIENE_MARKERS: tuple[str, ...] = (
     "TODO " + "completo",
     chr(40) + "TODO" + chr(41),
@@ -76,8 +93,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run Rako quality checks")
     parser.add_argument(
         "command",
-        choices=("lint", "test", "safety", "hygiene", "all"),
+        choices=("lint", "test", "safety", "hygiene", "stress", "all"),
         help="Check group to run",
+    )
+    parser.add_argument(
+        "--stress-runs",
+        type=int,
+        default=3,
+        help="Number of repeated stress cycles for the stress command.",
     )
     args = parser.parse_args(argv)
 
@@ -89,6 +112,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         _run_safety()
     if args.command in {"hygiene", "all"}:
         _run_hygiene()
+    if args.command == "stress":
+        _run_stress(repetitions=args.stress_runs)
     return 0
 
 
@@ -123,6 +148,24 @@ def _run_hygiene() -> None:
             print(f"  - {violation}", file=sys.stderr)
         raise SystemExit(1)
     print("Hygiene check passed")
+
+
+def _run_stress(*, repetitions: int) -> None:
+    if repetitions < 1:
+        raise SystemExit("--stress-runs must be >= 1")
+    _run_hygiene()
+    for index in range(1, repetitions + 1):
+        print(f"Stress cycle {index}/{repetitions}", flush=True)
+        _run(
+            (
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "--maxfail=1",
+                *STRESS_TEST_TARGETS,
+            )
+        )
 
 
 def _find_hygiene_violations(repo_root: Path) -> list[str]:

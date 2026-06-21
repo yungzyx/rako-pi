@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 
 def _load_checks_module() -> ModuleType:
@@ -70,3 +71,38 @@ def test_hygiene_passes_for_clean_repo_shape(tmp_path: Path) -> None:
     )
 
     assert checks._find_hygiene_violations(tmp_path) == []
+
+
+def test_stress_runs_repeated_target_cycles(monkeypatch: Any) -> None:
+    checks = _load_checks_module()
+    calls: list[tuple[str, ...]] = []
+    hygiene_runs = 0
+
+    def fake_hygiene() -> None:
+        nonlocal hygiene_runs
+        hygiene_runs += 1
+
+    def fake_run(command: tuple[str, ...]) -> None:
+        calls.append(command)
+
+    monkeypatch.setattr(checks, "_run_hygiene", fake_hygiene)
+    monkeypatch.setattr(checks, "_run", fake_run)
+
+    assert checks.main(["stress", "--stress-runs", "2"]) == 0
+
+    assert hygiene_runs == 1
+    assert len(calls) == 2
+    assert all(command[1:4] == ("-m", "pytest", "-q") for command in calls)
+    assert all("--maxfail=1" in command for command in calls)
+    assert all("tests/mobile" in command for command in calls)
+
+
+def test_stress_rejects_non_positive_repetitions() -> None:
+    checks = _load_checks_module()
+
+    try:
+        checks._run_stress(repetitions=0)
+    except SystemExit as exc:
+        assert str(exc) == "--stress-runs must be >= 1"
+    else:  # pragma: no cover - defensive assertion
+        raise AssertionError("stress should reject non-positive repetitions")
