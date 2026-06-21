@@ -323,6 +323,11 @@ def test_factory_install_plan_endpoint_lists_dry_run_commands(monkeypatch, tmp_p
 def test_setup_first_run_endpoint_configures_user_in_one_request(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
+    monkeypatch.setenv("SQLITE_ENCRYPTION_KEY", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    monkeypatch.setenv("STT_PROVIDER", "openai_whisper")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("TTS_PROVIDER", "elevenlabs")
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "el-test")
     monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
     client = TestClient(create_app())
 

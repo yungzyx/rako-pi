@@ -8,6 +8,11 @@ from scripts.rako_first_run import main
 def test_rako_first_run_cli_prints_json(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
+    monkeypatch.setenv("SQLITE_ENCRYPTION_KEY", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    monkeypatch.setenv("STT_PROVIDER", "openai_whisper")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("TTS_PROVIDER", "elevenlabs")
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "el-test")
 
     code = main(
         [

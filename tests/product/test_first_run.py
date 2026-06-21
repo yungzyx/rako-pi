@@ -8,7 +8,14 @@ from product.user_config import UserConfigService
 
 def test_first_run_setup_configures_user_identity_and_memory(db_conn) -> None:
     db = Database(db_conn)
-    settings = Settings(rako_device_id="rako-test-001")
+    settings = Settings(
+        rako_device_id="rako-test-001",
+        sqlite_encryption_key="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        stt_provider="openai_whisper",
+        openai_api_key="sk-test",
+        tts_provider="elevenlabs",
+        elevenlabs_api_key="el-test",
+    )
 
     result = apply_first_run_setup(
         db,
