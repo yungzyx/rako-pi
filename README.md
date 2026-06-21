@@ -187,6 +187,7 @@ GET  /setup/flow
 POST /setup/wifi       {"ssid": "Casa", "password": "...", "apply": false}
 GET  /factory/report
 GET  /update/status
+GET  /update/plan
 GET  /device/identity
 PATCH /device/identity {"serial": "SN-001", "lot": "pilot-a", "assigned_user_label": "nico@udd"}
 POST /device/heartbeat {"status": "ok", "detail": "factory bench"}
@@ -242,8 +243,25 @@ bloqueos, checks manuales, identidad, último heartbeat, versión y build.
 placa. `/device/heartbeat` registra el último pulso local. `/device/reset-user`
 borra datos del alumno anterior y tareas/estado local, pero preserva identidad
 de placa y heartbeat para poder reasignarla sin mezclar memorias.
-`/update/status` reporta versión/canal/build en modo solo lectura; aplicar OTA
-queda pendiente hasta tener releases firmadas y rollback.
+`/update/status` reporta versión/canal/build. `/update/plan` evalúa un manifest
+OTA local configurado con `RAKO_UPDATE_MANIFEST_PATH`, valida canal, versión y
+SHA-256 del artefacto, y devuelve los pasos de instalación segura. Aplicar OTA
+sigue bloqueado por defecto con `RAKO_UPDATE_APPLY_ENABLED=0` hasta completar
+releases firmadas, healthcheck e instalación con rollback.
+
+Ejemplo de manifest:
+
+```json
+{
+  "version": "0.2.0",
+  "channel": "stable",
+  "artifact_url": "https://example.com/rako-0.2.0.tar.gz",
+  "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "rollback_version": "0.1.0",
+  "minimum_version": "0.1.0",
+  "release_notes": "Mejoras de producto"
+}
+```
 
 Por defecto escucha en `127.0.0.1:8765`. Puedes cambiarlo con
 `RAKO_API_HOST` y `RAKO_API_PORT`. Si defines `RAKO_API_TOKEN`, todos los

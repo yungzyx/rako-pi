@@ -37,7 +37,13 @@ from product.device_registry import (
 )
 from product.factory_report import build_factory_report, factory_report_to_dict
 from product.setup_flow import build_setup_flow, setup_flow_to_dict
-from product.update_status import build_update_status, current_app_version, update_status_to_dict
+from product.update_status import (
+    build_update_plan,
+    build_update_status,
+    current_app_version,
+    update_plan_to_dict,
+    update_status_to_dict,
+)
 from product.user_config import (
     UserConfigService,
     channels_to_dict,
@@ -340,7 +346,13 @@ def create_app() -> Any:
     async def update_status(
         _: None = auth_dep,
     ) -> dict[str, Any]:
-        return update_status_to_dict(build_update_status())
+        return update_status_to_dict(build_update_status(settings))
+
+    @app.get("/update/plan")
+    async def update_plan(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        return update_plan_to_dict(build_update_plan(settings))
 
     @app.get("/user/profile")
     async def get_user_profile(

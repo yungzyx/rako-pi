@@ -82,6 +82,12 @@ class Settings(BaseSettings):
     whatsapp_cloud_app_secret: str | None = None
     whatsapp_cloud_timeout_s: float = 10.0
 
+    # --- OTA ---
+    rako_release_channel: Literal["stable", "beta", "dev"] = "stable"
+    rako_update_manifest_path: str | None = None
+    rako_update_public_key_path: str | None = None
+    rako_update_apply_enabled: bool = False
+
     # --- Wake word ---
     # `text_stt` es fallback dev: transcribe audio con STT y busca texto.
     # Para producto, preferir `porcupine` con keyword custom entrenada para Rako.

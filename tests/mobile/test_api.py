@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 
 from fastapi.testclient import TestClient
 
@@ -296,7 +297,6 @@ def test_reset_user_endpoint_clears_assignment_data_but_keeps_device_identity(
 def test_update_status_endpoint_is_read_only(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
     monkeypatch.setenv("RAKO_RELEASE_CHANNEL", "beta")
-    monkeypatch.setenv("RAKO_BUILD_SHA", "abc123")
     monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
     client = TestClient(create_app())
 
@@ -304,8 +304,33 @@ def test_update_status_endpoint_is_read_only(monkeypatch, tmp_path) -> None:
 
     assert response.status_code == 200
     assert response.json()["release_channel"] == "beta"
-    assert response.json()["build_sha"] == "abc123"
     assert response.json()["update_apply_enabled"] is False
+
+
+def test_update_plan_endpoint_evaluates_manifest(monkeypatch, tmp_path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "version": "0.2.0",
+                "channel": "stable",
+                "artifact_url": "https://example.com/rako-0.2.0.tar.gz",
+                "artifact_sha256": "c" * 64,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_UPDATE_MANIFEST_PATH", str(manifest_path))
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    response = client.get("/update/plan")
+
+    assert response.status_code == 200
+    assert response.json()["decision"] == "available"
+    assert response.json()["target_version"] == "0.2.0"
+    assert "Verify artifact SHA-256 before unpacking." in response.json()["steps"]
 
 
 def test_whatsapp_checkin_endpoint_returns_outbound_message(monkeypatch, tmp_path) -> None:
