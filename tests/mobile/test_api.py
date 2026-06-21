@@ -43,7 +43,13 @@ def test_setup_page_is_public_and_uses_setup_flow(monkeypatch, tmp_path) -> None
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "Configurar Rako" in response.text
-    assert 'fetch("/setup/flow"' in response.text
+    assert 'fetchJson("/setup/flow")' in response.text
+    assert 'fetchJson("/factory/report")' in response.text
+    assert 'fetchJson("/factory/provisioning-plan")' in response.text
+    assert 'submitJson(event, "/user/profile"' in response.text
+    assert 'submitJson(event, "/user/consent"' in response.text
+    assert 'fetchJson("/user/memory"' in response.text
+    assert 'fetchJson("/setup/hotspot/plan")' in response.text
     assert "secret" not in response.text
 
 

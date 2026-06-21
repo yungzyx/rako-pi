@@ -224,9 +224,10 @@ POST /whatsapp/webhook
 `/setup/flow` está pensado para primer encendido o app de configuración: entrega
 pasos, porcentaje de avance, próximo bloqueo, notas de privacidad y qué partes
 son opcionales o manuales antes de asignar una placa.
-`/setup` muestra una página local autocontenida para revisar ese flujo desde el
-celular o notebook del usuario. Si expones el API en la red local, usa
-`RAKO_API_TOKEN` y escribe el token en la pantalla de setup.
+`/setup` muestra una página local autocontenida para configurar perfil,
+consentimiento, WhatsApp, WiFi SSID, memoria inicial y revisar checks de
+hardware/fábrica desde el celular o notebook del usuario. Si expones el API en
+la red local, usa `RAKO_API_TOKEN` y escribe el token en la pantalla de setup.
 `/setup/wifi` puede guardar el SSID del usuario y, si `apply=true`, llamar a
 NetworkManager con `nmcli`; por seguridad solo aplica cambios reales cuando
 `RAKO_WIFI_APPLY_ENABLED=1`. La contraseña WiFi no se guarda en SQLite.
