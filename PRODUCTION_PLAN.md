@@ -114,8 +114,12 @@ that work the same on every board:
 - Fleet readiness: installation scripts, systemd units, health checks, support
   bundles, OTA/rollback, and per-board acceptance tests must be repeatable.
 - Factory setup: each unit should expose `/setup`, `/setup/qr`, `/factory`,
-  `/factory/provisioning-plan`, `/fleet/snapshot`, `/security/audit`, and
-  `/hardware/checks` locally before delivery.
+  `/factory/provisioning-plan`, `/fleet/snapshot`, `/observability`,
+  `/security/audit`, `/demo-mode`, `/pilot/plan`, and `/hardware/checks`
+  locally before delivery.
+- Pilot readiness: run a 14-day pilot with 3-5 users and track setup time,
+  understood voice turns, focus blocks started, WhatsApp usefulness, OLED state
+  comprehension, support-bundle quality, and crisis/privacy behavior.
 - Hotspot setup: `/setup/hotspot/start` and `/setup/hotspot/stop` can operate
   NetworkManager only when `RAKO_SETUP_HOTSPOT_ENABLED=1` and `apply=true`.
 - OTA: `/update/apply` verifies a local artifact against the manifest hash when

@@ -158,6 +158,8 @@ def render_factory_page() -> str:
       <p id="assignment">Cargando asignación...</p>
       <p id="heartbeat">Cargando heartbeat...</p>
       <p id="update">Cargando versión...</p>
+      <p id="observability">Cargando observabilidad...</p>
+      <p id="last-error">Cargando último error...</p>
     </section>
 
     <section class="panel">
@@ -205,6 +207,14 @@ def render_factory_page() -> str:
         heartbeat.at ? `Último heartbeat: ${heartbeat.at} · ${heartbeat.status}` : "Sin heartbeat registrado";
       document.querySelector("#update").textContent =
         `Versión: ${update.app_version} · canal: ${update.release_channel} · build: ${update.build_sha || "sin build"} · generado: ${report.generated_at}`;
+      const observability = report.observability || {};
+      const serviceSummary = (observability.services || [])
+        .map((service) => `${service.name}: ${service.status}`)
+        .join(" · ");
+      document.querySelector("#observability").textContent =
+        `Servicios: ${serviceSummary || "sin datos"} · sync pendiente: ${observability.sync_pending ?? 0}`;
+      document.querySelector("#last-error").textContent =
+        observability.sync_last_error ? `Último error sync: ${observability.sync_last_error}` : "Sin errores sync registrados";
       items.replaceChildren(...report.acceptance.items.map((item) => {
         const row = document.createElement("tr");
         row.innerHTML = `<td>${item.category}</td><td>${item.name}</td><td class="${item.status}">${item.status}</td><td>${item.detail}</td>`;

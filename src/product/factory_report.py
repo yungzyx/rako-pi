@@ -17,6 +17,7 @@ from product.factory_acceptance import (
     acceptance_checklist_to_dict,
     build_factory_acceptance_checklist,
 )
+from product.observability import build_observability_snapshot, observability_snapshot_to_dict
 from product.setup_flow import build_setup_flow, setup_flow_to_dict
 
 
@@ -36,6 +37,7 @@ class FactoryReport:
     next_setup_step_id: str | None
     setup: dict[str, Any]
     acceptance: dict[str, Any]
+    observability: dict[str, Any]
 
 
 def build_factory_report(
@@ -65,6 +67,7 @@ def build_factory_report(
         next_setup_step_id=setup.next_step_id,
         setup=setup_flow_to_dict(setup),
         acceptance=acceptance_checklist_to_dict(acceptance),
+        observability=observability_snapshot_to_dict(build_observability_snapshot(db, settings)),
     )
 
 

@@ -400,6 +400,27 @@ def test_support_bundle_endpoint_is_sanitized(monkeypatch, tmp_path) -> None:
     assert "sk-secret" not in str(response.json())
 
 
+def test_observability_demo_and_pilot_endpoints_support_final_pilot_ops(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_DEVICE_ID", "rako-test-001")
+    monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+    client = TestClient(create_app())
+
+    observability = client.get("/observability")
+    demo = client.get("/demo-mode")
+    pilot = client.get("/pilot/plan")
+    factory = client.get("/factory/report")
+
+    assert observability.status_code == 200
+    assert "services" in observability.json()
+    assert demo.json()["ready"] is True
+    assert any("rako-demo" in command for command in demo.json()["commands"])
+    assert pilot.json()["recommended_users"] == "3-5"
+    assert "observability" in factory.json()
+
+
 def test_device_identity_and_heartbeat_endpoints_support_factory_tracking(
     monkeypatch, tmp_path
 ) -> None:

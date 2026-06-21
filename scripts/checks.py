@@ -23,6 +23,7 @@ RUFF_TARGETS: tuple[str, ...] = (
     "scripts/listen_wake_word.py",
     "scripts/music_mode.py",
     "scripts/rako_demo.py",
+    "scripts/rako_demo_mode.py",
     "scripts/rako_doctor.py",
     "scripts/rako_first_run.py",
     "scripts/rako_provision.py",

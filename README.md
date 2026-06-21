@@ -197,8 +197,11 @@ GET  /factory/provisioning-plan
 GET  /factory/install-plan
 POST /factory/install-plan/apply {"step": "systemd api", "apply": false}
 GET  /fleet/snapshot
+GET  /observability
 GET  /security/audit
 GET  /support/bundle
+GET  /demo-mode
+GET  /pilot/plan
 GET  /hardware/checks
 POST /hardware/checks {"name": "microphone", "status": "pass", "detail": "clear"}
 GET  /update/status
@@ -274,15 +277,22 @@ paquetes, venv, systemd, audio y seguridad de `.env`.
 por defecto responde en dry-run. Los pasos manuales se saltan y los bloqueados
 impiden aplicar, para evitar tocar una placa incompleta por accidente.
 `/fleet/snapshot` resume una placa en formato útil para un dashboard central:
-identidad, asignación, heartbeat, hardware, seguridad, factory y versión.
+identidad, asignación, heartbeat, hardware, seguridad, factory, observabilidad y
+versión. `/observability` muestra estado resumido de servicios, cola sync,
+último error y archivos de log conocidos para diagnóstico rápido.
 `/security/audit` revisa token local, cifrado SQLite, WhatsApp Cloud, OTA y
 hotspot. `/hardware/checks` permite registrar validaciones físicas reales de
 micrófono, parlante, OLED, botón, foco y bypass de crisis.
 `/support/bundle` entrega un JSON sanitizado para soporte remoto sin API keys,
 contraseñas, transcripciones ni memoria editable. También se puede generar con
 `./scripts/rako-support-bundle --output /tmp/rako-support.json`.
+`/demo-mode` entrega un guion y comandos seguros para mostrar Rako sin datos
+reales. También puedes verlo con `./scripts/rako-demo-mode`.
+`/pilot/plan` resume el piloto recomendado de 14 días con 3-5 usuarios, métricas
+de éxito y prioridades antes de producir varias unidades.
 `/factory` muestra un panel local para revisar una placa: entrega, setup,
-bloqueos, checks manuales, identidad, último heartbeat, versión y build.
+bloqueos, checks manuales, identidad, último heartbeat, servicios, último error,
+versión y build.
 `/device/identity` permite registrar serial, lote y asignación visible de una
 placa. `/device/heartbeat` registra el último pulso local. `/device/reset-user`
 borra datos del alumno anterior y tareas/estado local, pero preserva identidad
@@ -417,6 +427,17 @@ Para revisar o aplicar pasos de instalación:
 Sin `--apply`, `rako-install` no ejecuta nada. Con `--apply`, solo ejecuta pasos
 `ready`; los pasos `manual` quedan para operador y los `blocked` detienen el
 proceso.
+
+Para preparar una demo sin datos reales:
+
+```bash
+./scripts/rako-demo-mode
+./scripts/rako-demo --no-playback
+./scripts/rako.sh demo-crisis-panic
+```
+
+El comando imprime guion, comandos y notas de seguridad para no exponer números
+reales, memorias reales ni bundles de usuarios.
 
 Para el flujo completo de instalación y QA por placa, ver
 [`PRODUCTION_PLAN.md`](./PRODUCTION_PLAN.md).

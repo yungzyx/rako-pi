@@ -13,6 +13,7 @@ from product.hardware_validation import (
     HardwareValidationService,
     hardware_validation_summary_to_dict,
 )
+from product.observability import build_observability_snapshot, observability_snapshot_to_dict
 from product.provisioning_plan import build_provisioning_plan, provisioning_plan_to_dict
 from product.security_audit import build_security_audit, security_audit_to_dict
 from product.update_status import build_update_status, update_status_to_dict
@@ -30,6 +31,7 @@ class FleetSnapshot:
     hardware: dict[str, Any]
     security: dict[str, Any]
     update: dict[str, Any]
+    observability: dict[str, Any]
 
 
 def build_fleet_snapshot(
@@ -53,6 +55,7 @@ def build_fleet_snapshot(
         hardware=hardware_validation_summary_to_dict(HardwareValidationService(db).summary()),
         security=security_audit_to_dict(build_security_audit(settings)),
         update=update_status_to_dict(update),
+        observability=observability_snapshot_to_dict(build_observability_snapshot(db, settings)),
     )
 
 
@@ -68,4 +71,5 @@ def fleet_snapshot_to_dict(snapshot: FleetSnapshot) -> dict[str, Any]:
         "hardware": snapshot.hardware,
         "security": snapshot.security,
         "update": snapshot.update,
+        "observability": snapshot.observability,
     }

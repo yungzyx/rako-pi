@@ -29,6 +29,7 @@ from db.database import Database
 from mobile.factory_page import render_factory_page
 from mobile.service import MobileService, focus_start_to_dict, status_to_dict, task_list_to_dict
 from mobile.setup_page import render_setup_page
+from product.demo_mode import build_demo_mode, demo_mode_to_dict
 from product.device_registry import (
     DeviceRegistryService,
     device_heartbeat_to_dict,
@@ -55,6 +56,8 @@ from product.hotspot_setup import (
 )
 from product.install_plan import build_install_plan, install_plan_to_dict
 from product.install_runner import execute_install_plan, install_execution_to_dict
+from product.observability import build_observability_snapshot, observability_snapshot_to_dict
+from product.pilot_plan import build_pilot_plan, pilot_plan_to_dict
 from product.provisioning_plan import build_provisioning_plan, provisioning_plan_to_dict
 from product.security_audit import build_security_audit, security_audit_to_dict
 from product.setup_flow import build_setup_flow, setup_flow_to_dict
@@ -461,6 +464,28 @@ def create_app() -> Any:
             )
         finally:
             db.close()
+
+    @app.get("/observability")
+    async def observability(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        db = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+        try:
+            return observability_snapshot_to_dict(build_observability_snapshot(db, settings))
+        finally:
+            db.close()
+
+    @app.get("/demo-mode")
+    async def demo_mode(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        return demo_mode_to_dict(build_demo_mode())
+
+    @app.get("/pilot/plan")
+    async def pilot_plan(
+        _: None = auth_dep,
+    ) -> dict[str, Any]:
+        return pilot_plan_to_dict(build_pilot_plan())
 
     @app.get("/security/audit")
     async def security_audit(
