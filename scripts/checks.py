@@ -71,6 +71,7 @@ HYGIENE_MARKERS: tuple[str, ...] = (
 )
 
 HYGIENE_TARGETS: tuple[str, ...] = (
+    ".github",
     "README.md",
     "PRODUCT_JOURNEY.md",
     "PRODUCTION_PLAN.md",
