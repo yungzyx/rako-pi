@@ -24,6 +24,7 @@ from db.database import Database
 from product.factory_acceptance import build_factory_acceptance_checklist
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+BOOT_CONFIG_PATHS = (Path("/boot/firmware/config.txt"), Path("/boot/config.txt"))
 
 Status = Literal["ok", "warn", "fail"]
 
@@ -72,6 +73,7 @@ def main() -> int:
             _check_command("aplay"),
             _check_command("mpg123"),
             _check_command("gpiomon"),
+            _check_boot_audio_overlay(),
             _check_alsa_capture_card(),
             _check_stt(settings),
             _check_tts(settings),
@@ -130,6 +132,33 @@ def _check_calibrate() -> CheckResult:
         return CheckResult("audio calibration", "ok", "perfil ReSpeaker aplicado")
     return CheckResult(
         "audio calibration", "warn", code.stdout.strip() or f"exit {code.returncode}"
+    )
+
+
+def _check_boot_audio_overlay(
+    config_paths: tuple[Path, ...] = BOOT_CONFIG_PATHS,
+) -> CheckResult:
+    config = next((path for path in config_paths if path.exists()), None)
+    if config is None:
+        return CheckResult("ReSpeaker boot overlay", "warn", "no encontré config.txt")
+    lines = [
+        line.strip()
+        for line in config.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    has_voicecard = "dtoverlay=seeed-2mic-voicecard" in lines
+    has_i2s = "dtparam=i2s=on" in lines
+    if has_voicecard and has_i2s:
+        return CheckResult("ReSpeaker boot overlay", "ok", str(config))
+    missing = []
+    if not has_voicecard:
+        missing.append("dtoverlay=seeed-2mic-voicecard")
+    if not has_i2s:
+        missing.append("dtparam=i2s=on")
+    return CheckResult(
+        "ReSpeaker boot overlay",
+        "fail",
+        "falta " + ", ".join(missing) + "; ejecuta sudo ./scripts/rako-fix-audio-boot y reinicia",
     )
 
 

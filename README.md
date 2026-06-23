@@ -110,6 +110,21 @@ rako-doctor --full
 rako-doctor --calibrate --full
 ```
 
+Si `rako-doctor` dice que falta `dtoverlay=seeed-2mic-voicecard` o no aparece
+`seeed2micvoicec` en ALSA, activa el overlay de arranque y reinicia:
+
+```bash
+sudo ./scripts/rako-fix-audio-boot
+sudo reboot
+```
+
+Después del reinicio:
+
+```bash
+cd ~/rako-pi
+./scripts/rako-doctor --full
+```
+
 `--factory` agrega el checklist de entrega de una placa configurada: perfil,
 WiFi, consentimiento, WhatsApp, bienestar, credenciales, seguridad local y los
 gates manuales de micrófono, parlante, OLED, botón, foco y crisis.

@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Enable the Seeed/ReSpeaker 2-Mic WM8960 boot overlay safely.
+#
+# This changes boot configuration, so it must run with sudo and requires reboot.
+
+set -euo pipefail
+
+if [[ "${EUID}" -ne 0 ]]; then
+  exec sudo "$0" "$@"
+fi
+
+if [[ -f /boot/firmware/config.txt ]]; then
+  CONFIG=/boot/firmware/config.txt
+elif [[ -f /boot/config.txt ]]; then
+  CONFIG=/boot/config.txt
+else
+  echo "Could not find Raspberry Pi config.txt under /boot/firmware or /boot." >&2
+  exit 1
+fi
+
+OVERLAY=/boot/firmware/overlays/seeed-2mic-voicecard.dtbo
+if [[ ! -f "${OVERLAY}" && -f /boot/overlays/seeed-2mic-voicecard.dtbo ]]; then
+  OVERLAY=/boot/overlays/seeed-2mic-voicecard.dtbo
+fi
+if [[ ! -f "${OVERLAY}" ]]; then
+  echo "Missing seeed-2mic-voicecard.dtbo overlay." >&2
+  echo "Install the Seeed voicecard overlay before running this script." >&2
+  exit 1
+fi
+
+BACKUP="${CONFIG}.rako-backup-$(date +%Y%m%d-%H%M%S)"
+cp "${CONFIG}" "${BACKUP}"
+
+ensure_line() {
+  local line="$1"
+  if ! grep -qxF "${line}" "${CONFIG}"; then
+    printf '%s\n' "${line}" >>"${CONFIG}"
+  fi
+}
+
+{
+  echo ""
+  echo "# Rako ReSpeaker 2-Mic WM8960 voicecard"
+  echo "# Added by scripts/rako-fix-audio-boot on $(date -Iseconds)"
+} >>"${CONFIG}"
+ensure_line "dtparam=i2c_arm=on"
+ensure_line "dtoverlay=i2s-mmap"
+ensure_line "dtparam=i2s=on"
+ensure_line "dtoverlay=seeed-2mic-voicecard"
+
+if ! grep -qxF "snd-soc-wm8960" /etc/modules; then
+  printf '%s\n' "snd-soc-wm8960" >>/etc/modules
+fi
+
+echo "Updated ${CONFIG}"
+echo "Backup saved at ${BACKUP}"
+echo ""
+echo "Next step:"
+echo "  sudo reboot"
+echo ""
+echo "After reboot:"
+echo "  cd ~/rako-pi"
+echo "  ./scripts/rako-doctor --full"
