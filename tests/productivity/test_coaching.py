@@ -7,6 +7,7 @@ from db.types import EmotionalStateRecord, Task, TaskSource, TaskStatus
 from emotion.types import EmotionalVector
 from productivity.coaching import build_coaching_recommendation
 from productivity.focus import create_focus_task
+from safety.types import CrisisLevel, CrisisReason, CrisisSignal
 
 
 def _now() -> datetime:
@@ -31,6 +32,28 @@ def test_coaching_prioritizes_recent_low_mood(db_conn) -> None:
 
     assert recommendation.kind == "LOW_MOOD_SUPPORT"
     assert "10 minutos suaves" in recommendation.text
+    assert "leer capítulo privado" not in recommendation.text
+
+
+def test_coaching_shows_low_mood_support_after_recent_crisis(db_conn) -> None:
+    # Aunque el ánimo puntual no esté bajo, una crisis reciente debe pesar
+    # al menos tanto: no queremos un nudge de productividad genérico
+    # compitiendo con lo que ya activó el protocolo de seguridad.
+    db = Database(db_conn)
+    db.crisis_journal.record(
+        CrisisSignal(
+            level=CrisisLevel.CRISIS,
+            reasons=(CrisisReason.KEYWORDS_IDEATION,),
+            detected_at=_now() - timedelta(hours=2),
+        )
+    )
+    task = db.tasks.create(create_focus_task("leer capítulo privado", _now()))
+    db.tasks.update_status(task.id, TaskStatus.DONE, completed_at=_now())
+
+    recommendation = build_coaching_recommendation(db, now=_now())
+
+    assert recommendation.kind == "LOW_MOOD_SUPPORT"
+    assert recommendation.metadata["reason"] == "recent_crisis"
     assert "leer capítulo privado" not in recommendation.text
 
 

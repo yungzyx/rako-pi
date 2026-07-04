@@ -1,10 +1,19 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from db.database import Database
+from db.types import (
+    EmotionalStateRecord,
+    Interaction,
+    InteractionType,
+    Task,
+    TaskSource,
+    TaskStatus,
+)
+from emotion.types import EmotionalVector
 from product.user_config import UserConfigService
 
 
@@ -60,21 +69,71 @@ def test_editable_memory_requires_consent_for_sensitive_items(db_conn) -> None:
     assert service.list_memory() == ()
 
 
-def test_user_data_export_and_delete_are_limited_to_product_config(db_conn) -> None:
+def test_user_data_export_reads_product_config(db_conn) -> None:
     db = Database(db_conn)
     service = UserConfigService(db)
     service.update_profile({"preferred_name": "Nico", "university": "UDD"})
     service.update_channels({"wifi_ssid": "Casa", "whatsapp_number": "+56912345678"})
     service.update_consent({"whatsapp_enabled": True})
     service.add_memory(text="Prefiero estudiar temprano")
-    db.config.set("operational.log.marker", "keep-me")
 
     exported = service.export_user_data()
-    deleted = service.delete_user_data()
 
     assert exported["profile"]["preferred_name"] == "Nico"
     assert exported["channels"]["wifi_ssid"] == "Casa"
     assert exported["memory"][0]["text"] == "Prefiero estudiar temprano"
+
+
+def test_delete_user_data_performs_full_wipe_of_all_local_history(db_conn) -> None:
+    # CLAUDE.md §4.1.5: "borrado total ... efecto inmediato" — el borrado
+    # debe alcanzar TODO el historial local, no solo la config de producto.
+    # Este test reemplaza deliberadamente uno anterior que codificaba el
+    # alcance limitado (solo config) como comportamiento esperado: eso era
+    # el bug, no la especificación.
+    db = Database(db_conn)
+    service = UserConfigService(db)
+    service.update_profile({"preferred_name": "Nico", "university": "UDD"})
+    service.update_channels({"wifi_ssid": "Casa", "whatsapp_number": "+56912345678"})
+    service.update_consent({"whatsapp_enabled": True})
+    service.add_memory(text="Prefiero estudiar temprano")
+    now = datetime(2026, 6, 20, 12, 0, tzinfo=UTC)
+    db.tasks.create(
+        Task(
+            id="t",
+            title="Leer capítulo 3",
+            description=None,
+            parent_id=None,
+            status=TaskStatus.TODO,
+            created_at=now,
+            completed_at=None,
+            source=TaskSource.VOICE,
+        )
+    )
+    db.interactions.append(
+        Interaction(
+            id="i",
+            timestamp=now,
+            type=InteractionType.USER_VOICE,
+            transcription_excerpt="me siento atascado",
+            emotion=None,
+            response_id=None,
+            response_text=None,
+        )
+    )
+    db.emotional_states.append(
+        EmotionalStateRecord(
+            id="e",
+            at=now,
+            vector=EmotionalVector(-0.2, 0.4, 0.5),
+            trigger_event=None,
+            confidence=0.9,
+        )
+    )
+
+    deleted = service.delete_user_data()
+
     assert all(deleted.values())
     assert service.export_user_data()["profile"]["preferred_name"] is None
-    assert db.config.get("operational.log.marker") == "keep-me"
+    assert db.tasks.list_pending() == []
+    assert db.interactions.list_recent() == []
+    assert db.emotional_states.list_in_window(now, timedelta(days=1)) == []

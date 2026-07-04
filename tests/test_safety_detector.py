@@ -115,6 +115,79 @@ def test_ideation_negation_or_unrelated_does_not_trigger(phrase: str) -> None:
     assert CrisisReason.KEYWORDS_IDEATION not in signal.reasons
 
 
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "No quiero morir, pero a veces siento que en el fondo sí quiero morir",
+        "No quiero morirme, aunque hoy de verdad quiero morirme",
+        "Le dije que no me quiero morir, pero ahora mismo sí me quiero morir",
+    ],
+)
+def test_negated_then_reaffirmed_ideation_triggers_crisis(phrase: str) -> None:
+    # Regresión: una negación temprana en la transcripción no debe poder
+    # silenciar una afirmación real y posterior de la misma frase. Antes del
+    # fix, `_matches_any` suprimía CUALQUIER coincidencia si la frase de
+    # exclusión aparecía en cualquier parte del texto, no solo cerca de la
+    # coincidencia negada.
+    signal = detect_crisis(_input(transcript=phrase))
+
+    assert signal.level is CrisisLevel.CRISIS
+    assert CrisisReason.KEYWORDS_IDEATION in signal.reasons
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "No quiero morir, solo estoy muy cansado y triste",
+        "No quiero morirme, simplemente tuve un mal día",
+    ],
+)
+def test_pure_negation_without_reaffirmation_still_does_not_trigger(phrase: str) -> None:
+    # Guarda contra sobre-corrección: una negación pura, sin afirmación
+    # posterior, sigue sin disparar.
+    signal = detect_crisis(_input(transcript=phrase))
+
+    assert CrisisReason.KEYWORDS_IDEATION not in signal.reasons
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "kiero morir",
+        "ya no aguanto, me kiero morir",
+    ],
+)
+def test_common_stt_garbled_ideation_phrases_trigger_crisis(phrase: str) -> None:
+    # Ortografía fonética/informal común en mensajes de texto o STT.
+    signal = detect_crisis(_input(transcript=phrase))
+
+    assert signal.level is CrisisLevel.CRISIS
+    assert CrisisReason.KEYWORDS_IDEATION in signal.reasons
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "tengo rayas en el brazo, me raye anoche",
+        "quiero rayarme otra vez",
+    ],
+)
+def test_chilean_selfharm_slang_triggers_crisis(phrase: str) -> None:
+    # "rayarse" es jerga chilena común para autolesión por corte.
+    signal = detect_crisis(_input(transcript=phrase))
+
+    assert signal.level is CrisisLevel.CRISIS
+    assert CrisisReason.KEYWORDS_SELFHARM in signal.reasons
+
+
+def test_garbled_goodbye_phrase_triggers_crisis() -> None:
+    # Garble plausible de STT para "ya no se puede más".
+    signal = detect_crisis(_input(transcript="ya nse puede mas"))
+
+    assert signal.level is CrisisLevel.CRISIS
+    assert CrisisReason.KEYWORDS_GOODBYE in signal.reasons
+
+
 # ---------------------------------------------------------------------------
 # Self-harm keywords
 # ---------------------------------------------------------------------------

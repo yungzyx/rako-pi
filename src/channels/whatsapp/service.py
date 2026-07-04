@@ -7,6 +7,7 @@ Meta directly; callers inject a client adapter.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -27,6 +28,8 @@ from productivity.study_plan import build_external_study_plan_message, build_stu
 from safety.detector import detect_crisis
 from safety.responses import pick_response
 from safety.types import CrisisInput, CrisisLevel
+
+_log = logging.getLogger(__name__)
 
 _LAST_CHECKIN_KEY = "whatsapp.last_checkin"
 _PENDING_TTL_SECONDS = 15 * 60
@@ -192,11 +195,23 @@ class WhatsAppService:
         if crisis_signal.level is CrisisLevel.CRISIS:
             self._clear_pending(from_number)
             response = pick_response(crisis_signal)
+            self._db.crisis_journal.record(crisis_signal, response_id=response.id)
             return self._reply(
                 to=from_number,
                 action="CRISIS",
                 response_text=response.text,
                 crisis=True,
+            )
+
+        if not self._is_authorized_sender(from_number):
+            _log.warning(
+                "whatsapp inbound from unpaired number ending in %s — ignoring",
+                from_number[-4:],
+            )
+            return self._reply(
+                to=from_number,
+                action="UNAUTHORIZED",
+                response_text="No reconozco este número. Escríbeme desde el número configurado en Rako.",
             )
 
         pending_result = self._handle_pending(clean_text, from_number=from_number, now=now)
@@ -332,14 +347,28 @@ class WhatsAppService:
             "qué sabes de mí",
             "qué sabes de mi",
         }:
-            memories = config.list_memory()
-            if not memories:
+            all_memories = config.list_memory()
+            if not all_memories:
                 return self._reply(
                     to=from_number,
                     action="MEMORY_LIST",
                     response_text="Todavía no tengo recuerdos guardados sobre tus preferencias.",
                 )
-            lines = [f"- {memory.text}" for memory in memories[:5]]
+            # Las memorias sensibles nunca salen por este canal — el mismo
+            # filtro que ya aplica el contexto del LLM (orchestrator/context.py).
+            normal_memories = [m for m in all_memories if m.sensitivity == "normal"]
+            sensitive_count = len(all_memories) - len(normal_memories)
+            sensitive_note = (
+                f"(Tienes {sensitive_count} recuerdo(s) sensible(s) guardado(s); "
+                "revísalos en la app.)"
+            )
+            if not normal_memories:
+                return self._reply(
+                    to=from_number, action="MEMORY_LIST", response_text=sensitive_note
+                )
+            lines = [f"- {memory.text}" for memory in normal_memories[:5]]
+            if sensitive_count:
+                lines.append(sensitive_note)
             return self._reply(
                 to=from_number,
                 action="MEMORY_LIST",
@@ -439,7 +468,9 @@ class WhatsAppService:
                 to=from_number,
                 action="DELETE_USER_DATA_CONFIRM",
                 response_text=(
-                    "Puedo borrar perfil, consentimiento, canales y memoria editable. "
+                    "Esto borra TODO tu historial en este dispositivo: perfil, "
+                    "consentimiento, canales, memoria editable, tareas, "
+                    "interacciones, estados de ánimo y logros. Es permanente. "
                     "Para confirmar, responde: confirmar borrar mis datos."
                 ),
             )
@@ -486,13 +517,15 @@ class WhatsAppService:
                         "confirmar borrar mis datos."
                     ),
                 )
-            deleted = UserConfigService(self._db).delete_user_data()
+            UserConfigService(self._db).delete_user_data()
             self._clear_pending(from_number)
-            deleted_count = sum(1 for was_deleted in deleted.values() if was_deleted)
             return self._reply(
                 to=from_number,
                 action="USER_DATA_DELETED",
-                response_text=f"Listo, borré {deleted_count} bloques de configuración personal.",
+                response_text=(
+                    "Listo, borré todo tu historial en este dispositivo: perfil, "
+                    "configuración, memoria, tareas, interacciones y estados de ánimo."
+                ),
             )
         return None
 
@@ -584,6 +617,14 @@ class WhatsAppService:
             action="MENU_FOCUS",
             response_text="Dime algo como: estudiar cálculo 25 minutos.",
         )
+
+    def _is_authorized_sender(self, from_number: str) -> bool:
+        """True si `from_number` es el dueño emparejado, o si aún no hay
+        número emparejado (onboarding incompleto — no bloquear ese flujo)."""
+        paired = UserConfigService(self._db).get_channels().whatsapp_number
+        if not paired:
+            return True
+        return _digits_only(paired) == _digits_only(from_number)
 
     def _reply(
         self,
@@ -729,6 +770,10 @@ def _compact_user_data_message(export: dict[str, object]) -> str:
 
 def _yes_no(value: bool) -> str:
     return "sí" if value else "no"
+
+
+def _digits_only(number: str) -> str:
+    return "".join(char for char in number if char.isdigit())
 
 
 def _pending_key(number: str) -> str:

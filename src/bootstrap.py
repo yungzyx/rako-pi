@@ -8,6 +8,7 @@ faltan drivers o credenciales.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,6 +47,8 @@ from voice.stt_openai import OpenAIWhisperSTT
 from voice.tts import ElevenLabsTTS, GoogleCloudTTS, TTSClient
 from voice.types import AudioBuffer, SynthesisResult, TranscriptResult
 from voice.wake_word import SubstringWakeWordDetector, WakeWordDetector
+
+_log = logging.getLogger(__name__)
 
 _FALLBACK_SYSTEM_PROMPT = (
     "Eres Rako: un asistente académico para estudiantes universitarios. "
@@ -334,6 +337,7 @@ def _try_real_servos() -> ServoController | None:
 
         return create_pi_servos(head_pin=12, ear_pin=13)
     except Exception:
+        _log.warning("real servo controller unavailable; falling back to fake", exc_info=True)
         return None
 
 
@@ -343,6 +347,7 @@ def _try_real_capture() -> AudioCaptureSource | None:
 
         return create_pi_capture()
     except Exception:
+        _log.warning("real audio capture unavailable; falling back to fake", exc_info=True)
         return None
 
 
@@ -352,6 +357,7 @@ def _try_real_playback() -> AudioPlaybackSink | None:
 
         return create_pi_playback()
     except Exception:
+        _log.warning("real audio playback unavailable; falling back to fake", exc_info=True)
         return None
 
 
@@ -389,6 +395,7 @@ def _try_google_stt(settings: Settings) -> STTClient | None:
         client = SpeechClient()
         return GoogleCloudSTT(client=client, language=settings.google_stt_language)
     except Exception:  # pragma: no cover - lib missing or auth failure
+        _log.warning("Google Cloud STT init failed; falling back", exc_info=True)
         return None
 
 
@@ -405,6 +412,7 @@ def _try_openai_whisper_stt(settings: Settings) -> STTClient | None:
             language=settings.google_stt_language,
         )
     except Exception:  # pragma: no cover - lib missing or runtime init failure
+        _log.warning("OpenAI Whisper STT init failed; falling back to Google", exc_info=True)
         return None
 
 
@@ -435,6 +443,7 @@ def _try_elevenlabs_tts(settings: Settings) -> TTSClient | None:
             timeout_s=settings.anthropic_timeout_s,
         )
     except Exception:  # pragma: no cover - lib missing or runtime init failure
+        _log.warning("ElevenLabs TTS init failed; falling back to Google", exc_info=True)
         return None
 
 
@@ -453,6 +462,7 @@ def _try_google_tts(settings: Settings) -> TTSClient | None:
             speaking_rate=settings.google_tts_speaking_rate,
         )
     except Exception:  # pragma: no cover - lib missing or auth failure
+        _log.warning("Google Cloud TTS init failed; no TTS available", exc_info=True)
         return None
 
 
@@ -492,6 +502,7 @@ def _try_openai_llm(settings: Settings, system_prompt: str) -> LLMClient | None:
             timeout_s=settings.anthropic_timeout_s,
         )
     except Exception:  # pragma: no cover - lib missing or runtime init failure
+        _log.warning("OpenAI LLM init failed; falling back to Anthropic", exc_info=True)
         return None
 
 

@@ -38,25 +38,40 @@ app móvil ni el contenido del RAG.
 ## 2. Stack técnico
 
 ### En la Pi
+- **Hardware actual:** Raspberry Pi 4 8GB + ReSpeaker 2-Mics Pi HAT + pantalla OLED por I2C. No hay speaker fijo todavía; salida temporal por cable a parlante externo cuando esté conectado. Ver `HARDWARE.md`.
 - **OS:** Raspberry Pi OS (Debian 64-bit).
 - **Lenguaje:** Python 3.12+ (Pi OS Bookworm).
-- **Frameworks:** FastAPI (servicios internos), LangChain (orquestación RAG+LLM).
+- **Frameworks:** FastAPI (servicios internos — mobile API + WhatsApp webhook).
 - **Vector DB:** ChromaDB (local).
 - **Relacional local:** SQLite + SQLCipher (cifrado en disco).
-- **STT/TTS clients:** `google-cloud-speech`, `google-cloud-texttospeech`.
-- **LLM client:** `anthropic` (Codex Haiku para MVP).
-- **SER (emoción local):** `transformers` + `torch` con modelo cuantizado
-  (`audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim` o liviano).
 - **Embeddings RAG:** `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`.
 - **Hardware GPIO:** `gpiozero`, `adafruit-circuitpython-*`.
 
-### Cloud
-- **LLM:** Anthropic Codex (Haiku MVP, Sonnet si requiere más calidad).
-- **Voz:** Google Cloud Speech (alternativa Azure).
-- **Backend:** Firebase (Auth + Firestore + FCM).
+### Cloud — arquitectura real (actualizado; ver auditoría de 2026-07)
+- **LLM:** OpenAI (`gpt-4o-mini`, `llm_provider=openai`) primario, Anthropic
+  Claude como fallback (`llm_provider=anthropic`). Configurable por env var.
+- **STT:** Google Cloud Speech por defecto (`stt_provider=google`); OpenAI
+  Whisper disponible como alternativa (`stt_provider=openai_whisper`) cuando
+  está configurado.
+- **TTS:** ElevenLabs primario (`tts_provider=elevenlabs`), Google Cloud TTS
+  como fallback.
+- **SER (emoción local):** planeado (`audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim`
+  vía `transformers`/`torch`), **no implementado todavía** — ver §4.2.
+- **WhatsApp:** canal de producto completo (`src/channels/whatsapp/`) sobre
+  WhatsApp Business Cloud API de Meta (`whatsapp_client=cloud`). Maneja
+  check-ins, menús de acción, reportes de progreso, memoria editable,
+  configuración y borrado de datos — con sus propias reglas de privacidad
+  (ver §4.1) y su propio chequeo de crisis (comparte `safety.detector`).
+- **Backend:** Firebase (Auth + Firestore + FCM) — **diseñado pero no
+  conectado todavía**: `src/sync/` tiene el cliente, el sanitizer y el
+  allowlist de eventos completos y testeados, pero tanto el bootstrap de dev
+  como el de Pi construyen un `FakeFirebaseClient()`. Nada se envía
+  realmente a Firebase hoy; es un gap de alcance conocido, no una regresión.
 
 ### Fuera de este repo
-- App móvil: **Flutter 3.x** + Riverpod o Bloc (en `../rako-app`, no acá).
+- App móvil: **Flutter 3.x** (en `../rako-app`, no acá). El servidor FastAPI
+  de este repo (`src/mobile/`) expone una API local + páginas de setup/factory
+  para el primer emparejamiento vía hotspot, pero no reemplaza la app.
 - Contenido RAG: vault Obsidian en `../Rako-kb` (no acá).
 
 ---
@@ -100,17 +115,39 @@ app móvil ni el contenido del RAG.
 2. **Audio nunca se persiste.** Ni en disco, ni en cloud. Excepción única:
    audio TTS generado por el robot (es output, no input del usuario).
 3. **Lo que se manda a APIs cloud:**
-   - Codex: query + chunks RAG + contexto mínimo anonimizado. **NO** nombre
-     real, audio, vector emocional crudo, contactos.
-   - Google STT: solo audio para transcribir, sin metadata identificable.
-   - Google TTS: solo texto a sintetizar.
+   - LLM (OpenAI u Anthropic, ver §2): query + chunks RAG + contexto mínimo
+     anonimizado (mood agregado en 3 categorías, memoria editable solo
+     `sensitivity=normal`, últimos turnos de la conversación truncados a
+     180 caracteres — este último es un tradeoff revisado y aceptado, no un
+     gap). **NO** nombre real, audio, vector emocional crudo, contactos.
+   - STT (Google u OpenAI Whisper, según configuración): solo audio para
+     transcribir, sin metadata identificable.
+   - TTS (ElevenLabs o Google): solo texto a sintetizar.
    - Firebase: solo eventos no sensibles + config + agregados de progreso.
      **NO** audio, transcripciones, ni estado emocional. En Firebase no debe
-     poder reconstruirse el estado emocional del usuario.
-4. **Modo no-grabación** debe funcionar siempre: el robot opera pero no guarda
-   historial.
-5. **Borrado total** desde la app debe propagarse a la Pi y borrar SQLite
-   local. Efecto inmediato.
+     poder reconstruirse el estado emocional del usuario. (Hoy no conectado
+     de verdad — ver §2.)
+   - **WhatsApp (Meta Cloud API):** solo memorias `sensitivity=normal` salen
+     por este canal — las sensibles nunca se envían, solo se referencia su
+     cantidad ("tienes N recuerdos sensibles, revísalos en la app"). El
+     número entrante debe coincidir con `channels.whatsapp_number` (el
+     emparejado) antes de exponer datos, memoria, configuración o ejecutar
+     borrado — un mensaje de un número no emparejado solo puede disparar el
+     protocolo de crisis (si aplica) o recibe una respuesta genérica sin
+     datos. El webhook de Meta se valida por firma HMAC
+     (`WHATSAPP_CLOUD_APP_SECRET`) antes de procesar cualquier payload.
+     Payloads salientes permitidos: check-ins, menús de acción, conteos de
+     progreso sin títulos de tareas. Prohibido: transcripciones completas,
+     vectores de emoción crudos, memoria sensible, detalle de crisis más
+     allá del protocolo curado.
+4. **Modo no-grabación** (`RAKO_MODE=private`) debe funcionar siempre: el
+   robot opera pero no guarda historial de interacciones
+   (`RunLoop._handle_voice_turn` respeta este flag antes de persistir).
+5. **Borrado total** desde la app o WhatsApp debe propagarse a la Pi y borrar
+   TODO el historial local — no solo config de producto, también tareas,
+   interacciones, estados de ánimo, logros y journal de crisis. Efecto
+   inmediato (`Database.purge_all_user_data()`, invocado desde
+   `UserConfigService.delete_user_data()`).
 6. **Encriptación:** SQLCipher en disco; HTTPS en todas las llamadas; reglas
    estrictas de Firebase.
 
@@ -118,26 +155,51 @@ app móvil ni el contenido del RAG.
    wheels de SQLCipher para macOS/3.12 no están disponibles). En la Pi se
    instala `pysqlcipher3` con `libsqlcipher-dev` y `db/encryption.py`
    intercepta la apertura para aplicar `PRAGMA key`. Los repositorios son
-   agnósticos al backend. **Producción NO debe correr sin SQLCipher activo;
-   el arranque hace self-test y aborta si no está cifrado.**
+   agnósticos al backend. **Producción NO debe correr sin SQLCipher activo:**
+   `rako run` (el loop de voz real) y el lifespan de la API móvil llaman
+   `Database.require_encrypted()` fuera de `rako_env=dev` y abortan si la
+   base no está cifrada; `security_audit.py`/`factory_acceptance.py` marcan
+   la falta de `SQLITE_ENCRYPTION_KEY` como `fail` (no `warn`) fuera de dev.
 
 ### 4.2 Manejo de crisis
 1. **El LLM se BYPASSEA en crisis.** Cero generación. Respuestas pre-curadas
    por profesional, cargadas estáticamente.
-2. **Disparadores de crisis:**
-   - Palabras clave de ideación suicida o autolesión en transcripción.
-   - Vector emocional con valores extremos sostenidos.
-   - Botón pánico físico (Pi) o en app.
-   - Inactividad anormalmente prolongada tras interacciones de alta angustia.
+2. **Disparadores de crisis — activos hoy vs. diferidos:**
+   - **Activos en producción:** palabras clave de ideación suicida o
+     autolesión en la transcripción (voz o WhatsApp); botón pánico físico
+     (Pi) o en app/WhatsApp.
+   - **Diferidos (roadmap, NO viven en producción todavía):** vector
+     emocional con valores extremos sostenidos — requiere el modelo SER
+     local (ver §2), que no está implementado; inactividad anormalmente
+     prolongada tras interacciones de alta angustia — requiere que algo
+     calcule y persista `last_high_distress_at`, y hoy nada lo hace.
+     La lógica de detección para ambos ya existe en `safety/detector.py`
+     con tests unitarios completos, pero ningún llamador real
+     (`orchestrator/run.py`) le pasa datos vivos — **tener tests no es
+     estar en producción.** No asumir que estos dos triggers protegen al
+     usuario del dispositivo físico hoy.
 3. **Protocolo:** presencia (no soluciones) → activar contacto de confianza
    con consentimiento previo registrado → desplegar recursos (Salud Responde
-   600 360 7777, Línea Libre, etc.) → registro privado del evento.
+   600 360 7777, Línea Libre, etc.) → registro privado del evento
+   (`crisis_journal`, en cada punto de entrada: voz, botón pánico y
+   WhatsApp).
 4. **Lo que el sistema NO hace en crisis:** diagnosticar, prometer
    confidencialidad absoluta, reemplazar ayuda profesional, usar frases
    motivacionales. Siempre deriva.
 5. **El bypass de crisis debe estar testeado siempre.** Es la única ruta que
    no puede regresionar. CI debe fallar si el detector de crisis no atrapa los
-   casos del fixture.
+   casos del fixture — el job dedicado `safety-fixtures` corre
+   `scripts/checks.py safety`, que incluye no solo los tests puros del
+   detector sino también los de integración (`orchestrator`, `RunLoop`,
+   canal WhatsApp) que verifican que el veto de crisis está realmente
+   cableado antes de cualquier llamada al LLM, no solo testeado en
+   aislamiento.
+6. **Detección de palabras clave — limitaciones conocidas:** el matcher es
+   determinístico por substring (sin fuzzy matching, ver detector.py) para
+   mantenerlo auditable línea por línea; cubre jerga chilena común
+   ("rayarme") y algunos garbles típicos de STT, pero no tolerancia a
+   errores tipográficos arbitraria — eso queda diferido hasta tener datos
+   reales de campo que justifiquen el tradeoff de falsos positivos.
 
 ### 4.3 Funcionamiento offline
 - Sin internet, la Pi sigue operando con respuestas pre-curadas del RAG (sin
@@ -157,16 +219,25 @@ rako-pi/
 ├── .gitignore
 ├── src/
 │   ├── voice/                STT, TTS, wake-word
-│   ├── emotion/              SER local + análisis de patrones
-│   ├── orchestrator/         decisión central + prompts
+│   ├── emotion/              SER local (planeado) + análisis de patrones
+│   ├── orchestrator/         decisión central + prompts + RunLoop
 │   ├── rag/                  ChromaDB client + indexer + embeddings
 │   ├── hardware/             GPIO: LEDs, servos, sensores, botones, audio I/O
 │   ├── db/                   SQLite + SQLCipher (estado del usuario)
-│   ├── sync/                 cliente Firebase (solo metadatos)
-│   └── safety/               detector y protocolo de crisis (bypass LLM)
+│   ├── sync/                 cliente Firebase (diseñado, no conectado — §2)
+│   ├── safety/               detector y protocolo de crisis (bypass LLM)
+│   ├── channels/whatsapp/    canal WhatsApp Business Cloud API (§2, §4.1)
+│   ├── mobile/               API FastAPI local + páginas setup/factory
+│   ├── product/              provisioning, OTA, fleet, security audit, etc.
+│   └── productivity/         foco, coaching, mindfulness, progreso
 ├── tests/                    pytest
-└── scripts/                  reindex_rag, setup_pi, etc.
+└── scripts/                  reindex_rag, setup_pi, checks.py, etc.
 ```
+
+Este árbol creció mucho más allá del "cerebro mínimo" original — hay una
+capa completa de producto (factory rollout, fleet, WhatsApp) no prevista en
+la primera versión de este documento. Mantenerlo actualizado cuando se
+agreguen módulos nuevos.
 
 **Regla de capas.** `safety/` no depende de `orchestrator/`. `orchestrator/`
 puede consultar `safety/` y debe respetar su veredicto. `hardware/` no conoce
@@ -208,11 +279,15 @@ python scripts/reindex_rag.py
 
 ## 7. Flujos a recordar
 
-- **Voz E2E:** mic → SER local → STT cloud → orquestador (RAG + estado SQLite)
-  → Codex API → TTS cloud → parlante + LEDs + SQLite. Latencia objetivo 3–5s.
-- **Detección proactiva:** monitor de patrones cruza umbral → consulta RAG →
-  respuesta breve (con o sin LLM según umbral) → activa robot suavemente. Si
-  no responde, desescala.
+- **Voz E2E:** mic → STT cloud → orquestador (RAG + estado SQLite)
+  → LLM (OpenAI/Anthropic) → TTS cloud → parlante + LEDs + SQLite. Latencia
+  objetivo 3–5s. (El paso de SER local descrito originalmente aquí está
+  diferido — ver §2 y §4.2; hoy no hay lectura de emoción antes del STT.)
+- **Detección proactiva:** **pendiente** — no hay un monitor de patrones
+  corriendo hoy (`orchestrator/proactive.py` es un stub). El equivalente
+  actual son los "smart check-ins" de WhatsApp (`channels/whatsapp/scheduler.py`),
+  que sí están implementados y respetan una crisis reciente (no compiten con
+  el protocolo de seguridad).
 - **Botón pánico:** bypass total al LLM → protocolo curado → notifica contacto
   → muestra recursos. Latencia objetivo: contacto recibe alerta < 30 s.
 

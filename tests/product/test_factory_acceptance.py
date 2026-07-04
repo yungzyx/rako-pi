@@ -77,6 +77,36 @@ def test_factory_acceptance_passes_when_required_board_config_exists(db_conn) ->
     assert {item.status for item in checklist.items if item.category == "hardware"} == {"manual"}
 
 
+def test_factory_acceptance_includes_automatic_crisis_bypass_smoke_check(db_conn) -> None:
+    settings = Settings(_env_file=None, rako_env="dev")
+
+    checklist = build_factory_acceptance_checklist(Database(db_conn), settings)
+    smoke_item = next(item for item in checklist.items if item.name == "crisis bypass smoke test")
+
+    assert smoke_item.category == "safety"
+    assert smoke_item.status == "ok"
+
+
+def test_factory_acceptance_fails_prod_without_sqlite_encryption_key(db_conn) -> None:
+    # CLAUDE.md §4.1.6: producción no debe correr sin SQLCipher activo — un
+    # dispositivo no debería poder pasar el checklist de fábrica sin cifrado.
+    settings = Settings(
+        _env_file=None,
+        rako_env="prod",
+        rako_api_token="local-token",
+        openai_api_key="sk-test",
+        stt_provider="openai_whisper",
+        elevenlabs_api_key="el-test",
+        tts_provider="elevenlabs",
+    )
+
+    checklist = build_factory_acceptance_checklist(Database(db_conn), settings)
+    encryption_item = next(item for item in checklist.items if item.name == "sqlite encryption key")
+
+    assert encryption_item.status == "fail"
+    assert checklist.ready_for_handoff is False
+
+
 def test_factory_acceptance_fails_wellbeing_without_destination(db_conn) -> None:
     db = Database(db_conn)
     config = UserConfigService(db)

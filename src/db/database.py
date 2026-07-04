@@ -15,6 +15,7 @@ import sqlite3
 from typing import Self
 
 from db.connection import open_connection
+from db.connection import require_encrypted as _require_encrypted
 from db.journal import CrisisJournal
 from db.repositories import (
     AchievementRepository,
@@ -43,6 +44,13 @@ class Database:
         conn = open_connection(path, key)
         create_all(conn)
         return cls(conn)
+
+    def require_encrypted(self) -> None:
+        """Aborta (`EncryptionRequiredError`) si la conexión no está cifrada.
+
+        Llamar antes de aceptar tráfico productivo (CLAUDE.md §4.1.6).
+        """
+        _require_encrypted(self._conn)
 
     def purge_all_user_data(self) -> None:
         """Borra TODO el historial e identidad del usuario.

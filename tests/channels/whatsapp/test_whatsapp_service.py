@@ -90,6 +90,38 @@ def test_handle_inbound_manages_editable_memory(db_conn) -> None:
     assert "Todavía no tengo recuerdos" in listed_after_delete.response_text
 
 
+def test_handle_inbound_memory_list_excludes_sensitive_entries(db_conn) -> None:
+    # Justo el dato considerado demasiado sensible para el contexto del LLM
+    # (orchestrator/context.py) no debe terminar en los servidores de Meta.
+    db = Database(db_conn)
+    config = UserConfigService(db)
+    config.update_consent({"sensitive_memory_enabled": True})
+    config.add_memory(text="Prefiero bloques de 25 minutos", sensitivity="normal")
+    config.add_memory(text="Me cuesta pedir ayuda cuando estoy mal", sensitivity="sensitive")
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    listed = service.handle_inbound(from_number="+56912345678", text="mis recuerdos")
+
+    assert listed.action == "MEMORY_LIST"
+    assert "Prefiero bloques de 25 minutos" in listed.response_text
+    assert "Me cuesta pedir ayuda" not in listed.response_text
+    assert "1 recuerdo" in listed.response_text
+
+
+def test_handle_inbound_memory_list_all_sensitive_shows_only_count(db_conn) -> None:
+    db = Database(db_conn)
+    config = UserConfigService(db)
+    config.update_consent({"sensitive_memory_enabled": True})
+    config.add_memory(text="Me cuesta pedir ayuda cuando estoy mal", sensitivity="sensitive")
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    listed = service.handle_inbound(from_number="+56912345678", text="mis recuerdos")
+
+    assert listed.action == "MEMORY_LIST"
+    assert "Me cuesta pedir ayuda" not in listed.response_text
+    assert "1 recuerdo" in listed.response_text
+
+
 def test_handle_inbound_starts_focus_from_whatsapp_text(db_conn) -> None:
     db = Database(db_conn)
     client = InMemoryWhatsAppClient()
@@ -122,6 +154,56 @@ def test_handle_inbound_crisis_uses_curated_response(db_conn) -> None:
     assert result.crisis is True
     assert "No tienes que estar solo" in result.response_text
     assert client.sent[-1].kind == "CRISIS"
+
+
+def test_handle_inbound_crisis_records_journal_entry(db_conn) -> None:
+    db = Database(db_conn)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    service.handle_inbound(
+        from_number="+56912345678",
+        text="ya no quiero vivir",
+        now=datetime(2026, 6, 1, 16, 0, tzinfo=UTC),
+    )
+
+    recorded = db.crisis_journal.list_recent()
+    assert len(recorded) == 1
+
+
+def test_handle_inbound_allows_when_no_number_paired_yet(db_conn) -> None:
+    # Onboarding incompleto (sin whatsapp_number configurado aún) no debe
+    # bloquear el flujo — solo se autentica una vez hay un número emparejado.
+    db = Database(db_conn)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    result = service.handle_inbound(from_number="+56999999999", text="memoria")
+
+    assert result.action != "UNAUTHORIZED"
+
+
+def test_handle_inbound_rejects_message_from_unpaired_number(db_conn) -> None:
+    db = Database(db_conn)
+    _enable_whatsapp(db)  # empareja +56912345678
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    result = service.handle_inbound(from_number="+56900000000", text="mis datos")
+
+    assert result.action == "UNAUTHORIZED"
+
+
+def test_handle_inbound_crisis_response_bypasses_sender_check(db_conn) -> None:
+    db = Database(db_conn)
+    _enable_whatsapp(db)  # empareja +56912345678
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    result = service.handle_inbound(
+        from_number="+56900000000",
+        text="ya no quiero vivir",
+        now=datetime(2026, 6, 1, 16, 0, tzinfo=UTC),
+    )
+
+    assert result.action == "CRISIS"
+    assert result.crisis is True
 
 
 def test_send_progress_report_uses_real_task_progress(db_conn) -> None:

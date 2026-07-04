@@ -8,11 +8,16 @@ checks pass and a human has completed the manual hardware/UX checklist.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from typing import Literal
 
 from config import Settings
 from db.database import Database
 from product.user_config import UserConfigService
+from safety.detector import detect_crisis
+from safety.types import CrisisInput
+
+_CRISIS_SMOKE_PHRASES: tuple[str, ...] = ("quiero morir", "no puedo más")
 
 AcceptanceStatus = Literal["ok", "warn", "fail", "manual"]
 
@@ -102,7 +107,9 @@ def build_factory_acceptance_checklist(
         _item(
             "secrets",
             "sqlite encryption key",
-            "ok" if settings.sqlite_encryption_key else "warn",
+            "ok"
+            if settings.sqlite_encryption_key
+            else ("warn" if settings.rako_env == "dev" else "fail"),
             "configured" if settings.sqlite_encryption_key else "missing SQLITE_ENCRYPTION_KEY",
         )
     )
@@ -130,6 +137,7 @@ def build_factory_acceptance_checklist(
             settings.tts_provider,
         )
     )
+    items.append(_crisis_bypass_smoke_check())
 
     items.extend(_manual_items())
 
@@ -194,6 +202,40 @@ def _manual_items() -> tuple[AcceptanceItem, ...]:
             "manual",
             "run demo crisis phrase and confirm curated response, no LLM improvisation",
         ),
+    )
+
+
+def _crisis_bypass_smoke_check() -> AcceptanceItem:
+    """Confirma que `detect_crisis` sigue atrapando frases fixture conocidas.
+
+    No reemplaza el ítem manual de hardware/voz — esto solo verifica que la
+    lógica pura no regresionó, sin necesidad de un humano ni de un
+    dispositivo físico para bloquear un handoff de fábrica.
+    """
+    now = datetime.now(UTC)
+    for phrase in _CRISIS_SMOKE_PHRASES:
+        signal = detect_crisis(
+            CrisisInput(
+                transcript=phrase,
+                emotion_history=(),
+                panic_button=None,
+                last_high_distress_at=None,
+                last_interaction_at=None,
+                now=now,
+            )
+        )
+        if not signal.should_bypass_llm:
+            return _item(
+                "safety",
+                "crisis bypass smoke test",
+                "fail",
+                f"'{phrase}' did not trigger should_bypass_llm",
+            )
+    return _item(
+        "safety",
+        "crisis bypass smoke test",
+        "ok",
+        f"{len(_CRISIS_SMOKE_PHRASES)} fixture phrase(s) bypass the LLM as expected",
     )
 
 
