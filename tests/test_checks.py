@@ -56,6 +56,55 @@ def test_hygiene_fails_when_required_gitignore_pattern_is_missing(tmp_path: Path
     assert violations == [".gitignore missing required pattern 'secrets/'"]
 
 
+def test_hygiene_fails_on_oversized_file(tmp_path: Path) -> None:
+    checks = _load_checks_module()
+    src = tmp_path / "src"
+    src.mkdir()
+    big_file = src / "too_big.py"
+    big_file.write_text("\n".join(f"x{i} = {i}" for i in range(checks.MAX_FILE_LINES + 1)) + "\n")
+
+    violations = checks._find_file_size_violations(tmp_path)
+
+    assert len(violations) == 1
+    assert "too_big.py" in violations[0]
+
+
+def test_hygiene_ignores_grandfathered_oversized_file(tmp_path: Path) -> None:
+    checks = _load_checks_module()
+    rel_path = next(iter(checks.GRANDFATHERED_OVERSIZED_FILES))
+    grandfathered = tmp_path / rel_path
+    grandfathered.parent.mkdir(parents=True)
+    grandfathered.write_text(
+        "\n".join(f"x{i} = {i}" for i in range(checks.MAX_FILE_LINES + 1)) + "\n"
+    )
+
+    assert checks._find_file_size_violations(tmp_path) == []
+
+
+def test_hygiene_fails_on_long_function(tmp_path: Path) -> None:
+    checks = _load_checks_module()
+    src = tmp_path / "src"
+    src.mkdir()
+    body = "\n".join(f"    x{i} = {i}" for i in range(checks.MAX_FUNCTION_LINES + 5))
+    (src / "long_function.py").write_text(f"def too_long():\n{body}\n")
+
+    violations = checks._find_function_length_violations(tmp_path)
+
+    assert len(violations) == 1
+    assert "too_long" in violations[0]
+
+
+def test_hygiene_ignores_grandfathered_long_function(tmp_path: Path) -> None:
+    checks = _load_checks_module()
+    rel_path, function_name = next(iter(checks.GRANDFATHERED_LONG_FUNCTIONS))
+    grandfathered = tmp_path / rel_path
+    grandfathered.parent.mkdir(parents=True, exist_ok=True)
+    body = "\n".join(f"    x{i} = {i}" for i in range(checks.MAX_FUNCTION_LINES + 5))
+    grandfathered.write_text(f"def {function_name}():\n{body}\n")
+
+    assert checks._find_function_length_violations(tmp_path) == []
+
+
 def test_hygiene_passes_for_clean_repo_shape(tmp_path: Path) -> None:
     checks = _load_checks_module()
     for target in checks.HYGIENE_TARGETS:
