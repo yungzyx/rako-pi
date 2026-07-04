@@ -1,36 +1,63 @@
 # rako-pi
 
-Cerebro de **Rako** sobre Raspberry Pi 4. Acompañamiento emocional para
-estudiantes universitarios con patrones de evasión post-trauma.
+[![CI](https://github.com/yungzyx/rako-pi/actions/workflows/ci.yml/badge.svg)](https://github.com/yungzyx/rako-pi/actions/workflows/ci.yml)
+
+Cerebro de **Rako** sobre Raspberry Pi 4: un robot mapache de acompañamiento
+emocional para estudiantes universitarios con patrones de evasión
+post-trauma. Detecta señales de bloqueo, responde con técnicas curadas por
+profesionales (RAG), acompaña con presencia física (ojos OLED, voz cálida) y
+deriva a ayuda profesional cuando corresponde.
 
 > Fuente de verdad técnica: [`../docs/Arquitectura_Tecnica.md`](../docs/Arquitectura_Tecnica.md).
-> Brief para Claude / agentes: [`CLAUDE.md`](./CLAUDE.md).
+> Brief para agentes de código: [`CLAUDE.md`](./CLAUDE.md).
+> Instalación en una Pi nueva: [`INSTALL.md`](./INSTALL.md).
 
-Este repo es **solo el cerebro** sobre la Pi. La app móvil vive en
-`../rako-app` (Flutter). El contenido del RAG vive en `../Rako-kb` (vault
-Obsidian). Los servicios cloud (Anthropic, Google Speech, Firebase) son
-externos.
+Este repo es **solo el cerebro** que corre en la Pi. La app móvil vive en
+`../rako-app` (Flutter) y el contenido del RAG en `../Rako-kb` (vault de
+Obsidian).
 
 ---
 
-## Arquitectura en una línea
+## Arquitectura
 
-`mic → SER local → STT cloud → orquestador (RAG + SQLite) → Claude → TTS cloud
-→ parlante + LEDs/OLED + SQLite + sync Firebase`. Detalle completo en el
-[doc de arquitectura](../docs/Arquitectura_Tecnica.md).
+Pipeline de un turno de voz (objetivo 3–5 s):
 
-Hardware actual de la Pi: Raspberry Pi 4 8GB + ReSpeaker 2-Mics Pi HAT + OLED I2C. Por ahora no hay speaker fijo; se usará salida de audio a parlante externo por cable cuando esté conectado. Ver [`HARDWARE.md`](./HARDWARE.md).
+```
+botón/mic → STT cloud → seguridad (crisis → bypass total del LLM)
+         → triage (derivación bienestar / tono / normal)
+         → orquestador (RAG + estado SQLite cifrado)
+         → LLM → TTS cloud → parlante + ojos OLED + SQLite
+```
+
+Servicios cloud reales (configurables por `.env`):
+
+| Rol | Primario | Fallback |
+| --- | --- | --- |
+| LLM | OpenAI `gpt-4o-mini` | Anthropic Claude |
+| STT | Google Cloud Speech | OpenAI Whisper (opción) |
+| TTS | ElevenLabs | Google Cloud TTS |
+| Mensajería | WhatsApp Business Cloud API (Meta) | — |
+| Backend | Firebase (diseñado, **no conectado aún** — cliente fake) | — |
+
+En crisis el LLM se **bypassea por completo**: solo respuestas pre-curadas
+por profesionales, recursos de ayuda (Salud Responde 600 360 7777, Línea
+Libre) y registro privado local. El análisis de emoción local (SER) está
+diferido — hoy no corre en el dispositivo.
 
 ```
 src/
-├── voice/         STT, TTS, wake-word
-├── emotion/       SER local + análisis de patrones
-├── orchestrator/  decisión central + prompts
-├── rag/           ChromaDB + indexer + embeddings
-├── hardware/      GPIO: LEDs, servos, sensores, botones, audio
-├── db/            SQLite + SQLCipher
-├── sync/          cliente Firebase (solo metadatos)
-└── safety/        detección y protocolo de crisis (bypass LLM)
+├── voice/          STT, TTS, wake-word
+├── emotion/        análisis de patrones (SER local diferido)
+├── orchestrator/   decisión central, prompts, RunLoop, memoria conversacional
+├── rag/            ChromaDB + indexer + embeddings
+├── hardware/       GPIO: LEDs, botones, OLED, audio I/O
+├── db/             SQLite + SQLCipher (estado del usuario, nunca sale de la Pi)
+├── sync/           cliente Firebase (sanitizer + allowlist; backend pendiente)
+├── safety/         detector de crisis, triage graduado, protocolo (bypass LLM)
+├── channels/       canal WhatsApp Business Cloud API
+├── mobile/         API FastAPI local + páginas de setup/factory
+├── product/        provisioning, factory, OTA, fleet, auditoría de seguridad
+└── productivity/   foco, coaching, mindfulness, progreso
 ```
 
 ---
@@ -43,308 +70,174 @@ src/
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # stack liviano: tests + lint + API
 
 cp .env.example .env
-# rellenar las credenciales (Anthropic, Google, Firebase) y la clave de cifrado:
-#   openssl rand -hex 32
+# rellenar credenciales; generar clave de cifrado con: openssl rand -hex 32
 ```
 
-> En mac, `RPi.GPIO` y `adafruit-*` se saltan automáticamente por el marker de
-> arquitectura. Hardware se mockea. SQLCipher requiere instalar `sqlcipher`
-> aparte (`brew install sqlcipher` en macOS).
+`requirements-dev.txt` es el mismo set que usa CI (sin torch ni SDKs de
+audio). Para el runtime completo de la Pi está `requirements-pi-lite.txt`;
+`requirements.txt` conserva el stack pesado experimental (SER local).
+Hardware y APIs cloud se mockean en tests — la suite corre sin credenciales.
 
-### Sobre la Raspberry Pi 4
+### Raspberry Pi (dispositivo real)
 
-```bash
-sudo apt update && sudo apt install -y \
-  python3.12 python3.12-venv python3-pip \
-  sqlcipher libsqlcipher-dev \
-  portaudio19-dev libsndfile1 \
-  ffmpeg
-
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-Provisionar GPIO, audio I/O y servicios cloud según `.env.example`.
-Para preparar varias placas, usa primero `/factory/provisioning-plan` y
-`rako-doctor --factory`; ambos muestran bloqueos antes de clonar o entregar una
-unidad.
-
-### Ejecutar Rako físico desde terminal
+Guía completa paso a paso en [`INSTALL.md`](./INSTALL.md). Versión corta:
 
 ```bash
-rako-chat
-```
-
-Ese comando aplica el perfil de audio del ReSpeaker, corre un diagnóstico rápido,
-enciende los ojos OLED y deja escuchando el botón del ReSpeaker. Para pasar
-argumentos al listener:
-
-```bash
-rako-chat --no-playback
-rako-chat --capture-seconds 7 --audio-device plughw:seeed2micvoicec,0
-rako-chat --cue-volume 0.14 --playback-warmup-seconds 0.15
-```
-
-Si quieres apagar OLED para depurar:
-
-```bash
-RAKO_OLED=0 rako-chat --no-playback
-```
-
-### Diagnóstico rápido de producto
-
-```bash
-rako-doctor
-```
-
-Chequea Python, `.env`, comandos de audio/GPIO, ReSpeaker, STT, TTS y ruta de
-SQLite. Para pruebas físicas opcionales:
-
-```bash
-rako-doctor --factory
-rako-doctor --full
-rako-doctor --calibrate --full
-```
-
-Si `rako-doctor` dice que falta `dtoverlay=seeed-2mic-voicecard` o no aparece
-`seeed2micvoicec` en ALSA, activa el overlay de arranque y reinicia:
-
-```bash
-sudo ./scripts/rako-fix-audio-boot
-sudo reboot
-```
-
-Después del reinicio:
-
-```bash
+git clone https://github.com/yungzyx/rako-pi.git ~/rako-pi
 cd ~/rako-pi
-./scripts/rako-doctor --full
+./scripts/setup_pi.sh      # apt + venv + deps + .env + clave SQLCipher + RAG
+./scripts/rako-doctor      # salud: audio, I2C/OLED, credenciales, BD
+.venv/bin/python scripts/checks.py safety   # bypass de crisis — no negociable
 ```
 
-`--factory` agrega el checklist de entrega de una placa configurada: perfil,
-WiFi, consentimiento, WhatsApp, bienestar, credenciales, seguridad local y los
-gates manuales de micrófono, parlante, OLED, botón, foco y crisis.
+---
+
+## Uso en el dispositivo
+
+### Conversación por botón (flujo principal)
+
+```bash
+./scripts/rako-chat
+```
+
+Aplica el perfil de audio del ReSpeaker, corre `rako-doctor`, enciende los
+ojos OLED y queda escuchando el botón. Argumentos útiles:
+
+```bash
+./scripts/rako-chat --no-playback
+./scripts/rako-chat --capture-seconds 7 --audio-device plughw:seeed2micvoicec,0
+RAKO_OLED=0 ./scripts/rako-chat --no-playback   # sin OLED, para depurar
+```
+
+### Diagnóstico
+
+```bash
+./scripts/rako-doctor              # chequeo estándar
+./scripts/rako-doctor --full       # incluye pruebas físicas opcionales
+./scripts/rako-doctor --factory    # checklist de entrega de una placa
+```
+
+Si falta el overlay del ReSpeaker (`seeed2micvoicec` no aparece en ALSA):
+
+```bash
+sudo ./scripts/rako-fix-audio-boot && sudo reboot
+```
 
 ### Foco con countdown en OLED
 
-Desde `rako-chat`, frases como estas crean un bloque de foco y lanzan un
-countdown visual en la OLED:
+Desde `rako-chat`, frases como estas crean un bloque de foco con countdown
+visual:
 
 ```text
 Rako, voy a estudiar cálculo 30 minutos
 Rako, hazme un pomodoro de 10 minutos para leer papers
 ```
 
-Al terminar, Rako avisa por voz y sugiere una pausa breve. Para probar el timer
-sin esperar minutos reales:
+Prueba rápida sin esperar minutos reales:
 
 ```bash
-PYTHONPATH=src python scripts/focus_countdown.py --title "estudiar cálculo" --minutes 1 --seconds 5 --no-oled --no-playback
+PYTHONPATH=src python scripts/focus_countdown.py --title "estudiar cálculo" \
+  --minutes 1 --seconds 5 --no-oled --no-playback
 ```
 
-### Música chill local
+### Música ambiente y demo
 
 ```text
-Rako, pon música chill
+Rako, pon música chill      # ambiente local generado, sin Spotify/YouTube
 Rako, para la música
 ```
 
-Por ahora es un ambiente local generado por Rako, sin Spotify/YouTube.
-
-### Demo guiada sin botón
-
 ```bash
-rako-demo
+./scripts/rako-demo         # sesión guiada: ojos + sonido + voz, sin botón
+./scripts/rako-demo-mode    # guion y comandos para demos sin datos reales
+./scripts/rako.sh demo-crisis-panic   # protocolo de pánico curado (sin LLM)
 ```
 
-Muestra ojos, sonidos y una respuesta hablada simulando una sesión de foco. Útil
-para verificar la experiencia completa sin depender del botón ni de una frase
-perfecta.
+### Arranque automático (systemd)
 
-### Arranque automático al enchufar/prender la Pi
-
-Las unidades en `systemd/` son plantillas (no se copian a mano: usan tokens
-`__RAKO_USER__`/`__RAKO_DIR__`). El instalador las renderiza para el usuario
-y la ruta reales de esta instalación:
+Las unidades en `systemd/` son plantillas (`__RAKO_USER__`/`__RAKO_DIR__`);
+no se copian a mano. El instalador las renderiza para este usuario y ruta:
 
 ```bash
-./scripts/install_systemd.sh          # rako-chat (botón+OLED) + rako-api
+./scripts/install_systemd.sh              # rako-chat (botón+OLED) + rako-api
+./scripts/install_systemd.sh --no-enable rako-api   # instalar sin arrancar
 journalctl -u rako-chat -f
 ```
 
-Conviene probar audio + OLED manualmente antes; con `--no-enable` la unidad
-queda instalada pero no arranca. Para detener/desactivar:
+`rako.service` (loop `main run`) y `rako-chat.service` declaran `Conflicts=`
+entre sí: compiten por el botón GPIO y el audio, systemd solo permite uno.
+
+---
+
+## API local para la app móvil
 
 ```bash
-sudo systemctl disable --now rako-chat.service
+./scripts/rako-api          # uvicorn en 127.0.0.1:8765
 ```
 
-### API local para app móvil
-
-La app móvil puede hablar con la Pi por la red local. El primer contrato expone
-estado y foco:
+La documentación interactiva vive en `http://127.0.0.1:8765/docs` (OpenAPI).
+Para exportar el contrato completo (por ejemplo, para generar el cliente
+Flutter):
 
 ```bash
-rako-api
+.venv/bin/python scripts/export_openapi.py
 ```
 
-Endpoints iniciales:
+Grupos de endpoints (≈50 rutas, detalle en `/docs`):
 
-```text
-GET  /health
-GET  /setup
-GET  /factory
-GET  /status
-GET  /setup/flow
-POST /setup/first-run  {"profile": {...}, "consent": {...}, "channels": {...}, "memories": []}
-POST /setup/wifi       {"ssid": "Casa", "password": "...", "apply": false}
-GET  /setup/hotspot/plan
-POST /setup/hotspot/start {"password": "temporal...", "apply": false}
-POST /setup/hotspot/stop  {"apply": false}
-GET  /setup/qr
-GET  /setup/qr.svg
-GET  /factory/report
-GET  /factory/provisioning-plan
-GET  /factory/install-plan
-POST /factory/install-plan/apply {"step": "systemd api", "apply": false}
-GET  /fleet/snapshot
-GET  /observability
-GET  /security/audit
-GET  /support/bundle
-GET  /demo-mode
-GET  /pilot/plan
-GET  /hardware/checks
-POST /hardware/checks {"name": "microphone", "status": "pass", "detail": "clear"}
-GET  /update/status
-GET  /update/plan
-POST /update/apply {"artifact_path": "/tmp/rako.tar.gz", "apply": false}
-GET  /device/identity
-PATCH /device/identity {"serial": "SN-001", "lot": "pilot-a", "assigned_user_label": "nico@udd"}
-POST /device/heartbeat {"status": "ok", "detail": "factory bench"}
-POST /device/reset-user
-GET  /onboarding/status
-GET  /coach/plan
-GET  /tasks?pending_only=true&limit=20
-GET  /progress/today
-GET  /progress/week
-GET  /user/profile
-PATCH /user/profile     {"preferred_name": "Nico", "university": "UDD"}
-GET  /user/consent
-PATCH /user/consent     {"whatsapp_enabled": true}
-GET  /user/channels
-PATCH /user/channels    {"wifi_ssid": "Casa", "whatsapp_number": "+569..."}
-GET  /user/memory
-POST /user/memory       {"text": "Prefiero bloques de 25 minutos", "category": "routine"}
-DELETE /user/memory/{id}
-GET  /user/export
-POST /user/delete-all
-POST /focus/start   {"title": "cálculo", "minutes": 30}
-POST /focus/cancel
-POST /whatsapp/checkin   {"to": "+56912345678"}
-POST /whatsapp/progress  {"to": "+56912345678", "period": "today"}
-POST /whatsapp/actions   {"to": "+56912345678"}
-GET  /whatsapp/templates
-POST /whatsapp/inbound   {"from_number": "+56912345678", "text": "estoy bien"}
-GET  /whatsapp/webhook
-POST /whatsapp/webhook
-```
+| Grupo | Qué cubre |
+| --- | --- |
+| `core` | `/health`, `/status`, `/pairing/info` (datos públicos de emparejamiento) |
+| `setup` | primer encendido: `/setup`, `/setup/flow`, `/setup/first-run`, WiFi, hotspot, QR |
+| `user` | perfil, consentimiento, canales, memoria editable, export, borrado total |
+| `productividad` | tareas, `/focus/start`, progreso diario/semanal, `/coach/plan` |
+| `factory` | reporte, provisioning-plan, install-plan (dry-run por defecto), checks de hardware |
+| `device` | identidad de placa, heartbeat, reset de usuario, OTA (`/update/*`) |
+| `whatsapp` | envíos internos, plantillas, webhook de Meta (verificación + firma) |
+| `observabilidad` | `/observability`, `/security/audit`, `/support/bundle`, `/fleet/snapshot` |
 
-`/setup/flow` está pensado para primer encendido o app de configuración: entrega
-pasos, porcentaje de avance, próximo bloqueo, notas de privacidad y qué partes
-son opcionales o manuales antes de asignar una placa.
-`/setup` muestra una página local autocontenida para configurar perfil,
-consentimiento, WhatsApp, WiFi SSID, memoria inicial y revisar checks de
-hardware/fábrica desde el celular o notebook del usuario. Si expones el API en
-la red local, usa `RAKO_API_TOKEN` y escribe el token en la pantalla de setup.
-La misma página incluye “setup completo”, que llama a `/setup/first-run` para
-guardar perfil, consentimiento, canales, memoria inicial e identidad de placa en
-una sola operación. Si se entrega contraseña WiFi, solo se usa para conectar con
-`nmcli` cuando `apply_wifi=true` y `RAKO_WIFI_APPLY_ENABLED=1`; no se persiste.
-`/setup/wifi` puede guardar el SSID del usuario y, si `apply=true`, llamar a
-NetworkManager con `nmcli`; por seguridad solo aplica cambios reales cuando
-`RAKO_WIFI_APPLY_ENABLED=1`. La contraseña WiFi no se guarda en SQLite.
-`/setup/hotspot/plan` genera el SSID de primer encendido y los comandos seguros
-para levantar un hotspot de configuración. `/setup/hotspot/start` y
-`/setup/hotspot/stop` pueden ejecutar `nmcli`, pero solo si envías `apply=true`
-y `RAKO_SETUP_HOTSPOT_ENABLED=1`; la clave temporal no se guarda y se redacta
-en respuestas. `/setup/qr` entrega el payload estable de setup sin secretos y
-`/setup/qr.svg` una tarjeta imprimible para pegar/entregar con cada unidad.
+Seguridad de la API:
 
-El inbound de WhatsApp también entiende memoria editable con frases como
-`recuerda que prefiero bloques de 25 minutos`, `qué sabes de mí` y
-`olvida bloques de 25`. En el menú de acciones, la opción `5` devuelve un plan
-rápido de estudio con bloque sugerido sin exponer títulos privados por WhatsApp;
-la opción `6` muestra configuración. También entiende `pausar mensajes`,
-`reanudar mensajes`, `exportar mis datos` y `borrar mis datos` con confirmación.
-`/user/export` y `/user/delete-all` cubren perfil, consentimiento, canales y
-memoria editable; no borran tareas ni logs operacionales.
-`/factory/report` resume setup, checklist de entrega y bloqueos para producción.
-`/factory/provisioning-plan` junta identidad de placa, seguridad local, hotspot,
-WhatsApp, OTA y checklist de aceptación para decidir si una imagen está lista
-para clonar o si una unidad está lista para handoff.
-`/factory/install-plan` devuelve comandos dry-run para preparar una Pi nueva:
-paquetes, venv, systemd, audio y seguridad de `.env`.
-`/factory/install-plan/apply` ejecuta el mismo plan solo cuando `apply=true`;
-por defecto responde en dry-run. Los pasos manuales se saltan y los bloqueados
-impiden aplicar, para evitar tocar una placa incompleta por accidente.
-`/fleet/snapshot` resume una placa en formato útil para un dashboard central:
-identidad, asignación, heartbeat, hardware, seguridad, factory, observabilidad y
-versión. `/observability` muestra estado resumido de servicios, cola sync,
-último error y archivos de log conocidos para diagnóstico rápido.
-`/security/audit` revisa token local, cifrado SQLite, WhatsApp Cloud, OTA y
-hotspot. `/hardware/checks` permite registrar validaciones físicas reales de
-micrófono, parlante, OLED, botón, foco y bypass de crisis.
-`/support/bundle` entrega un JSON sanitizado para soporte remoto sin API keys,
-contraseñas, transcripciones ni memoria editable. También se puede generar con
-`./scripts/rako-support-bundle --output /tmp/rako-support.json`.
-`/demo-mode` entrega un guion y comandos seguros para mostrar Rako sin datos
-reales. También puedes verlo con `./scripts/rako-demo-mode`.
-`/pilot/plan` resume el piloto recomendado de 14 días con 3-5 usuarios, métricas
-de éxito y prioridades antes de producir varias unidades.
-`/factory` muestra un panel local para revisar una placa: entrega, setup,
-bloqueos, checks manuales, identidad, último heartbeat, servicios, último error,
-versión y build.
-`/device/identity` permite registrar serial, lote y asignación visible de una
-placa. `/device/heartbeat` registra el último pulso local. `/device/reset-user`
-borra datos del alumno anterior y tareas/estado local, pero preserva identidad
-de placa y heartbeat para poder reasignarla sin mezclar memorias.
-`/update/status` reporta versión/canal/build. `/update/plan` evalúa un manifest
-OTA local configurado con `RAKO_UPDATE_MANIFEST_PATH`, valida canal, versión y
-SHA-256 del artefacto, y devuelve los pasos de instalación segura.
-`/update/apply` verifica un artefacto local contra el manifest cuando
-`RAKO_UPDATE_APPLY_ENABLED=1` y `apply=true`; el cambio atómico de release y
-rollback siguen siendo manuales hasta tener releases firmadas end-to-end.
+- Escucha solo en `127.0.0.1:8765` por defecto (`RAKO_API_HOST`/`RAKO_API_PORT`).
+- Con `RAKO_API_TOKEN` definido, todo excepto `/health` y `/pairing/info`
+  exige `Authorization: Bearer <token>`; fuera de `dev` el token es
+  **obligatorio**.
+- Fuera de `dev`, el arranque aborta si la base SQLite no está cifrada
+  (gate de SQLCipher en el lifespan).
+- `POST /user/delete-all` ejecuta **borrado total real**: config de
+  producto, tareas, interacciones, estados de ánimo, logros y journal de
+  crisis (`Database.purge_all_user_data()`), con efecto inmediato.
+- La contraseña WiFi nunca se persiste; `nmcli` solo se ejecuta con
+  `apply=true` + `RAKO_WIFI_APPLY_ENABLED=1` (ídem hotspot con
+  `RAKO_SETUP_HOTSPOT_ENABLED=1`).
 
-Ejemplo de manifest:
+---
 
-```json
-{
-  "version": "0.2.0",
-  "channel": "stable",
-  "artifact_url": "https://example.com/rako-0.2.0.tar.gz",
-  "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "rollback_version": "0.1.0",
-  "minimum_version": "0.1.0",
-  "release_notes": "Mejoras de producto"
-}
-```
+## Canal WhatsApp
 
-Por defecto escucha en `127.0.0.1:8765`. Puedes cambiarlo con
-`RAKO_API_HOST` y `RAKO_API_PORT`. Si defines `RAKO_API_TOKEN`, todos los
-endpoints excepto `/health` requieren `Authorization: Bearer <token>`; en
-`staging`/`prod`, el token es obligatorio.
-La integración WhatsApp actual es un MVP local con cliente en memoria: permite
-probar check-ins, respuestas de ánimo, menú de acciones, reportes de progreso,
-inicio de foco y bypass de crisis antes de conectar WhatsApp Cloud API real.
-Los mensajes salientes por WhatsApp requieren opt-in local en `/user/consent`
-y número configurado en `/user/channels`. El SSID WiFi se puede guardar para
-diagnóstico/onboarding, pero la contraseña WiFi no se persiste en SQLite.
+Canal de producto completo sobre WhatsApp Business Cloud API
+(`src/channels/whatsapp/`): check-ins, menú de acciones, reportes de
+progreso con conteos (nunca títulos de tareas), memoria editable
+(`recuerda que…`, `qué sabes de mí`, `olvida…`), configuración, pausa de
+mensajes, export y borrado con confirmación.
 
-Para usar WhatsApp Cloud API real:
+Reglas de privacidad del canal (detalle en [`CLAUDE.md`](./CLAUDE.md) §4.1):
+
+- Solo memorias `sensitivity=normal` salen por WhatsApp; de las sensibles
+  solo se informa la cantidad.
+- El remitente debe coincidir con el número emparejado antes de exponer
+  datos o ejecutar borrado. Un número no emparejado solo puede recibir el
+  protocolo de crisis o una respuesta genérica.
+- El webhook de Meta se valida por firma HMAC (`X-Hub-Signature-256`)
+  antes de procesar cualquier payload; fuera de `dev`,
+  `WHATSAPP_CLOUD_APP_SECRET` es obligatorio.
+- La detección de crisis corre **antes** que cualquier otra rama y usa el
+  mismo detector curado que la voz.
+
+Configuración (sin credenciales usa un cliente en memoria para desarrollo):
 
 ```bash
 WHATSAPP_CLIENT=cloud
@@ -354,159 +247,126 @@ WHATSAPP_CLOUD_VERIFY_TOKEN=...
 WHATSAPP_CLOUD_APP_SECRET=...
 ```
 
-`GET /whatsapp/webhook` sirve para la verificación de Meta. `POST
-/whatsapp/webhook` procesa mensajes de texto entrantes; en `staging`/`prod`
-exige firma `X-Hub-Signature-256` cuando `WHATSAPP_CLOUD_APP_SECRET` está
-configurado.
-`/whatsapp/templates` lista plantillas privacy-safe listas para enviar a Meta
-antes de habilitar mensajes proactivos fuera de la ventana de 24 horas.
-
 ### Smart check-ins
 
-Rako puede evaluar si corresponde enviar un check-in proactivo sin molestar al
-usuario. El scheduler respeta consentimiento, horario silencioso, intervalo
-mínimo y actividad reciente.
+El scheduler decide si corresponde un check-in proactivo respetando
+consentimiento, horario silencioso, intervalo mínimo, actividad reciente y
+**crisis recientes** (no compite con el protocolo de seguridad):
 
 ```bash
 ./scripts/rako.sh smart-checkin --dry-run
 ./scripts/rako.sh smart-checkin
 ```
 
-Para habilitarlo en una placa, el usuario debe tener `whatsapp_enabled=true`,
-`proactive_messages_enabled=true` y `whatsapp_number` configurado. Si además
-activa `progress_reports_enabled=true`, Rako puede celebrar progreso con conteos
-seguros; no envía títulos de tareas por WhatsApp.
+Requiere `whatsapp_enabled=true`, `proactive_messages_enabled=true` y
+`whatsapp_number` configurado.
 
-### Provisionar placas nuevas
+---
 
-Para preparar valores por placa, QR/tarjeta de setup y checklist post-flash:
+## Fábrica, provisioning y flota
 
-```bash
-./scripts/rako-factory-image \
-  --serial "SN-001" \
-  --lot "pilot-a" \
-  --write-env /tmp/rako-unit.env \
-  --write-card-svg /tmp/rako-setup-card.svg
-```
-
-Por defecto imprime valores y no toca `.env`; `--write-env` debe usarse solo en
-la placa objetivo o en el pipeline de imagen. El SVG no incluye token ni clave
-WiFi.
-
-Después de `scripts/setup_pi.sh`, cada placa puede quedar asignada a un usuario
-con configuración local reproducible:
+Flujo completo de instalación y QA por placa: [`PRODUCTION_PLAN.md`](./PRODUCTION_PLAN.md).
 
 ```bash
-./scripts/rako-first-run \
-  --name "Nico" \
-  --university "UDD" \
-  --program "Ingeniería" \
-  --wifi-ssid "Casa" \
-  --whatsapp-number "+56912345678" \
-  --enable-whatsapp \
-  --enable-progress \
-  --serial "SN-001" \
-  --lot "pilot-a" \
-  --assigned-user-label "nico@udd" \
-  --memory "Prefiere bloques de foco de 25 minutos"
-```
+# Valores por placa + QR/tarjeta de setup (no toca .env sin --write-env)
+./scripts/rako-factory-image --serial "SN-001" --lot "pilot-a" \
+  --write-env /tmp/rako-unit.env --write-card-svg /tmp/rako-setup-card.svg
 
-`rako-first-run` es el camino recomendado para entrega: agrupa perfil,
-consentimiento, canales, memoria inicial e identidad de placa. Si necesitas
-solo actualizar datos de usuario sin tocar identidad, puedes usar el comando
-granular:
+# Entrega recomendada: perfil + consentimiento + canales + identidad en una operación
+./scripts/rako-first-run --name "Nico" --university "UDD" \
+  --wifi-ssid "Casa" --whatsapp-number "+56912345678" \
+  --enable-whatsapp --enable-progress --serial "SN-001" --lot "pilot-a"
 
-```bash
-./scripts/rako-provision \
-  --name "Nico" \
-  --university "UDD" \
-  --program "Ingeniería" \
-  --wifi-ssid "Casa" \
-  --whatsapp-number "+56912345678" \
-  --enable-whatsapp \
-  --enable-progress \
-  --memory "Prefiere bloques de foco de 25 minutos"
-```
+# Solo datos de usuario, sin tocar identidad de placa
+./scripts/rako-provision --name "Nico" --wifi-ssid "Casa" \
+  --whatsapp-number "+56912345678" --enable-whatsapp --enable-progress
 
-`rako-provision` escribe perfil, consentimiento, canales y memoria editable en
-SQLite. No guarda contraseñas WiFi ni secretos de APIs.
-
-Para revisar o aplicar pasos de instalación:
-
-```bash
+# Pasos de instalación: dry-run por defecto, --apply solo ejecuta pasos "ready"
 ./scripts/rako-install
-./scripts/rako-install --step "systemd api"
 ./scripts/rako-install --apply --step "systemd api"
 ```
 
-Sin `--apply`, `rako-install` no ejecuta nada. Con `--apply`, solo ejecuta pasos
-`ready`; los pasos `manual` quedan para operador y los `blocked` detienen el
-proceso.
-
-Para preparar una demo sin datos reales:
-
-```bash
-./scripts/rako-demo-mode
-./scripts/rako-demo --no-playback
-./scripts/rako.sh demo-crisis-panic
-```
-
-El comando imprime guion, comandos y notas de seguridad para no exponer números
-reales, memorias reales ni bundles de usuarios.
-
-Para el flujo completo de instalación y QA por placa, ver
-[`PRODUCTION_PLAN.md`](./PRODUCTION_PLAN.md).
+- `/factory/provisioning-plan` y `rako-doctor --factory` muestran bloqueos
+  antes de clonar una imagen o entregar una unidad.
+- `/device/reset-user` borra los datos del alumno anterior preservando
+  identidad de placa y heartbeat, para reasignar sin mezclar memorias.
+- OTA: `/update/plan` valida canal, versión y SHA-256 contra un manifest
+  local (`RAKO_UPDATE_MANIFEST_PATH`); `/update/apply` solo verifica
+  artefactos cuando `RAKO_UPDATE_APPLY_ENABLED=1` y `apply=true`. El
+  cambio atómico de release sigue siendo manual hasta tener releases
+  firmadas end-to-end.
+- `/support/bundle` (o `./scripts/rako-support-bundle`) genera un JSON
+  sanitizado para soporte remoto: sin API keys, contraseñas,
+  transcripciones ni memoria editable.
 
 ---
 
-## Tests
+## Tests y calidad
 
 ```bash
-python scripts/checks.py lint                 # Ruff + format check, igual que CI
-python scripts/checks.py test                 # suite completa + cobertura, igual que CI
-python scripts/checks.py safety               # fixtures críticos de seguridad
-python scripts/checks.py hygiene              # marcadores obsoletos e ignores críticos
-python scripts/checks.py stress               # repite suites críticas para detectar flakiness
-python scripts/checks.py all                  # todo el harness local
+python scripts/checks.py lint      # Ruff + format check, igual que CI
+python scripts/checks.py test      # suite completa + cobertura ≥95%, igual que CI
+python scripts/checks.py safety    # fixtures críticos de crisis + wiring real
+python scripts/checks.py hygiene   # marcadores obsoletos, .gitignore, tamaños de archivo/función
+python scripts/checks.py stress    # repite suites críticas para detectar flakiness
+python scripts/checks.py all       # harness local completo
 ```
 
-Cobertura objetivo de CI: **≥ 95%**. El detector de crisis tiene fixtures
-dedicados y no puede regresionar.
+- Cobertura de CI: **≥ 95%** (hoy ~96%).
+- El job dedicado `safety-fixtures` corre `checks.py safety`: no solo el
+  detector puro, también los tests de integración que verifican que el
+  veto de crisis está cableado antes del LLM en cada punto de entrada
+  (orquestador, loop de voz, WhatsApp). **Esta ruta no puede regresionar.**
+- `hygiene` enforza además los límites de CLAUDE.md: ≤800 líneas por
+  archivo y <50 por función (con lista cerrada de casos preexistentes).
 
 ---
 
-## Re-indexar el RAG desde Obsidian
+## RAG
 
 ```bash
 python scripts/reindex_rag.py
 ```
 
-Lee la vault en `OBSIDIAN_VAULT_PATH` (default `../Rako-kb`), genera
-embeddings con `paraphrase-multilingual-MiniLM-L12-v2` y reescribe la
-colección de ChromaDB en `CHROMA_DB_PATH`.
+Lee la vault de Obsidian (`OBSIDIAN_VAULT_PATH`, default `../Rako-kb`) y
+reescribe la colección de ChromaDB en `CHROMA_DB_PATH`. Curaduría del
+contenido: `../docs/RAG_PROMPT.md`.
 
 ---
 
 ## Privacidad — lectura obligatoria antes de tocar el código
 
-- **Datos emocionales detallados nunca salen de la Pi.**
-- **Audio del usuario nunca se persiste.**
-- **El LLM se bypassea en crisis.** Respuestas curadas únicamente.
-- **Borrado total** desde la app borra SQLite local con efecto inmediato.
-- **Modo no-grabación** debe operar el robot sin guardar historial.
+- **Datos emocionales detallados nunca salen de la Pi** (SQLite local
+  cifrado con SQLCipher).
+- **Audio del usuario nunca se persiste** — ni en disco ni en cloud.
+- **El LLM se bypassea en crisis.** Solo respuestas curadas por
+  profesionales; el sistema nunca diagnostica y siempre deriva.
+- **Borrado total** desde la app o WhatsApp purga todo el historial local
+  con efecto inmediato.
+- **Modo no-grabación** (`RAKO_MODE=private`): el robot opera sin guardar
+  historial de interacciones.
 
-Reglas detalladas: [`CLAUDE.md`](./CLAUDE.md) §4 y
-[`../docs/Arquitectura_Tecnica.md`](../docs/Arquitectura_Tecnica.md) §6 y §7.
+Reglas completas y qué puede salir hacia cada API cloud:
+[`CLAUDE.md`](./CLAUDE.md) §4.
 
 ---
 
 ## Estado actual
 
-MVP funcional en Raspberry Pi: conversación por botón, STT/TTS, OLED/LED,
-SQLite local, memoria conversacional breve, tareas/foco, reportes de progreso,
-API móvil local y canal WhatsApp simulado para check-ins y acciones. Crisis y
-derivación usan respuestas curadas; los reportes externos evitan títulos de
-tareas por defecto.
+MVP funcional en Raspberry Pi: conversación por botón con memoria
+conversacional breve, triage graduado de bienestar (derivación curada sin
+LLM cuando corresponde), ojos OLED expresivos, tareas/foco con countdown,
+API móvil local lista para Flutter (OpenAPI exportable) y canal WhatsApp
+con reglas de privacidad propias. Crisis y derivación usan exclusivamente
+respuestas curadas.
+
+Diferido de forma explícita (ver [`CLAUDE.md`](./CLAUDE.md) §2 y §4.2):
+SER local (emoción en audio), triggers de crisis dependientes de ese
+modelo, monitor proactivo en la Pi y conexión real a Firebase.
+
+Roadmap de producto: [`PRODUCT_ROADMAP.md`](./PRODUCT_ROADMAP.md) ·
+Historia del producto: [`PRODUCT_JOURNEY.md`](./PRODUCT_JOURNEY.md) ·
+Hardware: [`HARDWARE.md`](./HARDWARE.md)
 
 ## Licencia
 

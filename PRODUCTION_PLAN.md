@@ -1,6 +1,7 @@
 # Rako Production Plan
 
 Operational plan for producing many Raspberry Pi based Rako devices.
+Single-board install guide (flash → verify → autostart): [`INSTALL.md`](./INSTALL.md).
 
 ## Per-board factory flow
 
@@ -176,8 +177,10 @@ exercise path and use the safety protocol.
 2. Real scannable QR image generation in factory packaging if SVG payload card is not enough.
 3. Signed OTA release switching + automatic rollback.
 4. Device identity and cloud account binding.
-5. Sanitized support bundle for debugging deployed devices.
-6. Systemd units installed automatically by `setup_pi.sh`.
-7. Central cloud dashboard consuming `/fleet/snapshot` from many devices.
-8. Consent review screen where users can pause WhatsApp, progress, proactive
+5. Central cloud dashboard consuming `/fleet/snapshot` from many devices.
+6. Consent review screen where users can pause WhatsApp, progress, proactive
    messages, memory, and wellbeing escalation independently.
+
+Done since last revision: sanitized support bundle (`/support/bundle`,
+`./scripts/rako-support-bundle`) and one-command systemd install
+(`./scripts/install_systemd.sh`, template-rendered per user/path).

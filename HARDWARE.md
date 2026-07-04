@@ -1,6 +1,6 @@
 # Rako Pi — Hardware actual
 
-Fecha de actualización: 2026-05-09
+Fecha de actualización: 2026-07-04
 
 ## Raspberry
 
@@ -28,13 +28,12 @@ Fecha de actualización: 2026-05-09
 
 ## Pantalla
 
-- Pantalla OLED por I2C.
-- Uso esperado:
-  - estados breves: escuchando, pensando, hablando, error, crisis/protocolo, offline;
+- OLED SSD1306 128x64 por I2C (dirección `0x3c`, verificar con
+  `i2cdetect -y 1`). Renderizada con `luma.oled` + Pillow.
+- Uso actual (implementado en `eyes.py` + `src/hardware/oled_runtime.py`):
+  - ojos expresivos estilo anime — idle, escuchando, pensando, hablando,
+    feliz, foco, error, crisis/protocolo — con parpadeo y transiciones;
   - no depender solo de LEDs/voz para feedback.
-- Pendiente técnico:
-  - confirmar modelo/resolución/controlador exacto, por ejemplo SSD1306 128x64 o similar;
-  - confirmar dirección I2C con `i2cdetect -y 1` cuando se haga prueba física.
 
 ## Activadores de conversación
 
