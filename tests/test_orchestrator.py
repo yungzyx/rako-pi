@@ -42,6 +42,7 @@ class _FakeRetriever:
 class _FakeLLMClient:
     response_text: str = "Estoy contigo. ¿Qué tal una pausa breve?"
     calls: list[tuple[str, tuple[Chunk, ...]]] = field(default_factory=list)
+    contexts: list[UserContext] = field(default_factory=list)
 
     def generate(
         self,
@@ -50,6 +51,7 @@ class _FakeLLMClient:
         context: UserContext,
     ) -> LLMResponse:
         self.calls.append((query, chunks))
+        self.contexts.append(context)
         return LLMResponse(
             text=self.response_text,
             input_tokens=120,
@@ -57,6 +59,18 @@ class _FakeLLMClient:
             cache_read_input_tokens=100,
             cache_creation_input_tokens=20,
         )
+
+
+@dataclass
+class _ExplodingLLMClient:
+    def generate(self, query, chunks, context) -> LLMResponse:  # type: ignore[no-untyped-def]
+        raise RuntimeError("API down")
+
+
+@dataclass
+class _ExplodingRetriever:
+    def query(self, text: str, top_k: int = 5, where=None):  # type: ignore[no-untyped-def]
+        raise RuntimeError("chroma down")
 
 
 @dataclass
@@ -226,26 +240,152 @@ def test_elevated_emotional_state_uses_curated_support_not_llm() -> None:
     assert "Bienestar UDD" in result.text
 
 
-def test_mental_health_topic_redirects_without_llm() -> None:
+def test_personal_disclosure_refers_to_wellbeing_without_llm() -> None:
+    # Cambio deliberado (Fase 1): "creo que tengo ansiedad" ya no recibe la
+    # redirección fría "supera mi rol" — es una revelación personal y merece
+    # una derivación cálida a bienestar. Sigue sin tocar el LLM.
     orch, retriever, llm, _ = _build_orchestrator()
 
     result = orch.handle_turn(_input(transcript="creo que tengo ansiedad"))
 
-    assert result.kind is TurnKind.SCOPE_REDIRECT
+    assert result.kind is TurnKind.WELLBEING_REFERRAL
     assert llm.calls == []
     assert retriever.queries == []
-    assert "supera mi rol" in result.text
-    assert "+56 2 2820 3419" in result.text
+    assert "+56 2 2820 3419" in result.text  # Bienestar UDD por defecto
+    assert result.show_resources is True
 
 
-def test_clinical_vocab_redirects_without_llm() -> None:
+def test_help_seeking_refers_to_wellbeing_without_llm() -> None:
     orch, retriever, llm, _ = _build_orchestrator()
 
     result = orch.handle_turn(_input(transcript="necesito terapia por trauma"))
 
-    assert result.kind is TurnKind.SCOPE_REDIRECT
+    assert result.kind is TurnKind.WELLBEING_REFERRAL
     assert llm.calls == []
     assert retriever.queries == []
+
+
+def test_wellbeing_referral_uses_configured_unit_when_available() -> None:
+    orch, _, llm, _ = _build_orchestrator()
+
+    result = orch.handle_turn(
+        _input(
+            transcript="necesito un psicólogo",
+            wellbeing_unit_name="Bienestar UDD",
+            wellbeing_unit_phone="+56 2 2820 3419",
+        )
+    )
+
+    assert result.kind is TurnKind.WELLBEING_REFERRAL
+    assert "Bienestar UDD" in result.text
+    assert "+56 2 2820 3419" in result.text
+    assert llm.calls == []
+
+
+def test_clinical_advice_request_redirects_without_llm() -> None:
+    orch, retriever, llm, _ = _build_orchestrator()
+
+    result = orch.handle_turn(_input(transcript="¿qué medicamento debería tomar?"))
+
+    assert result.kind is TurnKind.SCOPE_REDIRECT
+    assert "supera mi rol" in result.text
+    assert llm.calls == []
+    assert retriever.queries == []
+
+
+def test_academic_stress_mention_goes_to_llm_with_support_hint() -> None:
+    # Cambio deliberado (Fase 1): mencionar ansiedad por una prueba ya no
+    # redirige en frío — el LLM acompaña, con una nota de tono fija.
+    orch, _, llm, _ = _build_orchestrator()
+
+    result = orch.handle_turn(_input(transcript="tengo ansiedad por la prueba de mañana"))
+
+    assert result.kind is TurnKind.LLM_RESPONSE
+    assert len(llm.calls) == 1
+    assert llm.contexts[0].support_hint is not None
+    assert result.metadata["supportive"] is True
+
+
+def test_normal_turn_carries_no_support_hint() -> None:
+    orch, _, llm, _ = _build_orchestrator()
+
+    orch.handle_turn(_input(transcript="quiero estudiar cálculo 25 minutos"))
+
+    assert llm.contexts[0].support_hint is None
+
+
+def test_recurring_low_mood_upgrades_stress_mention_to_referral() -> None:
+    orch, _, llm, _ = _build_orchestrator()
+
+    result = orch.handle_turn(
+        _input(
+            transcript="tengo ansiedad por la prueba de mañana",
+            recent_low_mood_days=4,
+        )
+    )
+
+    assert result.kind is TurnKind.WELLBEING_REFERRAL
+    assert llm.calls == []
+
+
+def test_repeated_llm_response_triggers_one_vary_retry() -> None:
+    repeated = "Partamos con un bloque corto de 25 minutos de cálculo."
+    llm = _FakeLLMClient(response_text=repeated)
+    orch, _, _, _ = _build_orchestrator(llm=llm)
+    ctx = UserContext(
+        pending_task_count=0,
+        recent_completion_count=0,
+        robot_level=1,
+        time_of_day="tarde",
+        recent_mood_summary=None,
+        recent_conversation=("Usuario: quiero estudiar", f"Rako: {repeated}"),
+    )
+
+    result = orch.handle_turn(_input(user_context=ctx))
+
+    assert len(llm.calls) == 2  # original + reintento de reformulación
+    assert llm.contexts[0].support_hint is None
+    assert llm.contexts[1].support_hint is not None
+    assert "Reformula" in llm.contexts[1].support_hint
+    assert result.metadata["repeat_retry"] is True
+
+
+def test_fresh_llm_response_does_not_retry() -> None:
+    llm = _FakeLLMClient(response_text="¿Y si partimos anotando las tres dudas del capítulo?")
+    orch, _, _, _ = _build_orchestrator(llm=llm)
+    ctx = UserContext(
+        pending_task_count=0,
+        recent_completion_count=0,
+        robot_level=1,
+        time_of_day="tarde",
+        recent_mood_summary=None,
+        recent_conversation=("Rako: Partamos con un bloque corto de 25 minutos de cálculo.",),
+    )
+
+    result = orch.handle_turn(_input(user_context=ctx))
+
+    assert len(llm.calls) == 1
+    assert result.metadata["repeat_retry"] is False
+
+
+def test_llm_failure_returns_curated_fallback_not_crash() -> None:
+    orch, _, _, _ = _build_orchestrator(llm=_ExplodingLLMClient())  # type: ignore[arg-type]
+
+    result = orch.handle_turn(_input())
+
+    assert result.kind is TurnKind.LLM_FALLBACK
+    assert "repites" in result.text
+    assert result.metadata["reason"] == "llm_error"
+
+
+def test_retriever_failure_degrades_to_llm_without_chunks() -> None:
+    orch, _, llm, _ = _build_orchestrator(retriever=_ExplodingRetriever())  # type: ignore[arg-type]
+
+    result = orch.handle_turn(_input())
+
+    assert result.kind is TurnKind.LLM_RESPONSE
+    assert result.rag_chunk_ids == ()
+    assert len(llm.calls) == 1
 
 
 def test_turn_result_carries_chunk_ids_for_traceability() -> None:

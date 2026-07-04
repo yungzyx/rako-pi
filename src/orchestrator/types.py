@@ -22,6 +22,10 @@ class UserContext:
     recent_mood_summary: str | None
     recent_conversation: tuple[str, ...] = ()
     user_memory: tuple[str, ...] = ()
+    # Instrucción de tono para el turno (p.ej. cuando el triage detectó
+    # estrés académico). Es una instrucción fija — NO contiene datos del
+    # usuario, así que no cambia qué información sale hacia el LLM.
+    support_hint: str | None = None
 
 
 def default_user_context(

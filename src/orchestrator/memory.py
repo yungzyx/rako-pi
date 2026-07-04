@@ -2,14 +2,27 @@
 
 This memory is intentionally process-local. It helps the LLM avoid sounding as
 if every button press were the first turn, without persisting private chat text.
+
+También vive acá la detección de respuestas repetidas: comparar lo que el
+LLM acaba de generar contra lo que Rako ya dijo en la sesión, para poder
+pedirle una reformulación en vez de sonar a disco rayado.
 """
 
 from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 
 _MAX_TEXT_LEN = 180
+
+_RAKO_LINE_PREFIX = "Rako: "
+# Umbral de similitud (SequenceMatcher) sobre texto normalizado a partir
+# del cual dos respuestas se consideran "la misma cosa dicha de nuevo".
+_REPEAT_SIMILARITY_THRESHOLD = 0.82
+# Líneas muy cortas ("ok", "dale") matchean entre sí sin ser repetición
+# real — solo comparamos respuestas con algo de sustancia.
+_MIN_COMPARABLE_LEN = 20
 
 
 @dataclass(slots=True)
@@ -40,6 +53,34 @@ class ConversationMemory:
 
     def clear(self) -> None:
         self._turns.clear()
+
+
+def is_near_repeat(candidate: str, recent_lines: tuple[str, ...]) -> bool:
+    """True si `candidate` es casi idéntico a algo que Rako ya dijo.
+
+    `recent_lines` es el formato de `ConversationMemory.lines()` — solo se
+    comparan las líneas "Rako: ...". Como las líneas guardadas vienen
+    truncadas a 180 caracteres, la comparación usa el prefijo equivalente
+    del candidato.
+    """
+    normalized_candidate = _normalize_for_comparison(candidate)
+    if len(normalized_candidate) < _MIN_COMPARABLE_LEN:
+        return False
+    for line in recent_lines:
+        if not line.startswith(_RAKO_LINE_PREFIX):
+            continue
+        stored = _normalize_for_comparison(line[len(_RAKO_LINE_PREFIX) :].rstrip("…"))
+        if len(stored) < _MIN_COMPARABLE_LEN:
+            continue
+        trimmed = normalized_candidate[: len(stored)]
+        ratio = SequenceMatcher(None, trimmed, stored).ratio()
+        if ratio >= _REPEAT_SIMILARITY_THRESHOLD:
+            return True
+    return False
+
+
+def _normalize_for_comparison(text: str) -> str:
+    return " ".join(text.casefold().strip().split())
 
 
 def _clean(text: str) -> str:

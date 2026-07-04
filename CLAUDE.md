@@ -200,6 +200,18 @@ app móvil ni el contenido del RAG.
    ("rayarme") y algunos garbles típicos de STT, pero no tolerancia a
    errores tipográficos arbitraria — eso queda diferido hasta tener datos
    reales de campo que justifiquen el tradeoff de falsos positivos.
+7. **Triage no-crisis (`safety/triage.py`):** después de que el detector
+   descarta crisis, un triage graduado y determinístico diferencia:
+   consejo clínico (redirección "supera mi rol"), revelación personal o
+   búsqueda de ayuda profesional (derivación cálida curada a la unidad de
+   bienestar configurada, sin LLM), mención de estrés/ansiedad en marco
+   académico puntual (LLM con nota de tono fija — la nota es instrucción,
+   no lleva datos del usuario), y ánimo bajo recurrente (≥3 días distintos
+   en la semana, según check-ins locales → sube cualquier mención a
+   derivación). Recomendar contactar la unidad NO es escalación activa —
+   no requiere `wellbeing_escalation_enabled`. Tests en el gate de CI
+   (`test_safety_triage.py`). Si el LLM falla en runtime, el turno degrada
+   a una respuesta curada breve (`LLM_FALLBACK`), nunca silencio.
 
 ### 4.3 Funcionamiento offline
 - Sin internet, la Pi sigue operando con respuestas pre-curadas del RAG (sin

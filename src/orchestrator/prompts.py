@@ -69,6 +69,8 @@ def format_user_context(ctx: UserContext) -> str:
     if ctx.recent_conversation:
         lines.append("Conversación reciente de esta sesión:")
         lines.extend(f"- {line}" for line in ctx.recent_conversation[-8:])
+    if ctx.support_hint:
+        lines.append(f"Nota de tono para este turno: {ctx.support_hint}")
     return "\n".join(lines)
 
 
@@ -94,6 +96,7 @@ def build_user_message(
         "- Usa la memoria editable para adaptar tono y sugerencias, pero no la cites literalmente ni digas 'recuerdo que...' salvo que el usuario lo pida.\n"
         "- Usa la conversación reciente para mantener continuidad, pero no la repitas ni la resumas salvo que ayude.\n"
         "- Si el usuario continúa algo que ya venían hablando, responde como continuación natural, sin volver a saludar ni reiniciar el tema.\n"
+        "- No reutilices la misma apertura, el mismo cierre ni la misma sugerencia que ya aparece en la conversación reciente: di algo nuevo o avanza el tema.\n"
         "- Evita cerrar siempre con una pregunta. A veces basta con proponer el siguiente paso y dejar espacio.\n"
         "- Si el usuario pide ayuda con una tarea, divide la tarea en pasos pequeños y concretos.\n"
         "- Si el usuario ya va a estudiar, no lo llenes de técnicas: déjalo arrancar con un primer paso.\n"

@@ -3,33 +3,42 @@
 Flujo:
 1. Construir `CrisisInput` y consultar `safety.detector` PRIMERO.
 2. Si hay crisis → bypassear LLM, ejecutar protocolo curado.
-3. Si NONE/ELEVATED → consultar RAG + Claude.
+3. Si no hay crisis → `safety.triage` diferencia el caso: consejo clínico
+   (redirección), revelación personal o patrón recurrente (derivación a
+   la unidad de bienestar), estrés académico (LLM con nota de tono), o
+   conversación normal (LLM).
 4. Devolver un `TurnResult` con todo lo que el resto del sistema
    necesita para despachar (texto, audio path, LEDs, eventos).
 
 El orquestador NO toca hardware ni cloud directamente; recibe sus
 colaboradores por construcción y se mantiene determinístico para tests.
+Si el LLM o el RAG fallan en runtime, el turno degrada a una respuesta
+curada breve — nunca silencio.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import logging
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
 from typing import Any
 
 from emotion.types import EmotionalVector
-from orchestrator.llm_client import LLMClient
+from orchestrator.llm_client import LLMClient, LLMResponse
+from orchestrator.memory import is_near_repeat
 from orchestrator.types import UserContext
 from rag.client import Retriever
+from rag.types import Chunk
 from safety.detector import detect_crisis
 from safety.protocol import CrisisProtocol
 from safety.responses import pick_response
 from safety.scope import (
     build_elevated_support_response,
     build_scope_redirect_response,
-    mentions_mental_health_topic,
+    build_wellbeing_referral_response,
 )
+from safety.triage import TriageLevel, TriageResult, triage_turn
 from safety.types import (
     CrisisInput,
     CrisisLevel,
@@ -38,8 +47,33 @@ from safety.types import (
     PanicSource,
 )
 
+_log = logging.getLogger(__name__)
+
 _RAG_TOP_K = 5
 _RAG_MAX_QUERY_LEN = 500
+
+# Respuesta curada cuando el LLM falla en runtime (red caída, API con
+# error). Corta, honesta, sin fingir que entendió.
+_LLM_FALLBACK_TEXT = (
+    "Se me cortó la conexión un momento y no quiero inventarte una respuesta. "
+    "¿Me lo repites en un ratito?"
+)
+
+# Nota de tono que acompaña un turno con estrés académico detectado.
+# Instrucción fija: no lleva datos del usuario al LLM.
+_SUPPORT_HINT = (
+    "El usuario mencionó estrés, ansiedad o ánimo bajo en contexto cotidiano. "
+    "Valida brevemente con calidez, ofrece UN paso pequeño y realista, y no "
+    "diagnostiques ni des consejos clínicos."
+)
+
+# Instrucción de reformulación cuando el LLM generó casi lo mismo que ya
+# dijo en esta sesión. Un solo reintento — si insiste, se acepta.
+_VARY_HINT = (
+    "Tu borrador anterior era casi idéntico a algo que ya dijiste en esta "
+    "conversación. Reformula con otra estructura y aporta un ángulo o paso "
+    "distinto, sin repetir la misma apertura ni el mismo cierre."
+)
 
 
 class TurnKind(Enum):
@@ -47,6 +81,8 @@ class TurnKind(Enum):
     CRISIS_PROTOCOL = "CRISIS_PROTOCOL"
     SCOPE_REDIRECT = "SCOPE_REDIRECT"
     ELEVATED_SUPPORT = "ELEVATED_SUPPORT"
+    WELLBEING_REFERRAL = "WELLBEING_REFERRAL"
+    LLM_FALLBACK = "LLM_FALLBACK"
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +95,12 @@ class TurnInput:
     last_interaction_at: datetime | None
     user_context: UserContext
     now: datetime
+    # Señales para el triage no-crisis (ver safety/triage.py). Con los
+    # defaults el comportamiento es el conservador (sin recurrencia, sin
+    # unidad de bienestar configurada).
+    recent_low_mood_days: int = 0
+    wellbeing_unit_name: str | None = None
+    wellbeing_unit_phone: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,12 +130,21 @@ class Orchestrator:
 
         if signal.should_bypass_llm:
             return self._handle_crisis(signal)
-        if mentions_mental_health_topic(input.transcript):
-            return self._handle_scope_redirect()
-        if signal.level is CrisisLevel.ELEVATED:
+
+        triage = triage_turn(
+            input.transcript,
+            recent_low_mood_days=input.recent_low_mood_days,
+            elevated=signal.level is CrisisLevel.ELEVATED,
+        )
+        if triage.level is TriageLevel.CLINICAL_SCOPE:
+            return self._handle_scope_redirect(triage)
+        if triage.level is TriageLevel.WELLBEING_REFERRAL:
+            return self._handle_wellbeing_referral(input, triage)
+        if triage.level is TriageLevel.ELEVATED_SUPPORT:
             return self._handle_elevated_support()
 
-        return self._handle_llm_turn(input, signal)
+        supportive = triage.level is TriageLevel.SUPPORTIVE_ACADEMIC
+        return self._handle_llm_turn(input, signal, supportive=supportive)
 
     def close(self) -> None:
         for resource in (self._retriever, self._llm):
@@ -128,7 +179,7 @@ class Orchestrator:
             },
         )
 
-    def _handle_scope_redirect(self) -> TurnResult:
+    def _handle_scope_redirect(self, triage: TriageResult) -> TurnResult:
         return TurnResult(
             kind=TurnKind.SCOPE_REDIRECT,
             text=build_scope_redirect_response(),
@@ -136,7 +187,21 @@ class Orchestrator:
             rag_chunk_ids=(),
             notify_contact=False,
             show_resources=True,
-            metadata={"reason": "mental_health_scope"},
+            metadata={"reason": "mental_health_scope", "triage": triage.reason},
+        )
+
+    def _handle_wellbeing_referral(self, input: TurnInput, triage: TriageResult) -> TurnResult:
+        return TurnResult(
+            kind=TurnKind.WELLBEING_REFERRAL,
+            text=build_wellbeing_referral_response(
+                unit_name=input.wellbeing_unit_name,
+                unit_phone=input.wellbeing_unit_phone,
+            ),
+            audio_path=None,
+            rag_chunk_ids=(),
+            notify_contact=False,
+            show_resources=True,
+            metadata={"reason": "wellbeing_referral", "triage": triage.reason},
         )
 
     def _handle_elevated_support(self) -> TurnResult:
@@ -150,14 +215,22 @@ class Orchestrator:
             metadata={"elevated": True},
         )
 
-    def _handle_llm_turn(self, input: TurnInput, signal: CrisisSignal) -> TurnResult:
-        query = input.transcript[:_RAG_MAX_QUERY_LEN]
-        chunks = self._retriever.query(query, top_k=_RAG_TOP_K)
-        llm_response = self._llm.generate(
-            query=input.transcript,
-            chunks=chunks,
-            context=input.user_context,
-        )
+    def _handle_llm_turn(
+        self,
+        input: TurnInput,
+        signal: CrisisSignal,
+        *,
+        supportive: bool = False,
+    ) -> TurnResult:
+        chunks = self._safe_chunks(input.transcript)
+        context = input.user_context
+        if supportive:
+            context = replace(context, support_hint=_SUPPORT_HINT)
+        try:
+            llm_response, retried = self._generate_avoiding_repeats(input, chunks, context)
+        except Exception:
+            _log.exception("LLM generation failed; returning curated fallback")
+            return self._llm_fallback()
         return TurnResult(
             kind=TurnKind.LLM_RESPONSE,
             text=llm_response.text,
@@ -167,8 +240,60 @@ class Orchestrator:
             show_resources=False,
             metadata={
                 "elevated": signal.level is CrisisLevel.ELEVATED,
+                "supportive": supportive,
+                "repeat_retry": retried,
                 "input_tokens": llm_response.input_tokens,
                 "output_tokens": llm_response.output_tokens,
                 "cache_read_input_tokens": llm_response.cache_read_input_tokens,
             },
+        )
+
+    def _generate_avoiding_repeats(
+        self,
+        input: TurnInput,
+        chunks: tuple[Chunk, ...],
+        context: UserContext,
+    ) -> tuple[LLMResponse, bool]:
+        """Genera; si el texto repite algo ya dicho, reintenta UNA vez.
+
+        El segundo intento lleva una instrucción de reformulación. Si el
+        reintento falla con excepción, se conserva la primera respuesta —
+        repetirse es mejor que quedarse callado.
+        """
+        response = self._llm.generate(
+            query=input.transcript, chunks=chunks, context=context
+        )
+        recent = input.user_context.recent_conversation
+        if not is_near_repeat(response.text, recent):
+            return response, False
+        vary_hint = f"{context.support_hint} {_VARY_HINT}" if context.support_hint else _VARY_HINT
+        try:
+            retry = self._llm.generate(
+                query=input.transcript,
+                chunks=chunks,
+                context=replace(context, support_hint=vary_hint),
+            )
+        except Exception:
+            _log.exception("vary retry failed; keeping first response")
+            return response, True
+        return retry, True
+
+    def _safe_chunks(self, transcript: str) -> tuple[Chunk, ...]:
+        """RAG caído no debe botar el turno — degrada a cero chunks."""
+        query = transcript[:_RAG_MAX_QUERY_LEN]
+        try:
+            return tuple(self._retriever.query(query, top_k=_RAG_TOP_K))
+        except Exception:
+            _log.exception("RAG query failed; continuing without chunks")
+            return ()
+
+    def _llm_fallback(self) -> TurnResult:
+        return TurnResult(
+            kind=TurnKind.LLM_FALLBACK,
+            text=_LLM_FALLBACK_TEXT,
+            audio_path=None,
+            rag_chunk_ids=(),
+            notify_contact=False,
+            show_resources=False,
+            metadata={"reason": "llm_error"},
         )

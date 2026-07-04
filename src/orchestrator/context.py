@@ -61,6 +61,26 @@ def _robot_level(db: Database) -> int:
     return max(1, achievements[0].robot_level_after)
 
 
+_LOW_MOOD_VALENCE_MAX = -0.35
+_LOW_MOOD_LOOKBACK_DAYS = 7
+
+
+def count_recent_low_mood_days(db: Database, now: datetime) -> int:
+    """Días distintos con al menos una muestra de ánimo bajo en la semana.
+
+    Alimenta el triage de recurrencia (safety/triage.py). La fuente real
+    hoy son los check-ins de WhatsApp autoreportados; queda listo para
+    cuando exista SER local.
+    """
+    samples = db.emotional_states.list_samples_in_window(
+        end=now, lookback=timedelta(days=_LOW_MOOD_LOOKBACK_DAYS)
+    )
+    low_days = {
+        sample.at.date() for sample in samples if sample.vector.valence <= _LOW_MOOD_VALENCE_MAX
+    }
+    return len(low_days)
+
+
 def _recent_mood_summary(db: Database, now: datetime) -> str | None:
     samples = db.emotional_states.list_samples_in_window(end=now, lookback=timedelta(hours=24))
     if not samples:
