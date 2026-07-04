@@ -48,6 +48,14 @@ app móvil ni el contenido del RAG.
 - **Hardware GPIO:** `gpiozero`, `adafruit-circuitpython-*`.
 
 ### Cloud — arquitectura real (actualizado; ver auditoría de 2026-07)
+
+> **Principio (decisión 2026-07): local para lo que protege, cloud para
+> lo que encanta.** Seguridad, privacidad y resiliencia offline corren
+> SIEMPRE local (detector de crisis determinístico, SQLCipher, frases
+> curadas pre-generadas, whisper.cpp de fallback). La conversación y la
+> voz usan APIs cloud como primarias — la calidad conversacional es el
+> producto y un modelo local en Pi 4 la degradaría. No agregar modelos
+> locales pesados sin revisar esta decisión.
 - **LLM:** OpenAI (`gpt-4o-mini`, `llm_provider=openai`) primario, Anthropic
   Claude como fallback (`llm_provider=anthropic`). Configurable por env var.
 - **STT:** Google Cloud Speech por defecto (`stt_provider=google`); OpenAI
@@ -55,8 +63,11 @@ app móvil ni el contenido del RAG.
   está configurado.
 - **TTS:** ElevenLabs primario (`tts_provider=elevenlabs`), Google Cloud TTS
   como fallback.
-- **SER (emoción local):** planeado (`audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim`
-  vía `transformers`/`torch`), **no implementado todavía** — ver §4.2.
+- **SER (emoción local):** **diferido por decisión de arquitectura**
+  (2026-07) hasta tener datos reales de campo que lo justifiquen — la
+  Pi 4 no lo corre con la latencia/calidad necesarias y el trigger que
+  lo necesitaba tiene un proxy local barato (journal + check-ins). Sus
+  dependencias (torch/transformers) NO están en requirements. Ver §4.2.
 - **WhatsApp:** canal de producto completo (`src/channels/whatsapp/`) sobre
   WhatsApp Business Cloud API de Meta (`whatsapp_client=cloud`). Maneja
   check-ins, menús de acción, reportes de progreso, memoria editable,
@@ -273,7 +284,7 @@ puede consultar `safety/` y debe respetar su veredicto. `hardware/` no conoce
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # mismo set que CI
 cp .env.example .env   # rellenar con credenciales reales (no commitear)
 ```
 

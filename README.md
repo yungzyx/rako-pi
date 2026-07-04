@@ -76,9 +76,11 @@ cp .env.example .env
 # rellenar credenciales; generar clave de cifrado con: openssl rand -hex 32
 ```
 
-`requirements-dev.txt` es el mismo set que usa CI (sin torch ni SDKs de
-audio). Para el runtime completo de la Pi está `requirements-pi-lite.txt`;
-`requirements.txt` conserva el stack pesado experimental (SER local).
+`requirements-dev.txt` es el mismo set que usa CI. El runtime de la Pi
+es `requirements-pi-lite.txt` (`requirements.txt` es solo un puntero de
+compatibilidad hacia él — el stack pesado del SER local quedó fuera por
+decisión de arquitectura: local para lo que protege, cloud para lo que
+encanta).
 Hardware y APIs cloud se mockean en tests — la suite corre sin credenciales.
 
 ### Raspberry Pi (dispositivo real)
