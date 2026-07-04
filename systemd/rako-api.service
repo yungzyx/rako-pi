@@ -6,12 +6,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=yunglab
-Group=yunglab
-WorkingDirectory=/home/yunglab/rako-pi
-Environment="PYTHONPATH=/home/yunglab/rako-pi/src"
-EnvironmentFile=-/home/yunglab/rako-pi/.env
-ExecStart=/home/yunglab/rako-pi/scripts/rako-api
+User=__RAKO_USER__
+Group=__RAKO_USER__
+WorkingDirectory=__RAKO_DIR__
+Environment="PYTHONPATH=__RAKO_DIR__/src"
+EnvironmentFile=-__RAKO_DIR__/.env
+ExecStart=__RAKO_DIR__/scripts/rako-api
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=15s
@@ -25,4 +25,3 @@ SyslogIdentifier=rako-api
 
 [Install]
 WantedBy=multi-user.target
-

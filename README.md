@@ -167,17 +167,17 @@ perfecta.
 
 ### Arranque automático al enchufar/prender la Pi
 
-El repo trae una unit opcional en `systemd/rako-chat.service`. No se habilita
-sola: primero conviene probar audio + OLED manualmente. Para instalarla:
+Las unidades en `systemd/` son plantillas (no se copian a mano: usan tokens
+`__RAKO_USER__`/`__RAKO_DIR__`). El instalador las renderiza para el usuario
+y la ruta reales de esta instalación:
 
 ```bash
-sudo cp systemd/rako-chat.service /etc/systemd/system/rako-chat.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now rako-chat.service
-journalctl -u rako-chat.service -f
+./scripts/install_systemd.sh          # rako-chat (botón+OLED) + rako-api
+journalctl -u rako-chat -f
 ```
 
-Para detener/desactivar:
+Conviene probar audio + OLED manualmente antes; con `--no-enable` la unidad
+queda instalada pero no arranca. Para detener/desactivar:
 
 ```bash
 sudo systemctl disable --now rako-chat.service

@@ -30,7 +30,7 @@ def test_install_runner_applies_only_ready_steps() -> None:
 
     assert result.status == "applied"
     assert result.executed == ("systemd api",)
-    assert calls == ["sudo cp systemd/rako-api.service /etc/systemd/system/rako-api.service"]
+    assert calls == ["./scripts/install_systemd.sh --no-enable rako-api"]
 
 
 def test_install_runner_blocks_missing_security_env() -> None:

@@ -29,14 +29,14 @@ def build_install_plan(settings: Settings) -> InstallPlan:
         _step(
             "system packages",
             "ready",
-            "sudo apt update && sudo apt install -y python3.12 python3.12-venv sqlcipher libsqlcipher-dev portaudio19-dev libsndfile1 ffmpeg",
-            "Base packages for Python, SQLCipher, audio and media.",
+            "sudo apt update && sudo apt install -y python3 python3-venv python3-dev sqlcipher libsqlcipher-dev portaudio19-dev libsndfile1 ffmpeg i2c-tools",
+            "Base packages for Python, SQLCipher, audio, media and I2C.",
         ),
         _step(
             "python environment",
             "ready",
-            "python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt",
-            "Creates local virtualenv and installs runtime dependencies.",
+            "python3 -m venv .venv && .venv/bin/pip install -r requirements-pi-lite.txt",
+            "Creates local virtualenv and installs the Pi runtime dependencies.",
         ),
         _step(
             "audio profile",
@@ -47,14 +47,14 @@ def build_install_plan(settings: Settings) -> InstallPlan:
         _step(
             "systemd api",
             "ready",
-            "sudo cp systemd/rako-api.service /etc/systemd/system/rako-api.service",
-            "Installs local API service definition.",
+            "./scripts/install_systemd.sh --no-enable rako-api",
+            "Renders and installs the local API service for this user/path.",
         ),
         _step(
             "systemd chat",
             "ready",
-            "sudo cp systemd/rako-chat.service /etc/systemd/system/rako-chat.service",
-            "Installs physical chat service definition.",
+            "./scripts/install_systemd.sh --no-enable rako-chat",
+            "Renders and installs the physical chat service for this user/path.",
         ),
         _step(
             "enable services",

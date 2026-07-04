@@ -107,35 +107,40 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7. systemd unit (opcional — instalar a mano si se quiere autostart)
+# 7. Próximos pasos (systemd se instala con scripts/install_systemd.sh)
 # ---------------------------------------------------------------------------
 
 cat <<EOF
 
 ==> Setup completo.
 
-Próximos pasos:
+Próximos pasos (guía completa: INSTALL.md):
 
   1. Verificar y completar credenciales en .env:
        OPENAI_API_KEY (OpenAI Platform)
        ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID (ElevenLabs)
        GOOGLE_APPLICATION_CREDENTIALS (Google Cloud service account JSON)
 
-  2. Probar el demo:
+  2. Chequear salud del dispositivo (audio, I2C, credenciales, BD):
+       ./scripts/rako-doctor
+
+  3. Verificar el bypass de crisis (no negociable antes de usar con gente):
+       .venv/bin/python scripts/checks.py safety
+
+  4. Probar el demo:
        ./scripts/rako.sh demo-turn "hola Rako"
        ./scripts/rako.sh demo-crisis-panic
 
-  3. Provisionar este Rako para un usuario:
+  5. Provisionar este Rako para un usuario:
        ./scripts/rako-provision --name "Nico" --wifi-ssid "Casa" \\
          --whatsapp-number "+569..." --enable-whatsapp --enable-progress
 
-  4. Para autostart en boot:
-       sudo cp systemd/rako.service /etc/systemd/system/
-       sudo systemctl daemon-reload
-       sudo systemctl enable rako
-       sudo systemctl start rako
+  6. Autostart en boot (renderiza systemd/ para este usuario y ruta):
+       ./scripts/install_systemd.sh            # rako-chat (botón+OLED) + rako-api
+       # o bien: ./scripts/install_systemd.sh rako   (loop 'main run')
 
-  5. Ver logs:
-       journalctl -u rako -f
+  7. Ver logs:
+       journalctl -u rako-chat -f
+       journalctl -u rako-api -f
 
 EOF
