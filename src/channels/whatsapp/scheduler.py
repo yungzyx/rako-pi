@@ -15,6 +15,7 @@ from channels.whatsapp.client import WhatsAppOutboundMessage
 from channels.whatsapp.service import WhatsAppService
 from db.database import Database
 from product.user_config import UserConfigService
+from productivity.crisis_gate import has_recent_crisis_event
 
 _LAST_CHECKIN_KEY = "whatsapp.last_checkin"
 
@@ -56,6 +57,12 @@ def decide_smart_checkin(
     channels = config.get_channels()
     if not config.proactive_messages_can_send() or not channels.whatsapp_number:
         return SmartCheckinDecision(should_send=False, reason="consent_required")
+    if has_recent_crisis_event(db, now=now):
+        return SmartCheckinDecision(
+            should_send=False,
+            reason="recent_crisis",
+            to=channels.whatsapp_number,
+        )
     if _is_quiet_hour(now, schedule=schedule):
         return SmartCheckinDecision(
             should_send=False,

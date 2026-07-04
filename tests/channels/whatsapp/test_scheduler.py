@@ -12,6 +12,7 @@ from channels.whatsapp.service import WhatsAppService
 from db.database import Database
 from db.types import Interaction, InteractionType
 from product.user_config import UserConfigService
+from safety.types import CrisisLevel, CrisisReason, CrisisSignal
 
 
 def _now(hour: int = 14) -> datetime:
@@ -74,6 +75,25 @@ def test_decide_smart_checkin_skips_after_recent_interaction(db_conn) -> None:
 
     assert decision.should_send is False
     assert decision.reason == "recent_interaction"
+
+
+def test_decide_smart_checkin_suppresses_after_recent_crisis(db_conn) -> None:
+    # Una crisis reciente no debe competir con un smart check-in genérico —
+    # el protocolo de seguridad ya cubrió el contacto de confianza/recursos.
+    db = Database(db_conn)
+    _enable_proactive(db)
+    db.crisis_journal.record(
+        CrisisSignal(
+            level=CrisisLevel.CRISIS,
+            reasons=(CrisisReason.KEYWORDS_IDEATION,),
+            detected_at=_now() - timedelta(hours=1),
+        )
+    )
+
+    decision = decide_smart_checkin(db, now=_now())
+
+    assert decision.should_send is False
+    assert decision.reason == "recent_crisis"
 
 
 def test_send_due_smart_checkin_sends_when_eligible(db_conn) -> None:

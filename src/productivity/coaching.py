@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from db.database import Database
+from productivity.crisis_gate import has_recent_crisis_event
 from productivity.mindfulness import pick_mindfulness_exercise
 from productivity.progress import build_progress_summary
 
@@ -37,8 +38,13 @@ def build_coaching_recommendation(
     include_progress: bool = True,
 ) -> CoachingRecommendation:
     now = _ensure_aware(now or datetime.now(UTC))
+    # Una crisis reciente debe pesar al menos tanto como un mood bajo: no
+    # queremos que un nudge de productividad compita con el protocolo de
+    # seguridad. No re-corremos detección — solo consultamos el journal.
+    crisis_recent = has_recent_crisis_event(db, now=now)
     recent_mood = db.emotional_states.list_in_window(end=now, lookback=timedelta(hours=12))
-    if recent_mood and recent_mood[-1].vector.valence <= -0.35:
+    low_mood = bool(recent_mood) and recent_mood[-1].vector.valence <= -0.35
+    if crisis_recent or low_mood:
         exercise = pick_mindfulness_exercise(context="low_mood", max_minutes=3)
         return CoachingRecommendation(
             kind="LOW_MOOD_SUPPORT",
@@ -47,7 +53,7 @@ def build_coaching_recommendation(
                 f"o hacer {exercise.title.lower()} de {exercise.minutes} minutos."
             ),
             metadata={
-                "reason": "recent_low_mood",
+                "reason": "recent_crisis" if crisis_recent else "recent_low_mood",
                 "mindfulness_exercise": exercise.id,
             },
         )
