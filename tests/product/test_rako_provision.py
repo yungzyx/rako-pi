@@ -25,6 +25,7 @@ def test_provision_sets_profile_channels_consent_and_memory(db_conn) -> None:
         enable_progress=True,
         enable_proactive=True,
         enable_wellbeing=True,
+        enable_contact_alerts=True,
         memory=["Prefiere bloques cortos"],
     )
 
@@ -36,4 +37,5 @@ def test_provision_sets_profile_channels_consent_and_memory(db_conn) -> None:
     assert config.get_profile().preferred_name == "Nico"
     assert config.get_channels().wifi_ssid == "Casa"
     assert config.progress_reports_can_send() is True
+    assert config.get_consent().trusted_contact_alerts_enabled is True
     assert config.list_memory()[0].text == "Prefiere bloques cortos"

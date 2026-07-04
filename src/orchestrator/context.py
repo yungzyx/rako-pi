@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from db.database import Database
 from db.types import TaskStatus
@@ -91,3 +91,55 @@ def _recent_mood_summary(db: Database, now: datetime) -> str | None:
     if avg_valence >= 0.35:
         return "con buen ánimo recientemente"
     return "estable o neutral recientemente"
+
+
+# ---------------------------------------------------------------------------
+# Señales para el trigger de inactividad post-angustia (safety/detector.py).
+# Estos helpers son los que "despiertan" el trigger que estuvo dormido:
+# calculan los datos vivos que el detector siempre supo evaluar.
+# ---------------------------------------------------------------------------
+
+_HIGH_DISTRESS_VALENCE_MAX = -0.7
+_HIGH_DISTRESS_LOOKBACK = timedelta(hours=24)
+_JOURNAL_SCAN_LIMIT = 10
+_FOLLOWUP_REASON = "PROLONGED_INACTIVITY_AFTER_DISTRESS"
+
+
+def find_last_high_distress_at(db: Database, now: datetime) -> datetime | None:
+    """Última señal de alta angustia dentro de la ventana relevante.
+
+    Fuentes: eventos del crisis_journal (cualquier punto de entrada) y
+    muestras emocionales con valencia extrema (check-ins). Los eventos
+    cuyo ÚNICO motivo es el propio follow-up de inactividad se ignoran —
+    si contaran, cada follow-up renovaría la ventana de frescura y el
+    seguimiento se repetiría indefinidamente.
+    """
+    candidates: list[datetime] = []
+    for entry in db.crisis_journal.list_recent(limit=_JOURNAL_SCAN_LIMIT):
+        if all(reason == _FOLLOWUP_REASON for reason in entry.reasons):
+            continue
+        candidates.append(_as_aware_utc(entry.detected_at))
+    samples = db.emotional_states.list_samples_in_window(end=now, lookback=_HIGH_DISTRESS_LOOKBACK)
+    candidates.extend(
+        _as_aware_utc(sample.at)
+        for sample in samples
+        if sample.vector.valence <= _HIGH_DISTRESS_VALENCE_MAX
+    )
+    if not candidates:
+        return None
+    return max(candidates)
+
+
+def find_last_interaction_at(db: Database) -> datetime | None:
+    """Timestamp de la última interacción persistida (None en modo privado
+    o dispositivo recién provisionado — el trigger queda apagado ahí)."""
+    recent = db.interactions.list_recent(limit=1)
+    if not recent:
+        return None
+    return _as_aware_utc(recent[0].timestamp)
+
+
+def _as_aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value

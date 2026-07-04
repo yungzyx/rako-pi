@@ -37,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--enable-proactive", action="store_true")
     parser.add_argument("--enable-sensitive-memory", action="store_true")
     parser.add_argument("--enable-wellbeing", action="store_true")
+    parser.add_argument("--enable-contact-alerts", action="store_true")
     parser.add_argument("--serial")
     parser.add_argument("--lot")
     parser.add_argument("--assigned-user-label")
@@ -83,6 +84,7 @@ def _payload_from_args(args: argparse.Namespace) -> FirstRunPayload:
             "proactive_messages_enabled": args.enable_proactive,
             "sensitive_memory_enabled": args.enable_sensitive_memory,
             "wellbeing_escalation_enabled": args.enable_wellbeing,
+            "trusted_contact_alerts_enabled": args.enable_contact_alerts,
         },
         channels={
             "wifi_ssid": args.wifi_ssid,

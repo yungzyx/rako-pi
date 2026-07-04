@@ -240,3 +240,77 @@ def test_complete_turn_does_not_persist_in_private_mode(tmp_path: Path) -> None:
     assert app.db.interactions.list_recent(limit=5) == []
     # La memoria en proceso sí funciona: privacidad es no persistir.
     assert any("hola rako" in line for line in session.memory.lines())
+
+
+# ---------------------------------------------------------------------------
+# Trigger de inactividad post-angustia (antes dormido) — datos vivos
+# ---------------------------------------------------------------------------
+
+
+def _record_crisis(app, *, hours_ago: int) -> None:
+    from safety.types import CrisisLevel, CrisisReason, CrisisSignal
+
+    app.db.crisis_journal.record(
+        CrisisSignal(
+            level=CrisisLevel.CRISIS,
+            reasons=(CrisisReason.KEYWORDS_IDEATION,),
+            detected_at=_now() - timedelta(hours=hours_ago),
+        )
+    )
+
+
+def test_turn_input_carries_live_distress_and_interaction_signals(tmp_path: Path) -> None:
+    session, app = _make_session(tmp_path)
+    _record_crisis(app, hours_ago=3)
+    _seed_interaction(app, minutes_ago=180, user="antes", rako="respuesta")
+
+    turn = session.build_turn_input("hola rako")
+
+    assert turn.last_high_distress_at == _now() - timedelta(hours=3)
+    assert turn.last_interaction_at == _now() - timedelta(minutes=180)
+
+
+def test_inactivity_after_distress_reaches_curated_followup(tmp_path: Path) -> None:
+    # Crisis hace 3h, ninguna interacción desde entonces, y el usuario
+    # aprieta el botón: el turno debe ir al protocolo curado de
+    # seguimiento, no al LLM.
+    from orchestrator.orchestrator import TurnKind
+
+    session, app = _make_session(tmp_path)
+    _record_crisis(app, hours_ago=3)
+    _seed_interaction(app, minutes_ago=180, user="antes", rako="respuesta")
+
+    turn = session.build_turn_input("hola, quiero estudiar")
+    result = app.orchestrator.handle_turn(turn)
+
+    assert result.kind is TurnKind.CRISIS_PROTOCOL
+    assert result.metadata.get("response_id") == "inactivity_followup"
+
+
+def test_followup_events_do_not_renew_distress_window(tmp_path: Path) -> None:
+    # Un evento cuyo único motivo es el follow-up de inactividad NO debe
+    # contar como angustia nueva — si contara, cada seguimiento renovaría
+    # la ventana de 24h y el ciclo no terminaría nunca.
+    from safety.types import CrisisLevel, CrisisReason, CrisisSignal
+
+    session, app = _make_session(tmp_path)
+    app.db.crisis_journal.record(
+        CrisisSignal(
+            level=CrisisLevel.CRISIS,
+            reasons=(CrisisReason.PROLONGED_INACTIVITY_AFTER_DISTRESS,),
+            detected_at=_now() - timedelta(hours=1),
+        )
+    )
+
+    turn = session.build_turn_input("hola")
+
+    assert turn.last_high_distress_at is None
+
+
+def test_no_signals_keeps_trigger_off(tmp_path: Path) -> None:
+    session, _ = _make_session(tmp_path)
+
+    turn = session.build_turn_input("hola")
+
+    assert turn.last_high_distress_at is None
+    assert turn.last_interaction_at is None

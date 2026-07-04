@@ -326,10 +326,12 @@ def _is_emotionally_elevated(history: Iterable[EmotionalSample], now: datetime) 
 
 
 def _is_prolonged_inactivity_after_distress(input: CrisisInput) -> bool:
-    # NOTA (ver CLAUDE.md §4.2): igual que `_is_sustained_extreme` — este
-    # trigger está dormido en producción porque nada calcula ni persiste
-    # `last_high_distress_at` hoy. La lógica de detección está lista para
-    # cuando ese dato exista.
+    # ACTIVO en producción (ver CLAUDE.md §4.2): los datos vivos los
+    # calculan `find_last_high_distress_at`/`find_last_interaction_at`
+    # (orchestrator/context.py) y los inyecta TurnSession en ambos loops
+    # de voz. En modo privado ambos llegan None y el trigger queda
+    # apagado. Los eventos de follow-up no renuevan la ventana de 24h
+    # (anti-loop, filtrado en el helper).
     if input.last_high_distress_at is None:
         return False
     if input.last_interaction_at is None:

@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     elevenlabs_model: str = "eleven_flash_v2_5"
     elevenlabs_stability: float = 0.55
     elevenlabs_similarity_boost: float = 0.8
+    # Cache de frases curadas pre-sintetizadas (rako-pregen-tts): permite
+    # que crisis/derivaciones hablen sin internet. Solo audio de salida.
+    tts_cache_dir: str = "./data/tts-cache"
 
     # --- RAG ---
     chroma_db_path: str = "./chroma_db"

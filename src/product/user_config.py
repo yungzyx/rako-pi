@@ -42,6 +42,10 @@ class PrivacyConsent:
     progress_reports_enabled: bool = False
     sensitive_memory_enabled: bool = False
     wellbeing_escalation_enabled: bool = False
+    # Alerta al contacto de confianza cuando se activa el protocolo de
+    # crisis (CLAUDE.md §4.2.3). Off por defecto: requiere consentimiento
+    # explícito registrado durante el onboarding.
+    trusted_contact_alerts_enabled: bool = False
     accepted_at: str | None = None
 
 
@@ -110,6 +114,7 @@ class UserConfigService:
                 "progress_reports_enabled",
                 "sensitive_memory_enabled",
                 "wellbeing_escalation_enabled",
+                "trusted_contact_alerts_enabled",
             )
         )
         accepted_at = current.get("accepted_at")
@@ -121,6 +126,7 @@ class UserConfigService:
             progress_reports_enabled=bool(current.get("progress_reports_enabled")),
             sensitive_memory_enabled=bool(current.get("sensitive_memory_enabled")),
             wellbeing_escalation_enabled=bool(current.get("wellbeing_escalation_enabled")),
+            trusted_contact_alerts_enabled=bool(current.get("trusted_contact_alerts_enabled")),
             accepted_at=str(accepted_at) if accepted_at else None,
         )
         self._set_json(CONSENT_KEY, asdict(consent))

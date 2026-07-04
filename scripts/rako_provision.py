@@ -32,6 +32,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--enable-proactive", action="store_true")
     parser.add_argument("--enable-wellbeing", action="store_true")
     parser.add_argument(
+        "--enable-contact-alerts",
+        action="store_true",
+        help="Consent to alert the trusted contact via WhatsApp during crisis protocol",
+    )
+    parser.add_argument(
         "--memory",
         action="append",
         default=[],
@@ -81,6 +86,7 @@ def provision(db: Database, args: argparse.Namespace) -> dict[str, object]:
         "progress_reports_enabled": args.enable_progress or None,
         "proactive_messages_enabled": args.enable_proactive or None,
         "wellbeing_escalation_enabled": args.enable_wellbeing or None,
+        "trusted_contact_alerts_enabled": args.enable_contact_alerts or None,
     }
     if any(value is not None for value in consent_patch.values()):
         service.update_consent(consent_patch)

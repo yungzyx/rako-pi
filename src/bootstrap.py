@@ -16,6 +16,12 @@ from typing import Any
 
 from anthropic import Anthropic
 
+from channels.whatsapp.client import (
+    InMemoryWhatsAppClient,
+    WhatsAppClient,
+    WhatsAppCloudClient,
+)
+from channels.whatsapp.crisis_notifier import WhatsAppCrisisNotifier
 from config import Settings
 from db.database import Database
 from hardware.audio import InMemoryCapture, InMemoryPlayback
@@ -45,6 +51,7 @@ from voice.audio_io import AudioCaptureSource, AudioPlaybackSink
 from voice.stt import GoogleCloudSTT, STTClient
 from voice.stt_openai import OpenAIWhisperSTT
 from voice.tts import ElevenLabsTTS, FallbackTTS, GoogleCloudTTS, TTSClient
+from voice.tts_cache import PrerecordedTTS
 from voice.types import AudioBuffer, SynthesisResult, TranscriptResult
 from voice.wake_word import SubstringWakeWordDetector, WakeWordDetector
 
@@ -282,7 +289,10 @@ def build_pi_application(settings: Settings) -> Application:
 
     crisis_voice = _LoggingVoicePlayer()
     crisis_lighting = CrisisLightingAdapter(leds)
-    crisis_notifier = _LoggingNotifier()
+    # Notificador REAL del contacto de confianza: WhatsApp con
+    # consentimiento registrado. Sin credenciales cloud usa el cliente en
+    # memoria (equivalente a solo-log, sin efectos externos).
+    crisis_notifier = WhatsAppCrisisNotifier(db=db, client=_build_whatsapp_client(settings))
     protocol = CrisisProtocol(
         voice=crisis_voice,
         lighting=crisis_lighting,
@@ -428,11 +438,33 @@ def _try_real_tts(settings: Settings) -> TTSClient | None:
     return FallbackTTS(chain)
 
 
+def _build_whatsapp_client(settings: Settings) -> WhatsAppClient:
+    """Mismo criterio que la API móvil (mobile/deps.py): cloud real solo
+    con credenciales completas; si no, cliente en memoria (sin red)."""
+    if (
+        settings.whatsapp_client == "cloud"
+        and settings.whatsapp_cloud_access_token
+        and settings.whatsapp_cloud_phone_number_id
+    ):
+        return WhatsAppCloudClient(
+            access_token=settings.whatsapp_cloud_access_token,
+            phone_number_id=settings.whatsapp_cloud_phone_number_id,
+            api_version=settings.whatsapp_cloud_api_version,
+            timeout_s=settings.whatsapp_cloud_timeout_s,
+        )
+    return InMemoryWhatsAppClient()
+
+
 def _build_tts_chain(settings: Settings) -> tuple[TTSClient, ...]:
     candidates: list[TTSClient | None] = []
     if settings.tts_provider == "elevenlabs":
         candidates.append(_try_elevenlabs_tts(settings))
     candidates.append(_try_google_tts(settings))
+    # Último eslabón: frases curadas pre-sintetizadas en disco (offline).
+    # Solo entra si el operador corrió rako-pregen-tts (cache no vacío).
+    prerecorded = PrerecordedTTS(Path(settings.tts_cache_dir))
+    if prerecorded.entry_count() > 0:
+        candidates.append(prerecorded)
     return tuple(client for client in candidates if client is not None)
 
 

@@ -17,6 +17,7 @@ from typing import Self
 from db.connection import open_connection
 from db.connection import require_encrypted as _require_encrypted
 from db.journal import CrisisJournal
+from db.migrations import apply_migrations
 from db.repositories import (
     AchievementRepository,
     ConfigRepository,
@@ -40,9 +41,15 @@ class Database:
 
     @classmethod
     def open(cls, path: str, key: str | None = None) -> Self:
-        """Abre o crea la base, aplica el schema, y devuelve un Database."""
+        """Abre o crea la base, aplica schema + migraciones pendientes.
+
+        `create_all` cubre bases nuevas; `apply_migrations` lleva bases
+        con datos de versiones anteriores al esquema actual (y aborta si
+        la base es MÁS NUEVA que este código — ver db/migrations.py).
+        """
         conn = open_connection(path, key)
         create_all(conn)
+        apply_migrations(conn)
         return cls(conn)
 
     def require_encrypted(self) -> None:

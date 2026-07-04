@@ -170,19 +170,26 @@ app móvil ni el contenido del RAG.
 2. **Disparadores de crisis — activos hoy vs. diferidos:**
    - **Activos en producción:** palabras clave de ideación suicida o
      autolesión en la transcripción (voz o WhatsApp); botón pánico físico
-     (Pi) o en app/WhatsApp.
-   - **Diferidos (roadmap, NO viven en producción todavía):** vector
+     (Pi) o en app/WhatsApp; inactividad prolongada tras alta angustia
+     (≥2h sin interacción dentro de las 24h siguientes a un evento de
+     crisis o a un check-in de valencia extrema) — los datos vivos los
+     calculan `find_last_high_distress_at`/`find_last_interaction_at`
+     (`orchestrator/context.py`) y los inyecta `TurnSession`. La
+     respuesta es el follow-up curado (`inactivity_followup`, no
+     re-alerta al contacto) y los eventos de follow-up NO renuevan la
+     ventana de 24h (anti-loop). En `RAKO_MODE=private` este trigger
+     queda apagado (no hay historial persistido que medir).
+   - **Diferido (roadmap, NO vive en producción todavía):** vector
      emocional con valores extremos sostenidos — requiere el modelo SER
-     local (ver §2), que no está implementado; inactividad anormalmente
-     prolongada tras interacciones de alta angustia — requiere que algo
-     calcule y persista `last_high_distress_at`, y hoy nada lo hace.
-     La lógica de detección para ambos ya existe en `safety/detector.py`
-     con tests unitarios completos, pero ningún llamador real
-     (`orchestrator/run.py`) le pasa datos vivos — **tener tests no es
-     estar en producción.** No asumir que estos dos triggers protegen al
-     usuario del dispositivo físico hoy.
+     local (ver §2), que no está implementado. Su lógica de detección
+     existe en `safety/detector.py` con tests, pero ningún llamador le
+     pasa historial emocional de audio real — **tener tests no es estar
+     en producción.**
 3. **Protocolo:** presencia (no soluciones) → activar contacto de confianza
-   con consentimiento previo registrado → desplegar recursos (Salud Responde
+   con consentimiento previo registrado — la alerta REAL sale por WhatsApp
+   (`channels/whatsapp/crisis_notifier.py`), solo con
+   `trusted_contact_alerts_enabled` y contacto configurado; payload curado
+   mínimo sin datos del evento → desplegar recursos (Salud Responde
    600 360 7777, Línea Libre, etc.) → registro privado del evento
    (`crisis_journal`, en cada punto de entrada: voz, botón pánico y
    WhatsApp).

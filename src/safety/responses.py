@@ -100,6 +100,12 @@ _REASON_PRIORITY: tuple[tuple[CrisisReason, str], ...] = (
 )
 
 
+def all_response_texts() -> tuple[str, ...]:
+    """Textos de todas las respuestas curadas de crisis, para pre-síntesis
+    de voz offline (scripts/rako-pregen-tts)."""
+    return tuple(response.text for response in _RESPONSES.values())
+
+
 def pick_response(signal: CrisisSignal) -> CrisisResponse:
     """Selecciona la respuesta curada para la señal dada.
 

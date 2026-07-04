@@ -25,6 +25,7 @@ RUFF_TARGETS: tuple[str, ...] = (
     "scripts/listen_wake_word.py",
     "scripts/music_mode.py",
     "scripts/rako_backup.py",
+    "scripts/rako_pregen_tts.py",
     "scripts/rako_demo.py",
     "scripts/rako_demo_mode.py",
     "scripts/rako_doctor.py",
@@ -56,6 +57,7 @@ SAFETY_TESTS: tuple[str, ...] = (
     "tests/test_orchestrator_run.py",
     "tests/test_orchestrator_turn_session.py",
     "tests/channels/whatsapp/test_whatsapp_service.py",
+    "tests/channels/whatsapp/test_crisis_notifier.py",
 )
 
 STRESS_TEST_TARGETS: tuple[str, ...] = (

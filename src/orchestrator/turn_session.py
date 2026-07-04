@@ -18,7 +18,12 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from db.types import Interaction, InteractionType
-from orchestrator.context import build_user_context, count_recent_low_mood_days
+from orchestrator.context import (
+    build_user_context,
+    count_recent_low_mood_days,
+    find_last_high_distress_at,
+    find_last_interaction_at,
+)
 from orchestrator.memory import ConversationMemory
 from orchestrator.orchestrator import TurnInput, TurnResult
 from orchestrator.voice_commands import parse_remember_command
@@ -128,9 +133,12 @@ class TurnSession:
     # ------------------------------------------------------------------
 
     def build_turn_input(self, transcript: str, *, now: datetime | None = None) -> TurnInput:
-        """TurnInput con todo lo que el orquestador necesita para triage:
-        contexto de usuario con conversación reciente, días de ánimo bajo
-        y la unidad de bienestar configurada en esta placa."""
+        """TurnInput con todo lo que el orquestador necesita para triage y
+        detección: contexto con conversación reciente, días de ánimo bajo,
+        unidad de bienestar, y las señales vivas del trigger de
+        inactividad post-angustia (última angustia alta registrada +
+        última interacción persistida — None en modo privado, donde ese
+        trigger queda apagado)."""
         now = now or self._now()
         channels = UserConfigService(self._db).get_channels()
         return TurnInput(
@@ -138,8 +146,8 @@ class TurnSession:
             emotion=None,
             panic_button=None,
             emotion_history=(),
-            last_high_distress_at=None,
-            last_interaction_at=now,
+            last_high_distress_at=find_last_high_distress_at(self._db, now),
+            last_interaction_at=find_last_interaction_at(self._db),
             user_context=build_user_context(
                 self._db,
                 now,

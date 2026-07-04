@@ -163,3 +163,26 @@ def test_try_real_tts_wraps_multiple_candidates_in_fallback_chain(
 
     assert isinstance(tts, FallbackTTS)
     assert tts.clients == (eleven, google)
+
+
+def test_build_pi_wires_real_crisis_notifier(tmp_path: Path) -> None:
+    from bootstrap import build_pi_application
+    from channels.whatsapp.client import InMemoryWhatsAppClient
+    from channels.whatsapp.crisis_notifier import WhatsAppCrisisNotifier
+
+    settings = Settings(
+        _env_file=None,
+        rako_env="dev",
+        sqlite_path=str(tmp_path / "rako.db"),
+        anthropic_api_key=None,
+        obsidian_vault_path=str(tmp_path / "vault"),
+        chroma_db_path=str(tmp_path / "chroma"),
+    )
+    app = build_pi_application(settings)
+    try:
+        notifier = app.crisis_protocol.notifier
+        assert isinstance(notifier, WhatsAppCrisisNotifier)
+        # Sin credenciales cloud el cliente es en memoria: cero red.
+        assert isinstance(notifier._client, InMemoryWhatsAppClient)
+    finally:
+        app.close()
