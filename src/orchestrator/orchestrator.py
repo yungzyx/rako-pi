@@ -260,9 +260,7 @@ class Orchestrator:
         reintento falla con excepción, se conserva la primera respuesta —
         repetirse es mejor que quedarse callado.
         """
-        response = self._llm.generate(
-            query=input.transcript, chunks=chunks, context=context
-        )
+        response = self._llm.generate(query=input.transcript, chunks=chunks, context=context)
         recent = input.user_context.recent_conversation
         if not is_near_repeat(response.text, recent):
             return response, False

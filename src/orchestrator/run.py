@@ -145,9 +145,7 @@ class RunLoop:
         cutoff = self._now() - _MEMORY_RESTORE_WINDOW
         recent = [
             interaction
-            for interaction in self._app.db.interactions.list_recent(
-                limit=self._memory.max_turns
-            )
+            for interaction in self._app.db.interactions.list_recent(limit=self._memory.max_turns)
             if _as_aware(interaction.timestamp) >= cutoff
         ]
         for interaction in reversed(recent):  # list_recent viene nuevo→viejo
