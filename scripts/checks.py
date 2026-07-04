@@ -126,15 +126,8 @@ COVERAGE_FLOORS: tuple[tuple[str, float], ...] = (
 
 # CLAUDE.md exige <=800 líneas/archivo. No agregar archivos nuevos a esta
 # lista: un archivo nuevo que viole el máximo debe partirse, no listarse acá.
-GRANDFATHERED_OVERSIZED_FILES: frozenset[str] = frozenset(
-    {
-        # Cruzó el máximo por los fixes de privacidad P0.4/P0.5 (filtro de
-        # sensibilidad de memoria, autenticación de remitente, registro en
-        # crisis_journal). Pendiente de partir junto con sus funciones largas
-        # (ver GRANDFATHERED_LONG_FUNCTIONS).
-        "src/channels/whatsapp/service.py",
-    }
-)
+# (Vacía desde el split de channels/whatsapp/service.py — mantener así.)
+GRANDFATHERED_OVERSIZED_FILES: frozenset[str] = frozenset()
 
 # CLAUDE.md exige <50 líneas/función. Estas son violaciones preexistentes,
 # de antes de que este chequeo existiera. No agregar funciones nuevas a esta
@@ -143,12 +136,6 @@ GRANDFATHERED_LONG_FUNCTIONS: frozenset[tuple[str, str]] = frozenset(
     {
         ("src/bootstrap.py", "build_dev_application"),
         ("src/bootstrap.py", "build_pi_application"),
-        ("src/channels/whatsapp/service.py", "_handle_config_command"),
-        ("src/channels/whatsapp/service.py", "_handle_memory_command"),
-        ("src/channels/whatsapp/service.py", "_handle_menu_choice"),
-        ("src/channels/whatsapp/service.py", "_handle_pending"),
-        ("src/channels/whatsapp/service.py", "_handle_pending_focus"),
-        ("src/channels/whatsapp/service.py", "handle_inbound"),
         ("src/main.py", "cli"),
         ("src/mobile/factory_page.py", "render_factory_page"),
         ("src/product/factory_acceptance.py", "build_factory_acceptance_checklist"),

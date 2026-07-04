@@ -154,6 +154,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Do not try speaker playback; only print and save TTS output",
     )
+    parser.add_argument(
+        "--no-chunked-tts",
+        action="store_true",
+        help="Synthesize the full reply in one call instead of speaking sentence by sentence",
+    )
     args = parser.parse_args(argv)
 
     if args.capture_seconds <= 0:
@@ -441,13 +446,60 @@ def _launch_focus_countdown(*, focus: Any, args: argparse.Namespace) -> None:
     subprocess.Popen(command, cwd=str(Path(__file__).resolve().parents[1]))
 
 
+# Trozos de habla: bajar la latencia percibida sintetizando y reproduciendo
+# por oraciones — la primera frase suena mientras el resto se sintetiza en
+# paralelo. Fragmentos muy cortos se fusionan para no cortar la prosodia.
+_SPEECH_CHUNK_MIN_CHARS = 60
+_SPEECH_CHUNK_MAX_CHARS = 260
+
+
+def _split_speech_chunks(
+    text: str,
+    *,
+    min_chars: int = _SPEECH_CHUNK_MIN_CHARS,
+    max_chars: int = _SPEECH_CHUNK_MAX_CHARS,
+) -> list[str]:
+    """Divide en trozos hablables por límites de oración.
+
+    Nunca corta dentro de una oración; junta oraciones consecutivas hasta
+    `min_chars` para evitar trozos de 2 palabras, y cierra el trozo al
+    superar `max_chars`.
+    """
+    import re
+
+    normalized = " ".join(text.strip().split())
+    if not normalized:
+        return []
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?…])\s+", normalized) if s.strip()]
+    chunks: list[str] = []
+    current = ""
+    for sentence in sentences:
+        candidate = f"{current} {sentence}".strip()
+        if current and len(candidate) > max_chars:
+            chunks.append(current)
+            current = sentence
+        else:
+            current = candidate
+        if len(current) >= min_chars and len(current) <= max_chars:
+            chunks.append(current)
+            current = ""
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 def _synthesize_and_maybe_play(
     *, app: Any, text: str, eyes: OledEyeController | None = None, args: argparse.Namespace
 ) -> None:
+    playback_available = not args.no_playback and shutil.which("mpg123") is not None
+    chunks = [text]
+    if playback_available and not args.no_chunked_tts:
+        chunks = _split_speech_chunks(text) or [text]
+
     try:
         tts_started = time.monotonic()
-        synth = app.tts.synthesize(text)
-        print(f"Tiempo TTS: {time.monotonic() - tts_started:.2f}s", flush=True)
+        synth = app.tts.synthesize(chunks[0])
+        print(f"Tiempo TTS (primer trozo): {time.monotonic() - tts_started:.2f}s", flush=True)
     except Exception as exc:
         if eyes is not None:
             eyes.set_state(RakoVisualState.ERROR)
@@ -467,7 +519,39 @@ def _synthesize_and_maybe_play(
     _warm_up_audio_device(device=args.audio_device, seconds=args.playback_warmup_seconds)
     if eyes is not None:
         eyes.set_state(RakoVisualState.SPEAKING)
-    subprocess.run(["mpg123", "-q", "-o", "alsa", "-a", args.audio_device, str(out)], check=False)
+    _play_chunks_pipelined(app=app, first=out, remaining=chunks[1:], args=args)
+
+
+def _play_chunks_pipelined(
+    *, app: Any, first: Path, remaining: list[str], args: argparse.Namespace
+) -> None:
+    """Reproduce el primer trozo mientras el siguiente se sintetiza aparte."""
+    import threading
+
+    current = first
+    for index, chunk in enumerate(remaining, start=1):
+        holder: dict[str, Any] = {}
+
+        def _prefetch(text_chunk: str = chunk, into: dict[str, Any] = holder) -> None:
+            try:
+                into["synth"] = app.tts.synthesize(text_chunk)
+            except Exception as exc:
+                into["error"] = exc
+
+        prefetch = threading.Thread(target=_prefetch, daemon=True)
+        prefetch.start()
+        _play_mp3(current, args=args)
+        prefetch.join()
+        if "synth" not in holder:
+            print(f"No pude sintetizar el trozo {index + 1}: {holder.get('error')}", flush=True)
+            return
+        current = Path(f"/tmp/rako-button-reply-{index}.mp3")
+        current.write_bytes(holder["synth"].audio.data)
+    _play_mp3(current, args=args)
+
+
+def _play_mp3(path: Path, *, args: argparse.Namespace) -> None:
+    subprocess.run(["mpg123", "-q", "-o", "alsa", "-a", args.audio_device, str(path)], check=False)
 
 
 def _play_cue(*, kind: str, args: argparse.Namespace) -> None:

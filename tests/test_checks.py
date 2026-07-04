@@ -69,9 +69,12 @@ def test_hygiene_fails_on_oversized_file(tmp_path: Path) -> None:
     assert "too_big.py" in violations[0]
 
 
-def test_hygiene_ignores_grandfathered_oversized_file(tmp_path: Path) -> None:
+def test_hygiene_ignores_grandfathered_oversized_file(tmp_path: Path, monkeypatch) -> None:
+    # La lista real está vacía (y debe seguir así); el mecanismo se testea
+    # con una entrada inyectada.
     checks = _load_checks_module()
-    rel_path = next(iter(checks.GRANDFATHERED_OVERSIZED_FILES))
+    rel_path = "src/legacy_grandfathered.py"
+    monkeypatch.setattr(checks, "GRANDFATHERED_OVERSIZED_FILES", frozenset({rel_path}))
     grandfathered = tmp_path / rel_path
     grandfathered.parent.mkdir(parents=True)
     grandfathered.write_text(
@@ -79,6 +82,11 @@ def test_hygiene_ignores_grandfathered_oversized_file(tmp_path: Path) -> None:
     )
 
     assert checks._find_file_size_violations(tmp_path) == []
+
+
+def test_real_grandfathered_oversized_list_stays_empty() -> None:
+    checks = _load_checks_module()
+    assert not checks.GRANDFATHERED_OVERSIZED_FILES
 
 
 def test_hygiene_fails_on_long_function(tmp_path: Path) -> None:
