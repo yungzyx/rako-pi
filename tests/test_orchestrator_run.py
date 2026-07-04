@@ -191,6 +191,34 @@ def test_voice_turn_passes_short_memory_to_next_turn(tmp_path: Path) -> None:
         app.close()
 
 
+def test_voice_turn_records_interaction_by_default(tmp_path: Path) -> None:
+    loop, app, _ = _make_loop(tmp_path)
+    try:
+        _emit(app.event_bus, HardwareEventKind.TOUCH)  # type: ignore[arg-type]
+        loop.run(max_iterations=1)
+
+        recorded = app.db.interactions.list_recent()
+        assert len(recorded) == 1
+        assert recorded[0].transcription_excerpt == "estoy aquí"
+        assert recorded[0].response_text
+    finally:
+        app.close()
+
+
+def test_voice_turn_does_not_record_interaction_in_private_mode(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    settings = settings.model_copy(update={"rako_mode": "private"})
+    app = build_dev_application(settings)
+    loop = RunLoop(app=app, config=RunConfig(sleep_seconds=0.0), now=_now)
+    try:
+        _emit(app.event_bus, HardwareEventKind.TOUCH)  # type: ignore[arg-type]
+        loop.run(max_iterations=1)
+
+        assert app.db.interactions.list_recent() == []
+    finally:
+        app.close()
+
+
 def test_wake_word_event_triggers_voice_turn(tmp_path: Path) -> None:
     loop, app, _ = _make_loop(tmp_path)
     try:

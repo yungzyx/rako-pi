@@ -23,11 +23,13 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from uuid import uuid4
 
+from db.types import Interaction, InteractionType
 from hardware.types import HardwareEvent, HardwareEventKind, LEDState
 from orchestrator.context import build_user_context
 from orchestrator.memory import ConversationMemory
-from orchestrator.orchestrator import TurnInput
+from orchestrator.orchestrator import TurnInput, TurnResult
 from safety.types import PanicSource
 
 _log = logging.getLogger(__name__)
@@ -159,7 +161,25 @@ class RunLoop:
         )
         result = self._app.orchestrator.handle_turn(turn)
         self._memory.add_turn(user=transcript, rako=result.text)
+        self._record_interaction(transcript=transcript, result=result, now=now)
         self._dispatch(result)
+
+    def _record_interaction(self, *, transcript: str, result: TurnResult, now: datetime) -> None:
+        # "Modo no-grabación" (CLAUDE.md §4.1.4): con rako_mode=private el
+        # robot sigue operando pero no persiste historial de interacciones.
+        if self._app.settings.rako_mode == "private":
+            return
+        self._app.db.interactions.append(
+            Interaction(
+                id=f"turn_{uuid4().hex}",
+                timestamp=now,
+                type=InteractionType.USER_VOICE,
+                transcription_excerpt=transcript,
+                emotion=None,
+                response_id=None,
+                response_text=result.text,
+            )
+        )
 
     def _transcribe(self, audio) -> str:
         stt = getattr(self._app, "stt", None)
