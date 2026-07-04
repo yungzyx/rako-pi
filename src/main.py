@@ -27,6 +27,7 @@ from channels.whatsapp.scheduler import (
 )
 from channels.whatsapp.service import WhatsAppService
 from config import Settings
+from db.connection import EncryptionRequiredError
 from orchestrator.orchestrator import TurnInput, TurnKind
 from orchestrator.types import default_user_context
 from product.user_config import UserConfigService
@@ -195,6 +196,13 @@ def _run_purge_all(app: Application) -> int:
 
 def _run_loop(app: Application, *, max_iterations: int | None) -> int:
     from orchestrator.run import RunLoop
+
+    if app.settings.rako_env == "prod":
+        try:
+            app.db.require_encrypted()
+        except EncryptionRequiredError as exc:
+            print(f"[Rako] ABORT: {exc}", file=sys.stderr)
+            return 1
 
     loop = RunLoop(app=app)
     print("[Rako] loop principal iniciado. Ctrl+C para detener.")

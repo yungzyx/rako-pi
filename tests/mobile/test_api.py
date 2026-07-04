@@ -4,8 +4,10 @@ import hashlib
 import hmac
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
+from db.connection import EncryptionRequiredError
 from mobile.api import create_app
 
 
@@ -18,6 +20,29 @@ def test_health_does_not_require_token(monkeypatch, tmp_path) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_mobile_api_lifespan_aborts_outside_dev_without_encryption(monkeypatch, tmp_path) -> None:
+    # CLAUDE.md §4.1.6: fuera de dev, la API no debe aceptar tráfico si la
+    # base local no está cifrada. El lifespan de FastAPI solo se dispara
+    # entrando al context manager (`with TestClient(...) as client:`).
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_ENV", "staging")
+    monkeypatch.delenv("SQLITE_ENCRYPTION_KEY", raising=False)
+
+    with pytest.raises(EncryptionRequiredError), TestClient(create_app()) as _client:
+        pass
+
+
+def test_mobile_api_lifespan_allows_dev_without_encryption(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    monkeypatch.setenv("RAKO_ENV", "dev")
+    monkeypatch.delenv("SQLITE_ENCRYPTION_KEY", raising=False)
+
+    with TestClient(create_app()) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 200
 
 
 def test_status_requires_token_when_configured(monkeypatch, tmp_path) -> None:
@@ -255,8 +280,32 @@ def test_user_memory_endpoint_requires_sensitive_memory_consent(monkeypatch, tmp
 
 
 def test_user_export_and_delete_all_endpoints_manage_product_data(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "rako.db"))
+    from datetime import UTC, datetime
+
+    from db.database import Database
+    from db.types import Task, TaskSource, TaskStatus
+
+    db_path = str(tmp_path / "rako.db")
+    monkeypatch.setenv("SQLITE_PATH", db_path)
     monkeypatch.delenv("RAKO_API_TOKEN", raising=False)
+
+    # Sembrar una tarea directamente (no expuesto por escritura vía API) para
+    # confirmar que el borrado total alcanza historial, no solo config.
+    seed_db = Database.open(db_path)
+    seed_db.tasks.create(
+        Task(
+            id="t1",
+            title="Leer capítulo 3",
+            description=None,
+            parent_id=None,
+            status=TaskStatus.TODO,
+            created_at=datetime(2026, 6, 20, 12, 0, tzinfo=UTC),
+            completed_at=None,
+            source=TaskSource.VOICE,
+        )
+    )
+    seed_db.close()
+
     client = TestClient(create_app())
     client.patch("/user/profile", json={"preferred_name": "Nico", "university": "UDD"})
     client.patch("/user/channels", json={"wifi_ssid": "Casa", "whatsapp_number": "+56912345678"})
@@ -266,6 +315,7 @@ def test_user_export_and_delete_all_endpoints_manage_product_data(monkeypatch, t
     exported = client.get("/user/export")
     deleted = client.post("/user/delete-all")
     exported_after_delete = client.get("/user/export")
+    tasks_after_delete = client.get("/tasks")
 
     assert exported.status_code == 200
     assert exported.json()["profile"]["preferred_name"] == "Nico"
@@ -273,6 +323,7 @@ def test_user_export_and_delete_all_endpoints_manage_product_data(monkeypatch, t
     assert deleted.json()["deleted_count"] == 4
     assert exported_after_delete.json()["profile"]["preferred_name"] is None
     assert exported_after_delete.json()["memory"] == []
+    assert tasks_after_delete.json()["tasks"] == []
 
 
 def test_factory_report_endpoint_summarizes_unit_readiness(monkeypatch, tmp_path) -> None:

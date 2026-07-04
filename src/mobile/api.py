@@ -8,6 +8,7 @@ Run locally on the Pi:
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -212,7 +213,22 @@ def create_app() -> Any:
 
     settings = Settings()
     app_version = current_app_version()
-    app = FastAPI(title="Rako Local API", version=app_version)
+
+    @asynccontextmanager
+    async def _lifespan(_app: Any) -> AsyncIterator[None]:
+        # CLAUDE.md §4.1.6: fuera de dev, la API no debe aceptar tráfico si
+        # la base local no está cifrada (SQLCipher). `TestClient(app)` sin
+        # `with` no dispara lifespan, así que esto no afecta tests que
+        # construyen la app sin entrar al context manager.
+        if settings.rako_env != "dev":
+            probe = Database.open(settings.sqlite_path, settings.sqlite_encryption_key)
+            try:
+                probe.require_encrypted()
+            finally:
+                probe.close()
+        yield
+
+    app = FastAPI(title="Rako Local API", version=app_version, lifespan=_lifespan)
 
     async def require_api_token(
         authorization: str | None = Header(default=None),

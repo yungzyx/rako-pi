@@ -219,13 +219,14 @@ class UserConfigService:
         }
 
     def delete_user_data(self) -> dict[str, bool]:
-        """Delete profile, consent, channels, and editable memory.
-
-        This intentionally leaves study tasks, mood samples, and operational logs in place.
-        Those are separate product domains with their own retention policy.
+        """Rako's full data wipe: profile, consent, channels, editable memory,
+        AND all local history — tasks, interactions, mood samples, achievements,
+        crisis journal (CLAUDE.md §4.1.5: "borrado total ... efecto inmediato").
         """
 
-        return {key: self._db.config.delete(key) for key in PRODUCT_CONFIG_KEYS}
+        existed = {key: self._db.config.get(key) is not None for key in PRODUCT_CONFIG_KEYS}
+        self._db.purge_all_user_data()
+        return existed
 
     def onboarding_status(self) -> OnboardingStatus:
         profile = self.get_profile()

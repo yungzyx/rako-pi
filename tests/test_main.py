@@ -211,6 +211,27 @@ def test_run_subcommand_executes_finite_iterations(
     assert "loop principal" in captured.out.lower()
 
 
+def test_run_command_aborts_when_prod_lacks_encryption(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # CLAUDE.md §4.1.6: producción no debe correr sin SQLCipher activo — el
+    # arranque debe abortar antes de aceptar el loop de voz real. En este
+    # sandbox no hay libsqlcipher instalado, así que `rako_env=prod` sin key
+    # siempre debe fallar el self-test de cifrado.
+    _common_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("RAKO_ENV", "prod")
+    monkeypatch.delenv("SQLITE_ENCRYPTION_KEY", raising=False)
+
+    exit_code = cli_module.cli(["run", "--max-iterations", "2"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "ABORT" in captured.err
+    assert "not encrypted" in captured.err.lower()
+
+
 def test_smart_checkin_reports_consent_required(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

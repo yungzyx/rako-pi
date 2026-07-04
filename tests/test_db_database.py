@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from db.database import Database
 from db.types import (
     Achievement,
@@ -89,6 +91,19 @@ def test_purge_all_user_data_clears_everything(tmp_path: Path) -> None:
     assert db.achievements.list_all() == []
     assert db.crisis_journal.list_recent() == []
     db.close()
+
+
+def test_database_require_encrypted_delegates_to_connection_boundary(tmp_path: Path) -> None:
+    from db.connection import EncryptionRequiredError
+
+    # Sin SQLCipher instalado (como en este sandbox de dev/CI), abrir sin
+    # key nunca queda cifrado — `require_encrypted` debe abortar.
+    db = Database.open(str(tmp_path / "test.db"))
+    try:
+        with pytest.raises(EncryptionRequiredError):
+            db.require_encrypted()
+    finally:
+        db.close()
 
 
 def test_database_close_is_idempotent(tmp_path: Path) -> None:

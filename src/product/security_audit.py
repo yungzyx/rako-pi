@@ -34,7 +34,9 @@ def build_security_audit(settings: Settings) -> SecurityAudit:
         ),
         _check(
             "sqlite encryption",
-            "ok" if settings.sqlite_encryption_key else "warn",
+            "ok"
+            if settings.sqlite_encryption_key
+            else ("warn" if settings.rako_env == "dev" else "fail"),
             "configured" if settings.sqlite_encryption_key else "missing SQLITE_ENCRYPTION_KEY",
         ),
         _check(

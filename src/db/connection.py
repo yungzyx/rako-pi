@@ -51,7 +51,7 @@ def require_encrypted(conn: sqlite3.Connection) -> None:
         )
 
 
-class _CompatRow:
+class _CompatRow:  # pragma: no cover - solo se instancia con el driver SQLCipher real
     def __init__(self, columns: tuple[str, ...], values: tuple[object, ...]) -> None:
         self._columns = columns
         self._values = values
@@ -69,6 +69,6 @@ class _CompatRow:
         return len(self._values)
 
 
-def _dict_row(cursor, row) -> _CompatRow:
+def _dict_row(cursor, row) -> _CompatRow:  # pragma: no cover - solo con driver SQLCipher real
     columns = tuple(column[0] for column in cursor.description)
     return _CompatRow(columns, tuple(row))
