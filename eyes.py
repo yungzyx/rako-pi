@@ -163,7 +163,6 @@ def draw_happy(draw: ImageDraw.ImageDraw, t: float) -> None:
     bounce = int(2 * math.sin(t * 5))
     closed_eye(draw, _shift(LEFT_EYE, 0, bounce), tilt=-3)
     closed_eye(draw, _shift(RIGHT_EYE, 0, bounce), tilt=3)
-    sparkle(draw, 64, 18 + bounce, r=3)
 
 
 def draw_sad(draw: ImageDraw.ImageDraw, t: float) -> None:
@@ -193,7 +192,6 @@ def draw_surprised(draw: ImageDraw.ImageDraw, t: float) -> None:
 def draw_wink(draw: ImageDraw.ImageDraw, t: float) -> None:
     soft_eye(draw, LEFT_EYE, pupil=(3, 0), t=t, attentive=True)
     closed_eye(draw, RIGHT_EYE, tilt=2)
-    sparkle(draw, 64, 12, r=3)
 
 
 def draw_thinking(draw: ImageDraw.ImageDraw, t: float) -> None:
@@ -231,7 +229,6 @@ def draw_speaking(draw: ImageDraw.ImageDraw, t: float) -> None:
 def draw_love(draw: ImageDraw.ImageDraw, t: float) -> None:
     love_eye(draw, LEFT_EYE)
     love_eye(draw, RIGHT_EYE)
-    sparkle(draw, 64, 10, r=3)
 
 
 def love_eye(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int]) -> None:
