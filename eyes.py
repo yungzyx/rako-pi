@@ -111,6 +111,40 @@ def sparkle(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int = 3) -> None:
     )
 
 
+# Transición de entrada: cada expresión nueva "abre los ojos" durante este
+# lapso en vez de aparecer de golpe. Como cada cambio de estado relanza el
+# subproceso de eyes.py (ver hardware/oled_runtime.py), esto convierte todo
+# cambio de expresión en un parpadeo — el corte deja de notarse.
+_ENTER_TRANSITION_SECONDS = 0.28
+
+# Ciclo de parpadeo en reposo. Cada _BLINK_PERIOD hay un parpadeo corto; una
+# de cada _DOUBLE_BLINK_EVERY veces es doble (más vivo, menos metrónomo).
+_BLINK_PERIOD = 5.2
+_BLINK_CLOSED_SECONDS = 0.08
+_DOUBLE_BLINK_EVERY = 4
+_DOUBLE_BLINK_GAP_START = 0.22
+_DOUBLE_BLINK_GAP_END = 0.30
+
+
+def ease_out_cubic(progress: float) -> float:
+    clamped = max(0.0, min(1.0, progress))
+    return 1.0 - (1.0 - clamped) ** 3
+
+
+def blink_is_closed(t: float) -> bool:
+    """True si en el instante `t` el párpado está abajo (parpadeo idle).
+
+    Determinístico: mismo t → mismo frame (importante para tests y para
+    que --loop no acumule deriva).
+    """
+    cycle_position = t % _BLINK_PERIOD
+    if cycle_position < _BLINK_CLOSED_SECONDS:
+        return True
+    cycle_index = int(t // _BLINK_PERIOD)
+    is_double_cycle = cycle_index % _DOUBLE_BLINK_EVERY == _DOUBLE_BLINK_EVERY - 1
+    return is_double_cycle and _DOUBLE_BLINK_GAP_START <= cycle_position < _DOUBLE_BLINK_GAP_END
+
+
 def idle_drift(t: float) -> tuple[float, float]:
     """Slow, subtle pupil wander so a still gaze doesn't read as frozen.
 
@@ -132,8 +166,7 @@ def soft_eye(
     t: float = 0.0,
     attentive: bool = False,
 ) -> None:
-    blink_cycle = t % 5.2
-    is_blinking = blink_cycle < 0.08
+    is_blinking = blink_is_closed(t)
     openness = 0.18 if is_blinking else 0.86 + 0.06 * math.sin(t * 1.8)
     if attentive:
         openness = min(1.0, openness + 0.1)
@@ -282,14 +315,43 @@ EXPRESSIONS: dict[str, Expression] = {
 }
 
 
-def play_expression(device, expression: Expression, *, seconds: float | None = None) -> None:
+def compose_frame(expression: Expression, t: float, *, entering: bool = False) -> Image.Image:
+    """Renderiza un frame; con `entering`, superpone los párpados que se
+    abren durante la ventana de transición inicial."""
+    image, draw = canvas()
+    expression.draw(draw, t)
+    if entering and t < _ENTER_TRANSITION_SECONDS:
+        _draw_enter_lids(draw, t / _ENTER_TRANSITION_SECONDS)
+    return image
+
+
+def _draw_enter_lids(draw: ImageDraw.ImageDraw, progress: float) -> None:
+    """Párpados superior e inferior que se retiran con ease-out.
+
+    A progress=0 cubren toda la pantalla (ojos cerrados); a progress=1 no
+    queda nada. Genérico: funciona sobre cualquier expresión sin que esta
+    sepa de transiciones.
+    """
+    opened = ease_out_cubic(progress)
+    lid_height = int((HEIGHT / 2) * (1.0 - opened))
+    if lid_height <= 0:
+        return
+    draw.rectangle((0, 0, WIDTH, lid_height), fill=0)
+    draw.rectangle((0, HEIGHT - lid_height, WIDTH, HEIGHT), fill=0)
+
+
+def play_expression(
+    device,
+    expression: Expression,
+    *,
+    seconds: float | None = None,
+    enter: bool = True,
+) -> None:
     start = time.monotonic()
     duration = seconds if seconds is not None else expression.duration
     while time.monotonic() - start < duration:
         t = time.monotonic() - start
-        image, draw = canvas()
-        expression.draw(draw, t)
-        device.display(image)
+        device.display(compose_frame(expression, t, entering=enter))
         time.sleep(expression.frame_delay)
 
 
@@ -334,8 +396,12 @@ def main() -> int:
 
     expression = EXPRESSIONS[args.expression]
     if args.loop:
+        # El parpadeo de entrada solo en la primera pasada — las siguientes
+        # iteraciones del loop son continuidad, no un cambio de estado.
+        first = True
         while True:
-            play_expression(device, expression, seconds=args.seconds)
+            play_expression(device, expression, seconds=args.seconds, enter=first)
+            first = False
     else:
         play_expression(device, expression, seconds=args.seconds)
     return 0
