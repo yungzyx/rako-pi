@@ -109,6 +109,21 @@ REQUIRED_GITIGNORE_PATTERNS: tuple[str, ...] = (
 MAX_FILE_LINES = 800
 MAX_FUNCTION_LINES = 50
 
+# Pisos de cobertura POR ARCHIVO para el código donde una regresión
+# silenciosa importa más. El piso global de 95% puede esconder un hoyo
+# localizado (p. ej. safety/ al 70% compensado por el resto); esto no.
+# Las rutas son relativas a src/ y se matchean por prefijo.
+COVERAGE_FLOORS: tuple[tuple[str, float], ...] = (
+    ("safety/", 95.0),
+    ("db/connection.py", 95.0),
+    ("db/migrations.py", 90.0),
+    ("sync/sanitizer.py", 95.0),
+    ("orchestrator/turn_session.py", 95.0),
+    ("channels/whatsapp/crisis_notifier.py", 95.0),
+    ("voice/tts.py", 95.0),
+    ("voice/tts_cache.py", 95.0),
+)
+
 # CLAUDE.md exige <=800 líneas/archivo. No agregar archivos nuevos a esta
 # lista: un archivo nuevo que viole el máximo debe partirse, no listarse acá.
 GRANDFATHERED_OVERSIZED_FILES: frozenset[str] = frozenset(
@@ -197,6 +212,47 @@ def _run_tests() -> None:
             "--cov-fail-under=95",
         )
     )
+    _enforce_coverage_floors(Path.cwd() / "coverage.xml")
+
+
+def _enforce_coverage_floors(coverage_xml: Path) -> None:
+    violations = _find_coverage_floor_violations(coverage_xml)
+    if violations:
+        print("Per-file coverage floors failed:", file=sys.stderr)
+        for violation in violations:
+            print(f"  - {violation}", file=sys.stderr)
+        raise SystemExit(1)
+    print("Per-file coverage floors passed")
+
+
+def _find_coverage_floor_violations(coverage_xml: Path) -> list[str]:
+    if not coverage_xml.exists():
+        return [f"{coverage_xml} not found (did pytest --cov run?)"]
+    tree = _parse_coverage_classes(coverage_xml)
+    violations: list[str] = []
+    for filename, line_rate in tree:
+        for prefix, floor in COVERAGE_FLOORS:
+            if filename.startswith(prefix):
+                percent = line_rate * 100.0
+                if percent < floor:
+                    violations.append(f"src/{filename}: {percent:.1f}% < floor {floor:.0f}%")
+                break
+    return violations
+
+
+def _parse_coverage_classes(coverage_xml: Path) -> list[tuple[str, float]]:
+    """Extrae (filename, line-rate) por clase del coverage.xml de pytest-cov."""
+    import xml.etree.ElementTree as ElementTree
+
+    root = ElementTree.parse(coverage_xml).getroot()
+    entries: list[tuple[str, float]] = []
+    for cls in root.iter("class"):
+        filename = cls.get("filename")
+        line_rate = cls.get("line-rate")
+        if filename is None or line_rate is None:
+            continue
+        entries.append((filename, float(line_rate)))
+    return entries
 
 
 def _run_safety() -> None:

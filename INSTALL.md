@@ -128,6 +128,8 @@ Sin argumentos instala y arranca el stack por defecto:
   `rako-doctor` en cada boot).
 - **`rako-api`** — API móvil local en `127.0.0.1:8765` (emparejamiento y
   app Flutter).
+- **`rako-backup.timer`** — snapshot cifrado diario de la base a las
+  04:00 (destino por defecto `./backups`; ver §8 para apuntarlo a USB).
 
 Alternativa: `./scripts/install_systemd.sh rako` instala el loop
 `python -m main run` (bus de eventos de hardware). `rako` y `rako-chat`
@@ -156,8 +158,11 @@ los antiguos:
 ./scripts/rako-backup --list
 ```
 
-Ideal: apuntarlo a un USB y agendarlo diario con cron
-(`0 4 * * * /home/<user>/rako-pi/scripts/rako-backup --output-dir /media/usb/rako`).
+El instalador de systemd ya agenda un backup diario a las 04:00
+(`rako-backup.timer`, destino `./backups`). Para protección real contra
+muerte de la microSD, apuntarlo a un USB montado: editar `ExecStart` en
+`/etc/systemd/system/rako-backup.service` (`--output-dir /media/usb/rako`)
+y `sudo systemctl daemon-reload`.
 Para restaurar: detener los servicios (`sudo systemctl stop rako-chat rako-api`),
 copiar el snapshot sobre la ruta de `SQLITE_PATH` (borrando `*-wal`/`*-shm`
 si existen) y volver a arrancar. **Respaldar también la clave**: sin

@@ -31,7 +31,7 @@ for arg in "$@"; do
   fi
 done
 if [[ ${#UNITS[@]} -eq 0 ]]; then
-  UNITS=(rako-chat rako-api)
+  UNITS=(rako-chat rako-api rako-backup)
 fi
 
 for unit in "${UNITS[@]}"; do
@@ -48,6 +48,17 @@ if [[ ! -d "$ROOT/.venv" ]]; then
   exit 1
 fi
 
+# Si la unidad tiene un .timer asociado (p. ej. rako-backup), se instala
+# también y se habilita el TIMER en vez del service (oneshot agendado).
+_enable_target() {
+  local unit="$1"
+  if [[ -f "$ROOT/systemd/${unit}.timer" ]]; then
+    echo "${unit}.timer"
+  else
+    echo "${unit}"
+  fi
+}
+
 for unit in "${UNITS[@]}"; do
   echo "==> Instalando ${unit}.service (user=$RAKO_USER, dir=$ROOT)..."
   sed \
@@ -55,6 +66,14 @@ for unit in "${UNITS[@]}"; do
     -e "s|__RAKO_DIR__|$ROOT|g" \
     "$ROOT/systemd/${unit}.service" \
     | sudo tee "/etc/systemd/system/${unit}.service" > /dev/null
+  if [[ -f "$ROOT/systemd/${unit}.timer" ]]; then
+    echo "==> Instalando ${unit}.timer..."
+    sed \
+      -e "s|__RAKO_USER__|$RAKO_USER|g" \
+      -e "s|__RAKO_DIR__|$ROOT|g" \
+      "$ROOT/systemd/${unit}.timer" \
+      | sudo tee "/etc/systemd/system/${unit}.timer" > /dev/null
+  fi
 done
 
 echo "==> Recargando systemd..."
@@ -62,19 +81,22 @@ sudo systemctl daemon-reload
 
 if [[ "$ENABLE_UNITS" -eq 1 ]]; then
   for unit in "${UNITS[@]}"; do
-    echo "==> Habilitando y arrancando ${unit}..."
-    sudo systemctl enable --now "$unit"
+    target="$(_enable_target "$unit")"
+    echo "==> Habilitando y arrancando ${target}..."
+    sudo systemctl enable --now "$target"
   done
 
   echo
   echo "==> Listo. Estado:"
   for unit in "${UNITS[@]}"; do
-    sudo systemctl --no-pager --lines=0 status "$unit" || true
+    sudo systemctl --no-pager --lines=0 status "$(_enable_target "$unit")" || true
   done
 else
   echo "==> Unidades instaladas sin habilitar (--no-enable). Cuando .env,"
   echo "    audio y OLED estén validados:"
-  echo "      sudo systemctl enable --now ${UNITS[*]}"
+  for unit in "${UNITS[@]}"; do
+    echo "      sudo systemctl enable --now $(_enable_target "$unit")"
+  done
 fi
 
 echo

@@ -1,0 +1,11 @@
+[Unit]
+Description=Rako — backup diario de la base local (04:00)
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+# Si la Pi estaba apagada a las 04:00, corre al siguiente arranque.
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

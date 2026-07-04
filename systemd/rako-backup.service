@@ -1,0 +1,22 @@
+[Unit]
+Description=Rako — snapshot cifrado de la base local
+Documentation=https://github.com/yungzyx/rako-pi
+
+[Service]
+Type=oneshot
+User=__RAKO_USER__
+Group=__RAKO_USER__
+WorkingDirectory=__RAKO_DIR__
+Environment="PYTHONPATH=__RAKO_DIR__/src"
+EnvironmentFile=-__RAKO_DIR__/.env
+# Destino por defecto: __RAKO_DIR__/backups. Para proteger contra muerte
+# de la microSD, cambiar a un USB montado (ver INSTALL.md §8) editando
+# RAKO_BACKUP_DIR en .env o esta línea tras instalar.
+ExecStart=__RAKO_DIR__/scripts/rako-backup --output-dir __RAKO_DIR__/backups --keep 7
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rako-backup
+
+[Install]
+WantedBy=multi-user.target

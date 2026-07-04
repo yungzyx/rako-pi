@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+  schedule:
+    # Lunes 07:00 UTC — corrida semanal anti-flakiness (job stress).
+    - cron: "0 7 * * 1"
 
 jobs:
   test:
@@ -87,3 +91,27 @@ jobs:
 
       - name: Run safety + emotion + db.journal tests
         run: python scripts/checks.py safety
+
+  stress:
+    # Repite las suites críticas para cazar flakiness. Solo corre en la
+    # agenda semanal o a mano (workflow_dispatch) — no bloquea PRs.
+    name: stress (weekly / manual)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run stress cycles
+        run: python scripts/checks.py stress --stress-runs 3
