@@ -43,6 +43,7 @@ SAFETY_TESTS: tuple[str, ...] = (
     "tests/test_safety_resources.py",
     "tests/test_safety_protocol_with_journal.py",
     "tests/test_safety_scope.py",
+    "tests/test_safety_triage.py",
     "tests/test_emotion_types.py",
     "tests/test_db_journal.py",
     # Estos no testean el detector en sí, sino que el veto de crisis está

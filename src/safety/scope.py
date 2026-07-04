@@ -66,6 +66,32 @@ def build_elevated_support_response() -> str:
     )
 
 
+def build_wellbeing_referral_response(
+    unit_name: str | None = None,
+    unit_phone: str | None = None,
+) -> str:
+    """Derivación cálida a la unidad de bienestar (no-crisis).
+
+    Reglas de contenido (mismas que responses.py): sin diagnóstico, sin
+    promesas de confidencialidad, sin frases motivacionales de plantilla.
+    Recomendar contactar a la unidad NO es una escalación activa — no
+    requiere el consentimiento `wellbeing_escalation_enabled`; es mostrar
+    un recurso, igual que las líneas de ayuda.
+
+    NOTA: copy pendiente de revisión por profesional de salud mental
+    antes del release público, igual que safety/responses.py.
+    """
+    if unit_name and unit_phone:
+        contact = f"Puedes contactar a {unit_name} al {unit_phone}."
+    else:
+        contact = render_soft_udd_resources()
+    return (
+        "Gracias por contármelo — eso merece más apoyo del que yo puedo darte, "
+        f"y buscarlo es un buen paso. {contact} "
+        "Yo sigo aquí para acompañarte con lo académico cuando quieras."
+    )
+
+
 def _normalize(text: str) -> str:
     text = text.lower()
     decomposed = unicodedata.normalize("NFD", text)

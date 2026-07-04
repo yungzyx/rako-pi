@@ -27,9 +27,10 @@ from uuid import uuid4
 
 from db.types import Interaction, InteractionType
 from hardware.types import HardwareEvent, HardwareEventKind, LEDState
-from orchestrator.context import build_user_context
+from orchestrator.context import build_user_context, count_recent_low_mood_days
 from orchestrator.memory import ConversationMemory
 from orchestrator.orchestrator import TurnInput, TurnResult
+from product.user_config import UserConfigService
 from safety.types import PanicSource
 
 _log = logging.getLogger(__name__)
@@ -145,6 +146,7 @@ class RunLoop:
 
         self._app.leds.set_state(LEDState.THINKING)
         now = self._now()
+        channels = UserConfigService(self._app.db).get_channels()
         turn = TurnInput(
             transcript=transcript,
             emotion=None,
@@ -158,6 +160,9 @@ class RunLoop:
                 recent_conversation=self._memory.lines(),
             ),
             now=now,
+            recent_low_mood_days=count_recent_low_mood_days(self._app.db, now),
+            wellbeing_unit_name=channels.wellbeing_unit_name,
+            wellbeing_unit_phone=channels.wellbeing_unit_phone,
         )
         result = self._app.orchestrator.handle_turn(turn)
         self._memory.add_turn(user=transcript, rako=result.text)

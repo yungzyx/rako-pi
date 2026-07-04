@@ -69,6 +69,8 @@ def format_user_context(ctx: UserContext) -> str:
     if ctx.recent_conversation:
         lines.append("Conversación reciente de esta sesión:")
         lines.extend(f"- {line}" for line in ctx.recent_conversation[-8:])
+    if ctx.support_hint:
+        lines.append(f"Nota de tono para este turno: {ctx.support_hint}")
     return "\n".join(lines)
 
 

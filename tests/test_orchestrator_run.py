@@ -219,6 +219,61 @@ def test_voice_turn_does_not_record_interaction_in_private_mode(tmp_path: Path) 
         app.close()
 
 
+def test_voice_turn_feeds_triage_signals_from_local_state(tmp_path: Path) -> None:
+    # El loop de voz debe pasar al orquestador la recurrencia de ánimo bajo
+    # y la unidad de bienestar configurada — si esto se cae, el triage de
+    # derivación corre siempre con defaults y nunca deriva.
+    from datetime import timedelta
+
+    from db.types import EmotionalStateRecord
+    from emotion.types import EmotionalVector
+    from product.user_config import UserConfigService
+
+    loop, app, _ = _make_loop(tmp_path)
+    config = UserConfigService(app.db)
+    config.update_channels(
+        {"wellbeing_unit_name": "Bienestar UDD", "wellbeing_unit_phone": "+56228203419"}
+    )
+    for day in (1, 2, 3):
+        app.db.emotional_states.append(
+            EmotionalStateRecord(
+                id=f"low-{day}",
+                at=_now() - timedelta(days=day),
+                vector=EmotionalVector(valence=-0.6, arousal=0.5, dominance=0.4),
+                trigger_event="whatsapp_checkin",
+                confidence=0.7,
+            )
+        )
+
+    @dataclass
+    class _RecordingOrchestrator:
+        turns: list = field(default_factory=list)
+
+        def handle_turn(self, turn):  # type: ignore[no-untyped-def]
+            self.turns.append(turn)
+            return TurnResult(
+                kind=TurnKind.LLM_RESPONSE,
+                text="ok",
+                audio_path=None,
+                rag_chunk_ids=(),
+                notify_contact=False,
+                show_resources=False,
+            )
+
+    recorder = _RecordingOrchestrator()
+    app.orchestrator = recorder  # type: ignore[assignment]
+    try:
+        _emit(app.event_bus, HardwareEventKind.TOUCH)  # type: ignore[arg-type]
+        loop.run(max_iterations=1)
+
+        turn = recorder.turns[0]
+        assert turn.recent_low_mood_days == 3
+        assert turn.wellbeing_unit_name == "Bienestar UDD"
+        assert turn.wellbeing_unit_phone == "+56228203419"
+    finally:
+        app.close()
+
+
 def test_wake_word_event_triggers_voice_turn(tmp_path: Path) -> None:
     loop, app, _ = _make_loop(tmp_path)
     try:
