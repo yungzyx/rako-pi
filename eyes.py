@@ -32,6 +32,9 @@ HEIGHT = 64
 LEFT_EYE = (21, 14, 57, 50)
 RIGHT_EYE = (71, 14, 107, 50)
 
+# Bajo esta media-altura el ojo es una ranura: se dibuja sin pupila.
+_MIN_PUPIL_HALF_HEIGHT = 6
+
 FrameFn = Callable[[ImageDraw.ImageDraw, float], None]
 
 
@@ -78,6 +81,10 @@ def eye(
         draw.arc(
             (box[0] + 2, eye_box[1] - 6, box[2] - 2, eye_box[1] + 16), 190, 350, fill=0, width=2
         )
+    # Ojo casi cerrado (parpadeo / entrecerrado fuerte): la ranura se lee
+    # como una barra limpia — dibujar pupila ahí deja un punto negro raro.
+    if half_h < _MIN_PUPIL_HALF_HEIGHT:
+        return
     px = cx + round(pupil[0])
     py = cy + round(pupil[1])
     # Anime-style pupil: big and dominant, not a small centered dot — scales

@@ -77,6 +77,26 @@ def test_blink_cycle_includes_deterministic_double_blink() -> None:
     assert eyes.blink_is_closed(period * 1 + 0.25) is False
 
 
+def test_blink_slit_has_no_pupil_hole() -> None:
+    # Regresión: con el ojo casi cerrado (parpadeo), la ranura debe ser una
+    # barra continua — antes la pupila dejaba un punto negro en el medio.
+    image, draw = eyes.canvas()
+    eyes.eye(draw, eyes.LEFT_EYE, openness=0.15)
+
+    cx = (eyes.LEFT_EYE[0] + eyes.LEFT_EYE[2]) // 2
+    cy = (eyes.LEFT_EYE[1] + eyes.LEFT_EYE[3]) // 2
+    assert image.getpixel((cx, cy)) == 255
+
+
+def test_open_eye_still_has_pupil() -> None:
+    image, draw = eyes.canvas()
+    eyes.eye(draw, eyes.LEFT_EYE, openness=1.0)
+
+    cx = (eyes.LEFT_EYE[0] + eyes.LEFT_EYE[2]) // 2
+    cy = (eyes.LEFT_EYE[1] + eyes.LEFT_EYE[3]) // 2
+    assert image.getpixel((cx, cy + 4)) == 0  # centro-bajo de la pupila: oscuro
+
+
 def test_ease_out_cubic_is_clamped_and_monotone() -> None:
     assert eyes.ease_out_cubic(-1.0) == 0.0
     assert eyes.ease_out_cubic(0.0) == 0.0
