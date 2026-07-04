@@ -24,6 +24,7 @@ RUFF_TARGETS: tuple[str, ...] = (
     "scripts/focus_timer.py",
     "scripts/listen_wake_word.py",
     "scripts/music_mode.py",
+    "scripts/rako_backup.py",
     "scripts/rako_demo.py",
     "scripts/rako_demo_mode.py",
     "scripts/rako_doctor.py",
@@ -99,6 +100,8 @@ REQUIRED_GITIGNORE_PATTERNS: tuple[str, ...] = (
     "chroma_db/",
     "coverage.xml",
     "tmp-*.dts",
+    # Los snapshots de rako-backup contienen la base local del usuario.
+    "backups/",
 )
 
 MAX_FILE_LINES = 800

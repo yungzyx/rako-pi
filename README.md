@@ -156,6 +156,16 @@ Rako, para la música
 ./scripts/rako.sh demo-crisis-panic   # protocolo de pánico curado (sin LLM)
 ```
 
+### Respaldo local
+
+```bash
+./scripts/rako-backup       # snapshot cifrado de la BD en ./backups (rota 7)
+```
+
+Los datos del usuario nunca salen de la Pi, así que una SD muerta los
+perdería: `rako-backup` crea snapshots consistentes (misma clave SQLCipher)
+en un USB u otro destino. Detalle y restauración: [`INSTALL.md`](./INSTALL.md) §8.
+
 ### Arranque automático (systemd)
 
 Las unidades en `systemd/` son plantillas (`__RAKO_USER__`/`__RAKO_DIR__`);

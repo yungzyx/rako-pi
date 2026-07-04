@@ -143,7 +143,27 @@ journalctl -u rako-api -f
 systemctl status rako-chat rako-api
 ```
 
-## 8. Emparejar la app móvil
+## 8. Respaldos locales (recomendado)
+
+Una microSD muerta no debe borrar la historia del usuario (los datos, por
+diseño, nunca salen de la Pi). `rako-backup` crea un snapshot consistente
+de la base SQLite — cifrado con la misma `SQLITE_ENCRYPTION_KEY` — y rota
+los antiguos:
+
+```bash
+./scripts/rako-backup                                # ./backups, conserva 7
+./scripts/rako-backup --output-dir /media/usb/rako --keep 14
+./scripts/rako-backup --list
+```
+
+Ideal: apuntarlo a un USB y agendarlo diario con cron
+(`0 4 * * * /home/<user>/rako-pi/scripts/rako-backup --output-dir /media/usb/rako`).
+Para restaurar: detener los servicios (`sudo systemctl stop rako-chat rako-api`),
+copiar el snapshot sobre la ruta de `SQLITE_PATH` (borrando `*-wal`/`*-shm`
+si existen) y volver a arrancar. **Respaldar también la clave**: sin
+`SQLITE_ENCRYPTION_KEY` el snapshot es irrecuperable.
+
+## 9. Emparejar la app móvil
 
 Con `rako-api` corriendo, la Pi expone la API local documentada en
 `/docs` (OpenAPI). El flujo de primer emparejamiento vía hotspot está en

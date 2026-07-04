@@ -141,8 +141,11 @@ app móvil ni el contenido del RAG.
      vectores de emoción crudos, memoria sensible, detalle de crisis más
      allá del protocolo curado.
 4. **Modo no-grabación** (`RAKO_MODE=private`) debe funcionar siempre: el
-   robot opera pero no guarda historial de interacciones
-   (`RunLoop._handle_voice_turn` respeta este flag antes de persistir).
+   robot opera pero no guarda historial de interacciones. El gate vive en
+   `orchestrator/turn_session.py` (`TurnSession`), el pipeline de turno
+   compartido por `RunLoop` y el loop del botón físico
+   (`scripts/button_conversation.py`); también evita restaurar memoria
+   conversacional desde disco en modo privado.
 5. **Borrado total** desde la app o WhatsApp debe propagarse a la Pi y borrar
    TODO el historial local — no solo config de producto, también tareas,
    interacciones, estados de ánimo, logros y journal de crisis. Efecto
