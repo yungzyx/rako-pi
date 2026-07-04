@@ -2,9 +2,10 @@
 
 Hardware: 128x64 SSD1306 OLED over I2C at 0x3C.
 
-Design rule: Rako's face is eyes-only, anime-style — no mouth. Every mood
-must read from eye shape/pupil position, brows, cheeks, and small
-accessories (tears, zzz, sparkles) alone.
+Design rule: Rako's face is eyes-only, anime-style — no mouth, no thin
+decorative lines. Every mood must read from eye shape, pupil position/
+shape, and openness alone, plus a couple of small filled accessories
+(zzz, sparkles) where useful.
 
 Examples:
     python eyes.py demo
@@ -143,11 +144,6 @@ def soft_eye(
     eye(draw, box, pupil=animated_pupil, openness=openness)
 
 
-def cheek(draw: ImageDraw.ImageDraw, x: int, y: int, phase: float = 0.0) -> None:
-    width = 8 + int(2 * (0.5 + 0.5 * math.sin(phase)))
-    draw.arc((x - width, y - 3, x + width, y + 5), 15, 165, fill=255, width=1)
-
-
 def breathe_offset(t: float, amount: int = 2) -> int:
     return int(amount * math.sin(t * 1.7))
 
@@ -155,10 +151,6 @@ def breathe_offset(t: float, amount: int = 2) -> int:
 def closed_eye(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], *, tilt: int = 0) -> None:
     y = (box[1] + box[3]) // 2
     draw.line((box[0], y + tilt, box[2], y - tilt), fill=255, width=4)
-
-
-def brow(draw: ImageDraw.ImageDraw, x1: int, y1: int, x2: int, y2: int) -> None:
-    draw.line((x1, y1, x2, y2), fill=255, width=3)
 
 
 def draw_neutral(draw: ImageDraw.ImageDraw, t: float) -> None:
@@ -171,18 +163,12 @@ def draw_happy(draw: ImageDraw.ImageDraw, t: float) -> None:
     bounce = int(2 * math.sin(t * 5))
     closed_eye(draw, _shift(LEFT_EYE, 0, bounce), tilt=-3)
     closed_eye(draw, _shift(RIGHT_EYE, 0, bounce), tilt=3)
-    cheek(draw, 30, 46 + bounce, phase=t * 3)
-    cheek(draw, 98, 46 + bounce, phase=t * 3 + 1)
     sparkle(draw, 64, 18 + bounce, r=3)
 
 
 def draw_sad(draw: ImageDraw.ImageDraw, t: float) -> None:
-    eye(draw, LEFT_EYE, pupil=(0, 4), openness=0.85)
-    eye(draw, RIGHT_EYE, pupil=(0, 4), openness=0.85)
-    brow(draw, 22, 10, 54, 18)
-    brow(draw, 74, 18, 106, 10)
-    if int(t * 2) % 2 == 0:
-        draw.line((58, 50, 58, 59), fill=255, width=2)
+    eye(draw, LEFT_EYE, pupil=(0, 5), openness=0.68)
+    eye(draw, RIGHT_EYE, pupil=(0, 5), openness=0.68)
 
 
 def draw_sleepy(draw: ImageDraw.ImageDraw, t: float) -> None:
@@ -207,7 +193,6 @@ def draw_surprised(draw: ImageDraw.ImageDraw, t: float) -> None:
 def draw_wink(draw: ImageDraw.ImageDraw, t: float) -> None:
     soft_eye(draw, LEFT_EYE, pupil=(3, 0), t=t, attentive=True)
     closed_eye(draw, RIGHT_EYE, tilt=2)
-    cheek(draw, 96, 46, phase=t)
     sparkle(draw, 64, 12, r=3)
 
 
@@ -244,23 +229,40 @@ def draw_speaking(draw: ImageDraw.ImageDraw, t: float) -> None:
 
 
 def draw_love(draw: ImageDraw.ImageDraw, t: float) -> None:
-    heart(draw, 34, 28, 9)
-    heart(draw, 92, 28, 9)
-    cheek(draw, 24, 45, phase=t)
-    cheek(draw, 104, 45, phase=t + 1)
+    love_eye(draw, LEFT_EYE)
+    love_eye(draw, RIGHT_EYE)
+    sparkle(draw, 64, 10, r=3)
 
 
-def heart(draw: ImageDraw.ImageDraw, cx: int, cy: int, s: int) -> None:
-    draw.ellipse((cx - s, cy - s, cx, cy), fill=255)
-    draw.ellipse((cx, cy - s, cx + s, cy), fill=255)
-    draw.polygon([(cx - s, cy), (cx + s, cy), (cx, cy + s + 8)], fill=255)
+def love_eye(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int]) -> None:
+    """Wide-open eye whose pupil is heart-shaped instead of round."""
+    cx = (box[0] + box[2]) // 2
+    cy = (box[1] + box[3]) // 2
+    half_w = (box[2] - box[0]) // 2
+    half_h = (box[3] - box[1]) // 2
+    radius = max(4, min(half_w, half_h))
+    draw.rounded_rectangle(box, radius=radius, outline=255, fill=255)
+    draw.arc((box[0] + 2, box[1] - 6, box[2] - 2, box[1] + 16), 190, 350, fill=0, width=2)
+    heart_size = max(3, int(half_h * 0.55))
+    heart(draw, cx, cy - heart_size * 0.3, heart_size, fill=0)
+    highlight_r = max(1, heart_size // 3)
+    hl_x = cx - heart_size * 0.5
+    hl_y = cy - heart_size * 0.9
+    draw.ellipse(
+        (hl_x - highlight_r, hl_y - highlight_r, hl_x + highlight_r, hl_y + highlight_r),
+        fill=255,
+    )
+
+
+def heart(draw: ImageDraw.ImageDraw, cx: float, cy: float, s: float, *, fill: int = 255) -> None:
+    draw.ellipse((cx - s, cy - s, cx, cy), fill=fill)
+    draw.ellipse((cx, cy - s, cx + s, cy), fill=fill)
+    draw.polygon([(cx - s, cy), (cx + s, cy), (cx, cy + s * 1.5)], fill=fill)
 
 
 def draw_angry(draw: ImageDraw.ImageDraw, t: float) -> None:
-    eye(draw, LEFT_EYE, pupil=(0, 1), openness=0.85)
-    eye(draw, RIGHT_EYE, pupil=(0, 1), openness=0.85)
-    brow(draw, 20, 9, 55, 21)
-    brow(draw, 73, 21, 108, 9)
+    eye(draw, LEFT_EYE, pupil=(0, 2), openness=0.6)
+    eye(draw, RIGHT_EYE, pupil=(0, 2), openness=0.6)
 
 
 def _shift(box: tuple[int, int, int, int], dx: int, dy: int) -> tuple[int, int, int, int]:
