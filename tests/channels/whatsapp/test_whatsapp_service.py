@@ -420,3 +420,84 @@ def test_handle_inbound_deletes_user_data_only_after_confirmation(db_conn) -> No
     assert rejected.action == "DELETE_USER_DATA_CONFIRM"
     assert confirmed.action == "USER_DATA_DELETED"
     assert UserConfigService(db).get_profile().preferred_name is None
+
+
+# ---------------------------------------------------------------------------
+# Triage por WhatsApp — derivación a bienestar y redirección clínica
+# ---------------------------------------------------------------------------
+
+
+def test_inbound_personal_disclosure_gets_wellbeing_referral(db_conn) -> None:
+    db = Database(db_conn)
+    _enable_whatsapp(db)
+    UserConfigService(db).update_channels(
+        {"wellbeing_unit_name": "Bienestar UDD", "wellbeing_unit_phone": "+56228203419"}
+    )
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    result = service.handle_inbound(
+        from_number="+56912345678", text="necesito un psicólogo pero no sé cómo partir"
+    )
+
+    assert result.action == "WELLBEING_REFERRAL"
+    assert "Bienestar UDD" in result.response_text
+    assert "+56228203419" in result.response_text
+    assert result.crisis is False
+
+
+def test_inbound_referral_without_configured_unit_still_orients(db_conn) -> None:
+    db = Database(db_conn)
+    _enable_whatsapp(db)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    result = service.handle_inbound(
+        from_number="+56912345678", text="me diagnosticaron depresión el año pasado"
+    )
+
+    assert result.action == "WELLBEING_REFERRAL"
+    assert result.response_text.strip()
+
+
+def test_inbound_clinical_question_is_redirected(db_conn) -> None:
+    db = Database(db_conn)
+    _enable_whatsapp(db)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    result = service.handle_inbound(
+        from_number="+56912345678", text="¿qué medicamento debería tomar para la ansiedad?"
+    )
+
+    assert result.action == "SCOPE_REDIRECT"
+
+
+def test_inbound_crisis_still_wins_over_triage(db_conn) -> None:
+    db = Database(db_conn)
+    _enable_whatsapp(db)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    result = service.handle_inbound(
+        from_number="+56912345678", text="necesito un psicólogo, ya no quiero vivir"
+    )
+
+    assert result.action == "CRISIS"
+    assert result.crisis is True
+
+
+def test_inbound_unpaired_number_does_not_get_referral(db_conn) -> None:
+    db = Database(db_conn)
+    _enable_whatsapp(db)  # empareja +56912345678
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    result = service.handle_inbound(from_number="+56900000000", text="necesito un psicólogo")
+
+    assert result.action == "UNAUTHORIZED"
+
+
+def test_inbound_mood_words_still_record_mood_not_referral(db_conn) -> None:
+    db = Database(db_conn)
+    _enable_whatsapp(db)
+    service = WhatsAppService(db, InMemoryWhatsAppClient())
+
+    result = service.handle_inbound(from_number="+56912345678", text="ando bajo hoy")
+
+    assert result.action == "MOOD_RECORDED"

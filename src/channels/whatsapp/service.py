@@ -28,6 +28,7 @@ from channels.whatsapp.results import (
     outbound_message_to_dict,
 )
 from db.database import Database
+from orchestrator.context import count_recent_low_mood_days
 from product.user_config import UserConfigService
 from productivity.coaching import build_coaching_recommendation
 from productivity.progress import (
@@ -38,6 +39,8 @@ from productivity.progress import (
 from productivity.runtime import maybe_start_focus_from_transcript
 from safety.detector import detect_crisis
 from safety.responses import pick_response
+from safety.scope import build_scope_redirect_response, build_wellbeing_referral_response
+from safety.triage import TriageLevel, triage_turn
 from safety.types import CrisisInput, CrisisLevel
 
 __all__ = [
@@ -248,6 +251,13 @@ class WhatsAppService:
         if config_result is not None:
             return config_result
 
+        # Triage graduado (mismo de la voz, safety/triage.py) ANTES del
+        # clasificador de ánimo: "ando triste, necesito un psicólogo" debe
+        # derivar a bienestar, no quedar registrado solo como mood.
+        triage_result = self._triage_result(clean_text, from_number=from_number, now=now)
+        if triage_result is not None:
+            return triage_result
+
         mood = classify_mood(clean_text)
         if mood is not None:
             store_mood(self._db, mood=mood, now=now)
@@ -262,6 +272,11 @@ class WhatsAppService:
         if menu_result is not None:
             return menu_result
 
+        return self._focus_or_general(clean_text, from_number=from_number, now=now)
+
+    def _focus_or_general(
+        self, clean_text: str, *, from_number: str, now: datetime
+    ) -> WhatsAppInboundResult:
         focus = maybe_start_focus_from_transcript(clean_text, db=self._db, now=now)
         if focus is not None:
             return self._reply(
@@ -270,7 +285,6 @@ class WhatsAppService:
                 response_text=focus.response_text,
                 focus_session_id=focus.session.id if focus.session else None,
             )
-
         return self._reply(
             to=from_number,
             action="GENERAL",
@@ -279,6 +293,40 @@ class WhatsAppService:
                 "'quiero estudiar 25 minutos'."
             ),
         )
+
+    def _triage_result(
+        self, clean_text: str, *, from_number: str, now: datetime
+    ) -> WhatsAppInboundResult | None:
+        """Derivación a bienestar y redirección clínica también por WhatsApp.
+
+        Solo texto curado (sin LLM en este canal) y sin datos del usuario
+        en el payload — la unidad y su teléfono son configuración que el
+        propio usuario registró. Corre después de la autenticación de
+        remitente: un número no emparejado nunca llega acá.
+        """
+        result = triage_turn(
+            clean_text,
+            recent_low_mood_days=count_recent_low_mood_days(self._db, now),
+        )
+        if result.level is TriageLevel.CLINICAL_SCOPE:
+            return self._reply(
+                to=from_number,
+                action="SCOPE_REDIRECT",
+                response_text=build_scope_redirect_response(),
+            )
+        if result.level is TriageLevel.WELLBEING_REFERRAL:
+            channels = UserConfigService(self._db).get_channels()
+            return self._reply(
+                to=from_number,
+                action="WELLBEING_REFERRAL",
+                response_text=build_wellbeing_referral_response(
+                    unit_name=channels.wellbeing_unit_name,
+                    unit_phone=channels.wellbeing_unit_phone,
+                ),
+            )
+        # SUPPORTIVE/ELEVATED/ACADEMIC siguen el flujo normal del canal
+        # (menú, foco, respuesta general) — acá no hay LLM que matizar.
+        return None
 
     # ------------------------------------------------------------------
     # Infraestructura compartida por los handlers
