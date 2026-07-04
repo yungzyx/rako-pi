@@ -328,6 +328,46 @@ def test_recurring_low_mood_upgrades_stress_mention_to_referral() -> None:
     assert llm.calls == []
 
 
+def test_repeated_llm_response_triggers_one_vary_retry() -> None:
+    repeated = "Partamos con un bloque corto de 25 minutos de cálculo."
+    llm = _FakeLLMClient(response_text=repeated)
+    orch, _, _, _ = _build_orchestrator(llm=llm)
+    ctx = UserContext(
+        pending_task_count=0,
+        recent_completion_count=0,
+        robot_level=1,
+        time_of_day="tarde",
+        recent_mood_summary=None,
+        recent_conversation=("Usuario: quiero estudiar", f"Rako: {repeated}"),
+    )
+
+    result = orch.handle_turn(_input(user_context=ctx))
+
+    assert len(llm.calls) == 2  # original + reintento de reformulación
+    assert llm.contexts[0].support_hint is None
+    assert llm.contexts[1].support_hint is not None
+    assert "Reformula" in llm.contexts[1].support_hint
+    assert result.metadata["repeat_retry"] is True
+
+
+def test_fresh_llm_response_does_not_retry() -> None:
+    llm = _FakeLLMClient(response_text="¿Y si partimos anotando las tres dudas del capítulo?")
+    orch, _, _, _ = _build_orchestrator(llm=llm)
+    ctx = UserContext(
+        pending_task_count=0,
+        recent_completion_count=0,
+        robot_level=1,
+        time_of_day="tarde",
+        recent_mood_summary=None,
+        recent_conversation=("Rako: Partamos con un bloque corto de 25 minutos de cálculo.",),
+    )
+
+    result = orch.handle_turn(_input(user_context=ctx))
+
+    assert len(llm.calls) == 1
+    assert result.metadata["repeat_retry"] is False
+
+
 def test_llm_failure_returns_curated_fallback_not_crash() -> None:
     orch, _, _, _ = _build_orchestrator(llm=_ExplodingLLMClient())  # type: ignore[arg-type]
 

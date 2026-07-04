@@ -219,6 +219,111 @@ def test_voice_turn_does_not_record_interaction_in_private_mode(tmp_path: Path) 
         app.close()
 
 
+def test_memory_restores_recent_conversation_after_restart(tmp_path: Path) -> None:
+    # Un reinicio del proceso a mitad de sesión no debe amnesiar a Rako:
+    # las interacciones recientes (ventana de 45 min) se recargan del
+    # historial local; las viejas no.
+    from datetime import timedelta
+
+    from db.types import Interaction, InteractionType
+
+    app = build_dev_application(_settings(tmp_path))
+    app.db.interactions.append(
+        Interaction(
+            id="recent",
+            timestamp=_now() - timedelta(minutes=10),
+            type=InteractionType.USER_VOICE,
+            transcription_excerpt="sigamos con cálculo",
+            emotion=None,
+            response_id=None,
+            response_text="Dale, retomemos la integral.",
+        )
+    )
+    app.db.interactions.append(
+        Interaction(
+            id="old",
+            timestamp=_now() - timedelta(hours=5),
+            type=InteractionType.USER_VOICE,
+            transcription_excerpt="charla de la mañana",
+            emotion=None,
+            response_id=None,
+            response_text="respuesta antigua",
+        )
+    )
+
+    loop = RunLoop(app=app, config=RunConfig(sleep_seconds=0.0), now=_now)
+    try:
+        lines = loop._memory.lines()
+        assert "Usuario: sigamos con cálculo" in lines
+        assert "Rako: Dale, retomemos la integral." in lines
+        assert not any("charla de la mañana" in line for line in lines)
+    finally:
+        app.close()
+
+
+def test_memory_restore_is_skipped_in_private_mode(tmp_path: Path) -> None:
+    from datetime import timedelta
+
+    from db.types import Interaction, InteractionType
+
+    settings = _settings(tmp_path).model_copy(update={"rako_mode": "private"})
+    app = build_dev_application(settings)
+    app.db.interactions.append(
+        Interaction(
+            id="leftover",
+            timestamp=_now() - timedelta(minutes=5),
+            type=InteractionType.USER_VOICE,
+            transcription_excerpt="algo de antes",
+            emotion=None,
+            response_id=None,
+            response_text="respuesta de antes",
+        )
+    )
+
+    loop = RunLoop(app=app, config=RunConfig(sleep_seconds=0.0), now=_now)
+    try:
+        assert loop._memory.lines() == ()
+    finally:
+        app.close()
+
+
+def test_remember_voice_command_stores_memory_without_llm(tmp_path: Path) -> None:
+    from product.user_config import UserConfigService
+
+    loop, app, _ = _make_loop(tmp_path)
+
+    @dataclass
+    class _CannedSTT:
+        def transcribe(self, audio):  # type: ignore[no-untyped-def]
+            from voice.types import TranscriptResult
+
+            return TranscriptResult(
+                text="recuerda que prefiero estudiar de noche",
+                confidence=0.9,
+                language="es-CL",
+            )
+
+    @dataclass
+    class _CrashingOrchestrator:
+        def handle_turn(self, turn):  # type: ignore[no-untyped-def]
+            raise AssertionError("un comando local no debe llegar al orquestador")
+
+    app.stt = _CannedSTT()  # type: ignore[assignment]
+    app.orchestrator = _CrashingOrchestrator()  # type: ignore[assignment]
+    try:
+        _emit(app.event_bus, HardwareEventKind.TOUCH)  # type: ignore[arg-type]
+        loop.run(max_iterations=1)
+
+        memories = UserConfigService(app.db).list_memory()
+        assert len(memories) == 1
+        assert memories[0].text == "prefiero estudiar de noche"
+        assert memories[0].sensitivity == "normal"
+        # Y Rako confirmó por voz.
+        assert len(app.playback.played) == 1  # type: ignore[attr-defined]
+    finally:
+        app.close()
+
+
 def test_voice_turn_feeds_triage_signals_from_local_state(tmp_path: Path) -> None:
     # El loop de voz debe pasar al orquestador la recurrencia de ánimo bajo
     # y la unidad de bienestar configurada — si esto se cae, el triage de

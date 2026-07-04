@@ -25,7 +25,8 @@ from enum import Enum
 from typing import Any
 
 from emotion.types import EmotionalVector
-from orchestrator.llm_client import LLMClient
+from orchestrator.llm_client import LLMClient, LLMResponse
+from orchestrator.memory import is_near_repeat
 from orchestrator.types import UserContext
 from rag.client import Retriever
 from rag.types import Chunk
@@ -64,6 +65,14 @@ _SUPPORT_HINT = (
     "El usuario mencionó estrés, ansiedad o ánimo bajo en contexto cotidiano. "
     "Valida brevemente con calidez, ofrece UN paso pequeño y realista, y no "
     "diagnostiques ni des consejos clínicos."
+)
+
+# Instrucción de reformulación cuando el LLM generó casi lo mismo que ya
+# dijo en esta sesión. Un solo reintento — si insiste, se acepta.
+_VARY_HINT = (
+    "Tu borrador anterior era casi idéntico a algo que ya dijiste en esta "
+    "conversación. Reformula con otra estructura y aporta un ángulo o paso "
+    "distinto, sin repetir la misma apertura ni el mismo cierre."
 )
 
 
@@ -218,11 +227,7 @@ class Orchestrator:
         if supportive:
             context = replace(context, support_hint=_SUPPORT_HINT)
         try:
-            llm_response = self._llm.generate(
-                query=input.transcript,
-                chunks=chunks,
-                context=context,
-            )
+            llm_response, retried = self._generate_avoiding_repeats(input, chunks, context)
         except Exception:
             _log.exception("LLM generation failed; returning curated fallback")
             return self._llm_fallback()
@@ -236,11 +241,42 @@ class Orchestrator:
             metadata={
                 "elevated": signal.level is CrisisLevel.ELEVATED,
                 "supportive": supportive,
+                "repeat_retry": retried,
                 "input_tokens": llm_response.input_tokens,
                 "output_tokens": llm_response.output_tokens,
                 "cache_read_input_tokens": llm_response.cache_read_input_tokens,
             },
         )
+
+    def _generate_avoiding_repeats(
+        self,
+        input: TurnInput,
+        chunks: tuple[Chunk, ...],
+        context: UserContext,
+    ) -> tuple[LLMResponse, bool]:
+        """Genera; si el texto repite algo ya dicho, reintenta UNA vez.
+
+        El segundo intento lleva una instrucción de reformulación. Si el
+        reintento falla con excepción, se conserva la primera respuesta —
+        repetirse es mejor que quedarse callado.
+        """
+        response = self._llm.generate(
+            query=input.transcript, chunks=chunks, context=context
+        )
+        recent = input.user_context.recent_conversation
+        if not is_near_repeat(response.text, recent):
+            return response, False
+        vary_hint = f"{context.support_hint} {_VARY_HINT}" if context.support_hint else _VARY_HINT
+        try:
+            retry = self._llm.generate(
+                query=input.transcript,
+                chunks=chunks,
+                context=replace(context, support_hint=vary_hint),
+            )
+        except Exception:
+            _log.exception("vary retry failed; keeping first response")
+            return response, True
+        return retry, True
 
     def _safe_chunks(self, transcript: str) -> tuple[Chunk, ...]:
         """RAG caído no debe botar el turno — degrada a cero chunks."""
