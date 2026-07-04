@@ -4,14 +4,21 @@
 Por defecto usa una voz neuronal en español chileno y MP3 como salida.
 `ElevenLabsTTS` es el proveedor principal recomendado para la voz cálida
 del robot; Google queda como fallback estable.
+`FallbackTTS` encadena clientes en runtime: si el primario falla en una
+síntesis concreta (red, cuota, proveedor caído), prueba el siguiente en vez
+de dejar al robot mudo.
 `max_chars` evita gastar cuotas en textos accidentalmente enormes.
 """
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Sequence
 from typing import Any, Final, Protocol, runtime_checkable
 
 from voice.types import AudioBuffer, SynthesisResult
+
+_log = logging.getLogger(__name__)
 
 _DEFAULT_MAX_CHARS: Final[int] = 800
 
@@ -145,3 +152,45 @@ class ElevenLabsTTS:
         close = getattr(self._http, "close", None)
         if callable(close):
             close()
+
+
+class FallbackTTS:
+    """Cadena de TTS con degradación en runtime.
+
+    El fallback de bootstrap solo cubre fallas de *inicialización*; esta
+    cadena cubre fallas por síntesis (timeout, cuota agotada, proveedor
+    caído). Se intenta cada cliente en orden y solo se levanta el último
+    error si ninguno pudo sintetizar.
+    """
+
+    def __init__(self, clients: Sequence[TTSClient]) -> None:
+        if not clients:
+            raise ValueError("FallbackTTS requires at least one client")
+        self._clients = tuple(clients)
+
+    @property
+    def clients(self) -> tuple[TTSClient, ...]:
+        return self._clients
+
+    def synthesize(self, text: str) -> SynthesisResult:
+        last_error: Exception | None = None
+        for index, client in enumerate(self._clients):
+            try:
+                return client.synthesize(text)
+            except Exception as exc:
+                last_error = exc
+                remaining = len(self._clients) - index - 1
+                _log.warning(
+                    "TTS %s failed (%s); %d fallback(s) left",
+                    type(client).__name__,
+                    exc,
+                    remaining,
+                )
+        assert last_error is not None  # len(clients) >= 1 garantiza un intento
+        raise last_error
+
+    def close(self) -> None:
+        for client in self._clients:
+            close = getattr(client, "close", None)
+            if callable(close):
+                close()

@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from voice.tts import ElevenLabsTTS, GoogleCloudTTS, TTSClient
+from voice.tts import ElevenLabsTTS, FallbackTTS, GoogleCloudTTS, TTSClient
 from voice.types import AudioBuffer, SynthesisResult
 
 
@@ -272,3 +272,83 @@ def test_elevenlabs_tts_caps_text_length() -> None:
 
     with pytest.raises(ValueError, match="too long"):
         client.synthesize("x" * 500)
+
+
+# ---------------------------------------------------------------------------
+# FallbackTTS — cadena con degradación en runtime
+# ---------------------------------------------------------------------------
+
+
+class _StaticTTS:
+    def __init__(self, voice_name: str) -> None:
+        self.voice_name = voice_name
+        self.calls: list[str] = []
+        self.closed = False
+
+    def synthesize(self, text: str) -> SynthesisResult:
+        self.calls.append(text)
+        return SynthesisResult(
+            audio=AudioBuffer(data=b"AUDIO", sample_rate=44100, encoding="MP3"),
+            voice_name=self.voice_name,
+            text_synthesized=text,
+        )
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _FailingTTS:
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+        self.calls: list[str] = []
+
+    def synthesize(self, text: str) -> SynthesisResult:
+        self.calls.append(text)
+        raise self._error
+
+
+def test_fallback_tts_requires_at_least_one_client() -> None:
+    with pytest.raises(ValueError, match="at least one"):
+        FallbackTTS(())
+
+
+def test_fallback_tts_uses_primary_when_it_works() -> None:
+    primary = _StaticTTS("primary")
+    backup = _StaticTTS("backup")
+    chain = FallbackTTS((primary, backup))
+
+    result = chain.synthesize("hola")
+
+    assert result.voice_name == "primary"
+    assert backup.calls == []
+
+
+def test_fallback_tts_falls_through_on_runtime_error() -> None:
+    primary = _FailingTTS(RuntimeError("provider down"))
+    backup = _StaticTTS("backup")
+    chain = FallbackTTS((primary, backup))
+
+    result = chain.synthesize("hola")
+
+    assert result.voice_name == "backup"
+    assert primary.calls == ["hola"]
+
+
+def test_fallback_tts_raises_last_error_when_all_fail() -> None:
+    first = _FailingTTS(RuntimeError("first down"))
+    second = _FailingTTS(ValueError("second down"))
+    chain = FallbackTTS((first, second))
+
+    with pytest.raises(ValueError, match="second down"):
+        chain.synthesize("hola")
+
+
+def test_fallback_tts_close_closes_all_clients() -> None:
+    primary = _StaticTTS("primary")
+    backup = _StaticTTS("backup")
+    chain = FallbackTTS((primary, backup))
+
+    chain.close()
+
+    assert primary.closed
+    assert backup.closed

@@ -32,9 +32,8 @@ from bootstrap import build_pi_application
 from config import Settings
 from hardware.oled_runtime import OledEyeController
 from hardware.oled_states import RakoVisualState
-from orchestrator.context import build_user_context
-from orchestrator.memory import ConversationMemory
 from orchestrator.orchestrator import TurnInput, TurnKind
+from orchestrator.turn_session import TurnSession
 from orchestrator.types import default_user_context
 from productivity.runtime import maybe_start_focus_from_transcript
 from safety.detector import detect_crisis
@@ -53,6 +52,10 @@ _DEFAULT_CUE_VOLUME = 0.14
 _DEFAULT_END_SILENCE_SECONDS = 0.8
 _DEFAULT_VAD_THRESHOLD = 1400
 _DEFAULT_VAD_FRAME_MS = 100
+
+# Feedback hablado cuando el STT no entendió nada — sin voz, el usuario solo
+# ve ojos de error y no sabe si repetir o esperar.
+_DID_NOT_HEAR_TEXT = "No te escuché bien. ¿Me lo repites?"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -166,7 +169,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not 0 <= args.cue_volume <= 1:
         parser.error("--cue-volume must be between 0.0 and 1.0")
 
-    app_holder: dict[str, Any] = {"app": None, "memory": ConversationMemory()}
+    app_holder: dict[str, Any] = {"app": None, "session": None}
     eyes = OledEyeController(enabled=args.oled, project_root=Path(__file__).resolve().parents[1])
     eyes.set_state(RakoVisualState.READY)
 
@@ -276,6 +279,11 @@ def _handle_press(
             print("Inicializando Rako...", flush=True)
             init_started = time.monotonic()
             app_holder["app"] = build_pi_application(Settings())
+            # Pipeline de turno compartido con RunLoop: memoria + triage +
+            # persistencia con gate de privacidad (orchestrator/turn_session).
+            session = TurnSession(db=app_holder["app"].db, settings=app_holder["app"].settings)
+            session.restore_recent_memory()
+            app_holder["session"] = session
             print(f"Tiempo inicialización: {time.monotonic() - init_started:.2f}s", flush=True)
         app = app_holder["app"]
         eyes.set_state(RakoVisualState.TRANSCRIBING)
@@ -292,13 +300,14 @@ def _handle_press(
     if not transcript:
         eyes.set_state(RakoVisualState.ERROR)
         print("No escuché una frase clara.", flush=True)
-        time.sleep(1)
+        _synthesize_and_maybe_play(app=app, text=_DID_NOT_HEAR_TEXT, eyes=eyes, args=args)
         eyes.set_state(RakoVisualState.READY)
         return
 
     print(f"Tú: {transcript}", flush=True)
     now = datetime.now(UTC)
     eyes.set_state(RakoVisualState.THINKING)
+    session: TurnSession = app_holder["session"]
 
     guardrail_result = _guardrail_result_for_transcript(app=app, transcript=transcript, now=now)
     if guardrail_result is not None:
@@ -307,11 +316,18 @@ def _handle_press(
         eyes.set_state(RakoVisualState.READY)
         return
 
+    remember_confirmation = session.try_remember_command(transcript)
+    if remember_confirmation is not None:
+        print(f"Rako: {remember_confirmation}", flush=True)
+        _synthesize_and_maybe_play(app=app, text=remember_confirmation, eyes=eyes, args=args)
+        eyes.set_state(RakoVisualState.READY)
+        return
+
     music_response = _handle_music_intent(transcript, args=args)
     if music_response is not None:
         print(f"Rako: {music_response}", flush=True)
         _synthesize_and_maybe_play(app=app, text=music_response, eyes=eyes, args=args)
-        _remember_turn(app_holder=app_holder, user=transcript, rako=music_response)
+        session.add_exchange(user=transcript, rako=music_response)
         eyes.set_state(RakoVisualState.READY)
         return
 
@@ -321,13 +337,13 @@ def _handle_press(
             eyes.set_state(RakoVisualState.THINKING)
             print(f"Rako: {focus.response_text}", flush=True)
             _synthesize_and_maybe_play(app=app, text=focus.response_text, eyes=eyes, args=args)
-            _remember_turn(app_holder=app_holder, user=transcript, rako=focus.response_text)
+            session.add_exchange(user=transcript, rako=focus.response_text)
             eyes.set_state(RakoVisualState.READY)
             return
         eyes.set_state(RakoVisualState.FOCUS_RUNNING)
         print(f"Rako: {focus.response_text}", flush=True)
         _synthesize_and_maybe_play(app=app, text=focus.response_text, eyes=eyes, args=args)
-        _remember_turn(app_holder=app_holder, user=transcript, rako=focus.response_text)
+        session.add_exchange(user=transcript, rako=focus.response_text)
         if not args.no_focus_countdown:
             eyes.close()
             _launch_focus_countdown(focus=focus, args=args)
@@ -335,34 +351,15 @@ def _handle_press(
             eyes.set_state(RakoVisualState.READY)
         return
 
-    turn = TurnInput(
-        transcript=transcript,
-        emotion=None,
-        panic_button=None,
-        emotion_history=(),
-        last_high_distress_at=None,
-        last_interaction_at=None,
-        user_context=build_user_context(
-            app.db,
-            now,
-            recent_conversation=app_holder["memory"].lines(),
-        ),
-        now=now,
-    )
+    turn = session.build_turn_input(transcript, now=now)
     llm_started = time.monotonic()
     result = app.orchestrator.handle_turn(turn)
     print(f"Tiempo orquestador/LLM: {time.monotonic() - llm_started:.2f}s", flush=True)
     print(f"Tiempo total antes de responder: {time.monotonic() - turn_started:.2f}s", flush=True)
     print(f"Rako: {result.text}", flush=True)
     _synthesize_and_maybe_play(app=app, text=result.text, eyes=eyes, args=args)
-    _remember_turn(app_holder=app_holder, user=transcript, rako=result.text)
+    session.complete_turn(transcript=transcript, result=result, now=now)
     eyes.set_state(RakoVisualState.READY)
-
-
-def _remember_turn(*, app_holder: dict[str, Any], user: str, rako: str) -> None:
-    memory = app_holder.get("memory")
-    if isinstance(memory, ConversationMemory):
-        memory.add_turn(user=user, rako=rako)
 
 
 def _guardrail_result_for_transcript(*, app: Any, transcript: str, now: datetime) -> Any | None:

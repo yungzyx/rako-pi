@@ -22,23 +22,15 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from datetime import UTC, datetime
 
-from db.types import Interaction, InteractionType
 from hardware.types import HardwareEvent, HardwareEventKind, LEDState
-from orchestrator.context import build_user_context, count_recent_low_mood_days
-from orchestrator.memory import ConversationMemory
-from orchestrator.orchestrator import TurnInput, TurnResult
-from orchestrator.voice_commands import parse_remember_command
-from product.user_config import UserConfigService
+from orchestrator.context import build_user_context
+from orchestrator.orchestrator import TurnInput
+from orchestrator.turn_session import TurnSession
 from safety.types import PanicSource
 
 _log = logging.getLogger(__name__)
-
-# Al reiniciar, retomamos la conversación solo si es realmente reciente —
-# una charla de ayer no debe tratarse como "conversación en curso".
-_MEMORY_RESTORE_WINDOW = timedelta(minutes=45)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,8 +60,10 @@ class RunLoop:
         self._pending: list[HardwareEvent] = []
         self._iteration = 0
         self._stopped = False
-        self._memory = ConversationMemory()
-        self._restore_recent_memory()
+        self._session = TurnSession(db=app.db, settings=app.settings, now=now)
+        # Alias: la memoria vive en la sesión compartida (mismo objeto).
+        self._memory = self._session.memory
+        self._session.restore_recent_memory()
         app.event_bus.subscribe(self._enqueue)
 
     # ------------------------------------------------------------------
@@ -134,26 +128,6 @@ class RunLoop:
         result = self._app.orchestrator.handle_turn(turn)
         self._dispatch(result)
 
-    def _restore_recent_memory(self) -> None:
-        """Retoma la conversación si el proceso se reinició a mitad de sesión.
-
-        Solo interacciones dentro de la ventana reciente; en modo privado no
-        hay historial persistido y tampoco lo leemos.
-        """
-        if self._app.settings.rako_mode == "private":
-            return
-        cutoff = self._now() - _MEMORY_RESTORE_WINDOW
-        recent = [
-            interaction
-            for interaction in self._app.db.interactions.list_recent(limit=self._memory.max_turns)
-            if _as_aware(interaction.timestamp) >= cutoff
-        ]
-        for interaction in reversed(recent):  # list_recent viene nuevo→viejo
-            self._memory.add_turn(
-                user=interaction.transcription_excerpt or "",
-                rako=interaction.response_text or "",
-            )
-
     def _handle_voice_turn(self) -> None:
         self._app.leds.set_state(LEDState.LISTENING)
         try:
@@ -175,65 +149,20 @@ class RunLoop:
 
         self._app.leds.set_state(LEDState.THINKING)
         now = self._now()
-        channels = UserConfigService(self._app.db).get_channels()
-        turn = TurnInput(
-            transcript=transcript,
-            emotion=None,
-            panic_button=None,
-            emotion_history=(),
-            last_high_distress_at=None,
-            last_interaction_at=now,
-            user_context=build_user_context(
-                self._app.db,
-                now,
-                recent_conversation=self._memory.lines(),
-            ),
-            now=now,
-            recent_low_mood_days=count_recent_low_mood_days(self._app.db, now),
-            wellbeing_unit_name=channels.wellbeing_unit_name,
-            wellbeing_unit_phone=channels.wellbeing_unit_phone,
-        )
+        turn = self._session.build_turn_input(transcript, now=now)
         result = self._app.orchestrator.handle_turn(turn)
-        self._memory.add_turn(user=transcript, rako=result.text)
-        self._record_interaction(transcript=transcript, result=result, now=now)
+        self._session.complete_turn(transcript=transcript, result=result, now=now)
         self._dispatch(result)
 
     def _handle_remember_command(self, transcript: str) -> bool:
         """Comando local "recuerda que ..." — guarda preferencia sin LLM."""
-        memory_text = parse_remember_command(transcript)
-        if memory_text is None:
+        confirmation = self._session.try_remember_command(transcript)
+        if confirmation is None:
             return False
-        now = self._now()
-        try:
-            memory = UserConfigService(self._app.db).add_memory(
-                text=memory_text, category="preference", now=now
-            )
-        except ValueError:
-            _log.warning("remember command rejected by memory validation")
-            return False
-        confirmation = f"Listo, lo voy a recordar: {memory.text}"
         self._app.leds.set_state(LEDState.SPEAKING)
         self._speak(confirmation)
         self._app.leds.turn_off()
-        self._memory.add_turn(user=transcript, rako=confirmation)
         return True
-
-    def _record_interaction(self, *, transcript: str, result: TurnResult, now: datetime) -> None:
-        # "Modo no-grabación" (CLAUDE.md §4.1.4): con rako_mode=private el
-        # robot sigue operando pero no persiste historial de interacciones.
-        if self._app.settings.rako_mode == "private":
-            return
-        self._app.db.interactions.append(
-            Interaction(
-                id=f"turn_{uuid4().hex}",
-                timestamp=now,
-                type=InteractionType.USER_VOICE,
-                transcription_excerpt=transcript,
-                emotion=None,
-                response_id=None,
-                response_text=result.text,
-            )
-        )
 
     def _transcribe(self, audio) -> str:
         stt = getattr(self._app, "stt", None)
@@ -260,9 +189,3 @@ class RunLoop:
             self._app.playback.play(synth.audio)
         except Exception:
             _log.exception("TTS or playback failed")
-
-
-def _as_aware(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value

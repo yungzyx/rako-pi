@@ -44,7 +44,7 @@ from sync.queue import SyncQueue
 from voice.audio_io import AudioCaptureSource, AudioPlaybackSink
 from voice.stt import GoogleCloudSTT, STTClient
 from voice.stt_openai import OpenAIWhisperSTT
-from voice.tts import ElevenLabsTTS, GoogleCloudTTS, TTSClient
+from voice.tts import ElevenLabsTTS, FallbackTTS, GoogleCloudTTS, TTSClient
 from voice.types import AudioBuffer, SynthesisResult, TranscriptResult
 from voice.wake_word import SubstringWakeWordDetector, WakeWordDetector
 
@@ -417,14 +417,23 @@ def _try_openai_whisper_stt(settings: Settings) -> STTClient | None:
 
 
 def _try_real_tts(settings: Settings) -> TTSClient | None:
-    """Construye el TTS real seleccionado. ElevenLabs es la voz principal;
-    Google queda como fallback estable cuando se configura explícitamente."""
+    """Construye el TTS real. ElevenLabs es la voz principal y Google el
+    fallback; con más de un candidato disponible se arma una cadena
+    `FallbackTTS` para degradar también en runtime (no solo al iniciar)."""
+    chain = _build_tts_chain(settings)
+    if not chain:
+        return None
+    if len(chain) == 1:
+        return chain[0]
+    return FallbackTTS(chain)
+
+
+def _build_tts_chain(settings: Settings) -> tuple[TTSClient, ...]:
+    candidates: list[TTSClient | None] = []
     if settings.tts_provider == "elevenlabs":
-        eleven = _try_elevenlabs_tts(settings)
-        if eleven is not None:
-            return eleven
-        return _try_google_tts(settings)
-    return _try_google_tts(settings)
+        candidates.append(_try_elevenlabs_tts(settings))
+    candidates.append(_try_google_tts(settings))
+    return tuple(client for client in candidates if client is not None)
 
 
 def _try_elevenlabs_tts(settings: Settings) -> TTSClient | None:

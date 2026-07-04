@@ -137,3 +137,29 @@ def test_build_pi_uses_canned_stt_tts_without_credentials(tmp_path: Path) -> Non
         assert isinstance(app.tts, _CannedTTS)
     finally:
         app.close()
+
+
+def test_try_real_tts_wraps_multiple_candidates_in_fallback_chain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bootstrap import _CannedTTS, _try_real_tts
+    from voice.tts import FallbackTTS
+
+    eleven = _CannedTTS()
+    google = _CannedTTS()
+
+    monkeypatch.setattr("bootstrap._try_elevenlabs_tts", lambda settings: eleven)
+    monkeypatch.setattr("bootstrap._try_google_tts", lambda settings: google)
+
+    settings = Settings(
+        _env_file=None,
+        rako_env="prod",
+        tts_provider="elevenlabs",
+        elevenlabs_api_key="el-test",
+        google_application_credentials="creds.json",
+    )
+
+    tts = _try_real_tts(settings)
+
+    assert isinstance(tts, FallbackTTS)
+    assert tts.clients == (eleven, google)

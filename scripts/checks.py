@@ -53,6 +53,7 @@ SAFETY_TESTS: tuple[str, ...] = (
     # note.
     "tests/test_orchestrator.py",
     "tests/test_orchestrator_run.py",
+    "tests/test_orchestrator_turn_session.py",
     "tests/channels/whatsapp/test_whatsapp_service.py",
 )
 
