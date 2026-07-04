@@ -53,7 +53,7 @@ def eye(
     draw: ImageDraw.ImageDraw,
     box: tuple[int, int, int, int],
     *,
-    pupil: tuple[int, int] = (0, 0),
+    pupil: tuple[float, float] = (0, 0),
     openness: float = 1.0,
 ) -> None:
     openness = max(0.15, min(1.0, openness))
@@ -67,25 +67,43 @@ def eye(
         draw.arc(
             (box[0] + 2, eye_box[1] - 6, box[2] - 2, eye_box[1] + 16), 190, 350, fill=0, width=2
         )
-    px = cx + pupil[0]
-    py = cy + pupil[1]
+    px = cx + round(pupil[0])
+    py = cy + round(pupil[1])
     draw.ellipse((px - 4, py - 4, px + 4, py + 4), fill=0)
     draw.point((px - 1, py - 2), fill=255)
+
+
+def idle_drift(t: float) -> tuple[float, float]:
+    """Slow, subtle pupil wander so a still gaze doesn't read as frozen.
+
+    Two sine terms with unrelated periods/phases trace a small
+    Lissajous-like path instead of a simple back-and-forth — reads as idle
+    life, not a mechanical tic. Amplitude stays under ~2px so it never
+    looks like the robot is glancing away.
+    """
+    dx = 1.1 * math.sin(t * 0.55) + 0.5 * math.sin(t * 1.3 + 1.7)
+    dy = 0.6 * math.sin(t * 0.4 + 0.6) + 0.3 * math.sin(t * 0.9 + 2.4)
+    return dx, dy
 
 
 def soft_eye(
     draw: ImageDraw.ImageDraw,
     box: tuple[int, int, int, int],
     *,
-    pupil: tuple[int, int] = (0, 0),
+    pupil: tuple[float, float] = (0, 0),
     t: float = 0.0,
     attentive: bool = False,
 ) -> None:
     blink_cycle = t % 5.2
-    openness = 0.18 if blink_cycle < 0.08 else 0.86 + 0.06 * math.sin(t * 1.8)
+    is_blinking = blink_cycle < 0.08
+    openness = 0.18 if is_blinking else 0.86 + 0.06 * math.sin(t * 1.8)
     if attentive:
         openness = min(1.0, openness + 0.1)
-    eye(draw, box, pupil=pupil, openness=openness)
+    # No drift mid-blink: the eyelid closing should read as a clean blink,
+    # not a pupil twitching as it disappears.
+    drift = (0.0, 0.0) if is_blinking else idle_drift(t)
+    animated_pupil = (pupil[0] + drift[0], pupil[1] + drift[1])
+    eye(draw, box, pupil=animated_pupil, openness=openness)
 
 
 def cheek(draw: ImageDraw.ImageDraw, x: int, y: int, phase: float = 0.0) -> None:
@@ -142,8 +160,8 @@ def draw_happy(draw: ImageDraw.ImageDraw, t: float) -> None:
 
 
 def draw_sad(draw: ImageDraw.ImageDraw, t: float) -> None:
-    eye(draw, (21, 22, 51, 47), pupil=(0, 3), openness=0.65)
-    eye(draw, (77, 22, 107, 47), pupil=(0, 3), openness=0.65)
+    eye(draw, LEFT_EYE, pupil=(0, 3), openness=0.8)
+    eye(draw, RIGHT_EYE, pupil=(0, 3), openness=0.8)
     brow(draw, 20, 15, 50, 22)
     brow(draw, 78, 22, 108, 15)
     mouth(draw, "sad")
@@ -162,8 +180,8 @@ def draw_sleepy(draw: ImageDraw.ImageDraw, t: float) -> None:
 
 
 def draw_bored(draw: ImageDraw.ImageDraw, t: float) -> None:
-    eye(draw, (21, 25, 51, 43), pupil=(-2, 2), openness=0.5)
-    eye(draw, (77, 25, 107, 43), pupil=(-2, 2), openness=0.5)
+    eye(draw, LEFT_EYE, pupil=(-2, 2), openness=0.68)
+    eye(draw, RIGHT_EYE, pupil=(-2, 2), openness=0.68)
     mouth(draw, "flat")
 
 
@@ -224,8 +242,8 @@ def heart(draw: ImageDraw.ImageDraw, cx: int, cy: int, s: int) -> None:
 
 
 def draw_angry(draw: ImageDraw.ImageDraw, t: float) -> None:
-    eye(draw, LEFT_EYE, pupil=(0, 1), openness=0.72)
-    eye(draw, RIGHT_EYE, pupil=(0, 1), openness=0.72)
+    eye(draw, LEFT_EYE, pupil=(0, 1), openness=0.82)
+    eye(draw, RIGHT_EYE, pupil=(0, 1), openness=0.82)
     brow(draw, 18, 14, 52, 25)
     brow(draw, 76, 25, 110, 14)
     draw.line((52, 54, 76, 54), fill=255, width=3)
