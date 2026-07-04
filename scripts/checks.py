@@ -103,17 +103,14 @@ REQUIRED_GITIGNORE_PATTERNS: tuple[str, ...] = (
 MAX_FILE_LINES = 800
 MAX_FUNCTION_LINES = 50
 
-# CLAUDE.md exige <=800 líneas/archivo. `mobile/api.py` ya lo viola — queda
-# aquí hasta que el refactor a `src/mobile/routes/` (routers por dominio)
-# aterrice. No agregar archivos nuevos a esta lista: un archivo nuevo que
-# viole el máximo debe partirse, no listarse acá.
+# CLAUDE.md exige <=800 líneas/archivo. No agregar archivos nuevos a esta
+# lista: un archivo nuevo que viole el máximo debe partirse, no listarse acá.
 GRANDFATHERED_OVERSIZED_FILES: frozenset[str] = frozenset(
     {
-        "src/mobile/api.py",
         # Cruzó el máximo por los fixes de privacidad P0.4/P0.5 (filtro de
         # sensibilidad de memoria, autenticación de remitente, registro en
         # crisis_journal). Pendiente de partir junto con sus funciones largas
-        # (ver GRANDFATHERED_LONG_FUNCTIONS) en el refactor de P2.
+        # (ver GRANDFATHERED_LONG_FUNCTIONS).
         "src/channels/whatsapp/service.py",
     }
 )
@@ -132,7 +129,6 @@ GRANDFATHERED_LONG_FUNCTIONS: frozenset[tuple[str, str]] = frozenset(
         ("src/channels/whatsapp/service.py", "_handle_pending_focus"),
         ("src/channels/whatsapp/service.py", "handle_inbound"),
         ("src/main.py", "cli"),
-        ("src/mobile/api.py", "create_app"),
         ("src/mobile/factory_page.py", "render_factory_page"),
         ("src/product/factory_acceptance.py", "build_factory_acceptance_checklist"),
         ("src/product/first_run.py", "apply_first_run_setup"),
