@@ -54,6 +54,10 @@ _INACTIVITY_GAP_MIN = timedelta(hours=2)
 # Frases clave (forma normalizada: minúsculas, sin acentos, con espacios
 # colapsados). Pares (frase, exclusiones) — si una exclusión coincide,
 # la frase no dispara.
+#
+# Solo la forma SIN acentos/ñ: `_normalize()` le hace strip de acentos al
+# transcript de entrada, así que una variante con tilde/ñ nunca podría
+# matchear — no duplicar entradas "hacer daño" junto a "hacer dano".
 # ---------------------------------------------------------------------------
 
 
@@ -82,6 +86,8 @@ _IDEATION_PATTERNS: tuple[_Pattern, ...] = (
     _Pattern("pensando en suicidarme"),
     _Pattern("pienso en suicidarme"),
     _Pattern("suicidarme"),
+    _Pattern("kiero morir", excludes=("no kiero morir",)),
+    _Pattern("me kiero morir", excludes=("no me kiero morir",)),
 )
 
 _SELFHARM_PATTERNS: tuple[_Pattern, ...] = (
@@ -91,16 +97,17 @@ _SELFHARM_PATTERNS: tuple[_Pattern, ...] = (
     _Pattern("me cortaria"),
     _Pattern("me corte"),
     _Pattern("hacerme dano"),
-    _Pattern("hacerme daño"),
     _Pattern("hacer dano a mi"),
-    _Pattern("hacer daño a mi"),
     _Pattern("me hice dano"),
-    _Pattern("me hice daño"),
     _Pattern("lastimarme"),
     _Pattern("lesionarme"),
     _Pattern("quemarme"),
     _Pattern("golpearme"),
     _Pattern("dejar de comer"),
+    _Pattern("rayarme"),
+    _Pattern("me raye"),
+    _Pattern("rayandome"),
+    _Pattern("quiero rayarme"),
 )
 
 _GOODBYE_PATTERNS: tuple[_Pattern, ...] = (
@@ -111,6 +118,8 @@ _GOODBYE_PATTERNS: tuple[_Pattern, ...] = (
     _Pattern("no tiene sentido seguir"),
     _Pattern("no aguanto mas"),
     _Pattern("no puedo mas"),
+    _Pattern("ya nse puede mas"),
+    _Pattern("ya no se puede mas"),
     _Pattern("les haria un favor a todos"),
     _Pattern("ya para que"),
 )
@@ -135,15 +144,10 @@ _HARM_OTHERS_PATTERNS: tuple[_Pattern, ...] = (
     _Pattern("lastimar a un"),
     _Pattern("lastimar a una"),
     _Pattern("hacerle dano a"),
-    _Pattern("hacerle daño a"),
     _Pattern("hacer dano a"),
-    _Pattern("hacer daño a"),
     _Pattern("hacer dano al"),
-    _Pattern("hacer daño al"),
     _Pattern("hacer dano a un"),
-    _Pattern("hacer daño a un"),
     _Pattern("hacer dano a una"),
-    _Pattern("hacer daño a una"),
 )
 
 _DANGEROUS_ACCESS_PATTERNS: tuple[_Pattern, ...] = (
@@ -234,13 +238,41 @@ def _normalize(text: str) -> str:
     return collapsed
 
 
+def _find_all_spans(text: str, needle: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    start = 0
+    while (idx := text.find(needle, start)) != -1:
+        spans.append((idx, idx + len(needle)))
+        start = idx + 1
+    return spans
+
+
+def _spans_overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
+    return a[0] < b[1] and b[0] < a[1]
+
+
 def _matches_any(normalized_text: str, patterns: Iterable[_Pattern]) -> bool:
+    """True si alguna ocurrencia del needle de algún patrón no está negada.
+
+    Una ocurrencia solo se descarta si el span de una frase de exclusión se
+    solapa con ella — una negación en otra parte de la transcripción (p.ej.
+    "no quiero morir... pero en el fondo sí quiero morir") no debe poder
+    silenciar una afirmación real y posterior de la misma frase.
+    """
     for p in patterns:
-        if p.needle not in normalized_text:
+        needle_spans = _find_all_spans(normalized_text, p.needle)
+        if not needle_spans:
             continue
-        if any(exc in normalized_text for exc in p.excludes):
-            continue
-        return True
+        exclude_spans = [
+            span for exc in p.excludes for span in _find_all_spans(normalized_text, exc)
+        ]
+        unsuppressed = (
+            span
+            for span in needle_spans
+            if not any(_spans_overlap(span, exc_span) for exc_span in exclude_spans)
+        )
+        if any(True for _ in unsuppressed):
+            return True
     return False
 
 
@@ -257,6 +289,12 @@ def _samples_in_window(
 
 
 def _is_sustained_extreme(history: Iterable[EmotionalSample], now: datetime) -> bool:
+    # NOTA (ver CLAUDE.md §4.2): esta lógica está completa y testeada, pero
+    # hoy ningún llamador real (`orchestrator/run.py`) le pasa un
+    # `emotion_history` no vacío — no hay modelo SER local implementado
+    # todavía. Este trigger está dormido en producción hasta que exista un
+    # SER local y algo que lo alimente. "Tiene tests" no es "está en
+    # producción" — no confundir el uno con el otro.
     samples = _samples_in_window(history, now, _SUSTAINED_LOOKBACK)
     if len(samples) < _SUSTAINED_MIN_SAMPLES:
         return False
@@ -288,6 +326,10 @@ def _is_emotionally_elevated(history: Iterable[EmotionalSample], now: datetime) 
 
 
 def _is_prolonged_inactivity_after_distress(input: CrisisInput) -> bool:
+    # NOTA (ver CLAUDE.md §4.2): igual que `_is_sustained_extreme` — este
+    # trigger está dormido en producción porque nada calcula ni persiste
+    # `last_high_distress_at` hoy. La lógica de detección está lista para
+    # cuando ese dato exista.
     if input.last_high_distress_at is None:
         return False
     if input.last_interaction_at is None:
