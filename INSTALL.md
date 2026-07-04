@@ -136,6 +136,12 @@ Alternativa: `./scripts/install_systemd.sh rako` instala el loop
 declaran `Conflicts=` entre sí porque compiten por el botón GPIO y el
 audio — systemd no deja correr ambos.
 
+Opt-in adicional: `./scripts/install_systemd.sh rako-proactive` agenda el
+chequeo proactivo cada 30 minutos (nudge suave por voz si hay tareas
+pendientes + inactividad larga; respeta modo privado, crisis reciente,
+horario silencioso y rate limit). Probar antes con
+`./scripts/rako.sh proactive-check --dry-run`.
+
 ```bash
 # Logs en vivo
 journalctl -u rako-chat -f
@@ -163,6 +169,16 @@ El instalador de systemd ya agenda un backup diario a las 04:00
 muerte de la microSD, apuntarlo a un USB montado: editar `ExecStart` en
 `/etc/systemd/system/rako-backup.service` (`--output-dir /media/usb/rako`)
 y `sudo systemctl daemon-reload`.
+
+Restaurar un snapshot (valida la clave, aparta la base actual como copia
+`pre-restore` y deja el snapshot en su lugar):
+
+```bash
+sudo systemctl stop rako-chat rako-api
+./scripts/rako-restore                 # usa el snapshot más reciente
+./scripts/rako-restore backups/rako-db-20260704-040000.db
+sudo systemctl start rako-chat rako-api
+```
 Para restaurar: detener los servicios (`sudo systemctl stop rako-chat rako-api`),
 copiar el snapshot sobre la ruta de `SQLITE_PATH` (borrando `*-wal`/`*-shm`
 si existen) y volver a arrancar. **Respaldar también la clave**: sin

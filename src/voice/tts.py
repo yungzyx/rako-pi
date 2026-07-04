@@ -148,6 +148,39 @@ class ElevenLabsTTS:
             text_synthesized=cleaned,
         )
 
+    def synthesize_stream(self, text: str):
+        """Genera chunks de MP3 a medida que llegan del endpoint /stream.
+
+        Permite empezar la reproducción con los primeros bytes en vez de
+        esperar la síntesis completa. El caller debe consumir el iterador
+        entero (o cerrar el stream) para liberar la conexión.
+        """
+        cleaned = text.strip()
+        if not cleaned:
+            raise ValueError("cannot synthesize empty text")
+        if len(cleaned) > self._max_chars:
+            raise ValueError(f"text too long: {len(cleaned)} chars (max {self._max_chars})")
+        with self._http.stream(
+            "POST",
+            f"https://api.elevenlabs.io/v1/text-to-speech/{self._voice_id}/stream",
+            headers={
+                "accept": "audio/mpeg",
+                "content-type": "application/json",
+                "xi-api-key": self._api_key,
+            },
+            json={
+                "text": cleaned,
+                "model_id": self._model,
+                "voice_settings": {
+                    "stability": self._stability,
+                    "similarity_boost": self._similarity_boost,
+                },
+            },
+            timeout=self._timeout_s,
+        ) as response:
+            response.raise_for_status()
+            yield from response.iter_bytes()
+
     def close(self) -> None:
         close = getattr(self._http, "close", None)
         if callable(close):
@@ -188,6 +221,13 @@ class FallbackTTS:
                 )
         assert last_error is not None  # len(clients) >= 1 garantiza un intento
         raise last_error
+
+    def stream_client(self) -> TTSClient | None:
+        """Primer cliente de la cadena que soporta streaming, si hay."""
+        for client in self._clients:
+            if callable(getattr(client, "synthesize_stream", None)):
+                return client
+        return None
 
     def close(self) -> None:
         for client in self._clients:

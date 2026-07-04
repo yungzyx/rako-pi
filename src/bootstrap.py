@@ -49,6 +49,7 @@ from sync.firebase_client import FakeFirebaseClient, FirebaseClient
 from sync.queue import SyncQueue
 from voice.audio_io import AudioCaptureSource, AudioPlaybackSink
 from voice.stt import GoogleCloudSTT, STTClient
+from voice.stt_local import FallbackSTT, WhisperCppSTT
 from voice.stt_openai import OpenAIWhisperSTT
 from voice.tts import ElevenLabsTTS, FallbackTTS, GoogleCloudTTS, TTSClient
 from voice.tts_cache import PrerecordedTTS
@@ -383,7 +384,32 @@ def _ensure_google_credentials_env(settings: Settings) -> None:
 
 
 def _try_real_stt(settings: Settings) -> STTClient | None:
-    """Construye el STT real seleccionado.
+    """Construye el STT real: cloud primario + whisper.cpp local si está
+    configurado (cadena FallbackSTT — sin internet, Rako sigue oyendo)."""
+    primary = _try_cloud_stt(settings)
+    local = _try_whisper_cpp_stt(settings)
+    if primary is not None and local is not None:
+        return FallbackSTT((primary, local))
+    return primary or local
+
+
+def _try_whisper_cpp_stt(settings: Settings) -> STTClient | None:
+    if not settings.whisper_cpp_bin or not settings.whisper_cpp_model:
+        return None
+    if not Path(settings.whisper_cpp_model).exists():
+        _log.warning(
+            "whisper.cpp model not found at %s; offline STT off", settings.whisper_cpp_model
+        )
+        return None
+    return WhisperCppSTT(
+        binary_path=settings.whisper_cpp_bin,
+        model_path=settings.whisper_cpp_model,
+        language=settings.google_stt_language.split("-")[0],
+    )
+
+
+def _try_cloud_stt(settings: Settings) -> STTClient | None:
+    """STT cloud seleccionado.
 
     `openai_whisper` suele transcribir mejor nombres raros/acentos que Google.
     Google queda disponible como fallback estable si Whisper no está configurado.

@@ -314,3 +314,131 @@ def test_no_signals_keeps_trigger_off(tmp_path: Path) -> None:
 
     assert turn.last_high_distress_at is None
     assert turn.last_interaction_at is None
+
+
+# ---------------------------------------------------------------------------
+# Aprendizaje opt-in de preferencias — sugerir, confirmar, declinar
+# ---------------------------------------------------------------------------
+
+
+def test_llm_turn_with_preference_produces_suggestion(tmp_path: Path) -> None:
+    session, _ = _make_session(tmp_path)
+
+    suggestion = session.suggest_preference(
+        "para las pruebas prefiero estudiar de noche", _result("buena idea")
+    )
+
+    assert suggestion is not None
+    assert "prefiero estudiar de noche" in suggestion
+    assert "recuérdalo" in suggestion
+
+
+def test_confirmation_saves_pending_preference(tmp_path: Path) -> None:
+    session, app = _make_session(tmp_path)
+    session.suggest_preference("prefiero estudiar de noche siempre", _result("ok"))
+
+    reply = session.try_remember_command("sí, recuérdalo")
+
+    assert reply is not None and "recordar" in reply
+    memories = UserConfigService(app.db).list_memory()
+    assert any("prefiero estudiar de noche" in m.text for m in memories)
+    # Confirmar de nuevo no debe duplicar: la pendiente ya se consumió.
+    assert session.try_remember_command("sí, recuérdalo") is None
+
+
+def test_decline_clears_pending_without_saving(tmp_path: Path) -> None:
+    session, app = _make_session(tmp_path)
+    session.suggest_preference("prefiero estudiar de noche siempre", _result("ok"))
+
+    reply = session.try_remember_command("no gracias")
+
+    assert reply is not None and "no lo guardo" in reply
+    assert UserConfigService(app.db).list_memory() == ()
+
+
+def test_no_suggestion_for_non_llm_turns(tmp_path: Path) -> None:
+    from orchestrator.orchestrator import TurnKind, TurnResult
+
+    session, _ = _make_session(tmp_path)
+    referral = TurnResult(
+        kind=TurnKind.WELLBEING_REFERRAL,
+        text="derivación",
+        audio_path=None,
+        rag_chunk_ids=(),
+        notify_contact=False,
+        show_resources=False,
+    )
+
+    assert session.suggest_preference("prefiero estudiar de noche siempre", referral) is None
+
+
+def test_no_suggestion_when_similar_memory_exists(tmp_path: Path) -> None:
+    session, app = _make_session(tmp_path)
+    UserConfigService(app.db).add_memory(text="prefiero estudiar de noche", category="preference")
+
+    suggestion = session.suggest_preference(
+        "ya te dije que prefiero estudiar de noche", _result("sí")
+    )
+
+    assert suggestion is None
+
+
+def test_plain_turns_do_not_suggest(tmp_path: Path) -> None:
+    session, _ = _make_session(tmp_path)
+
+    assert session.suggest_preference("hola, ¿cómo estás?", _result("hola")) is None
+
+
+def test_pending_memory_rejected_by_validation_returns_none(tmp_path: Path, monkeypatch) -> None:
+    session, _ = _make_session(tmp_path)
+    session.suggest_preference("prefiero estudiar de noche siempre", _result("ok"))
+
+    def _reject(self, **kwargs):
+        raise ValueError("invalid")
+
+    monkeypatch.setattr(UserConfigService, "add_memory", _reject)
+
+    assert session.try_remember_command("sí, recuérdalo") is None
+
+
+def test_unrelated_turn_keeps_pending_suggestion_alive(tmp_path: Path) -> None:
+    session, app = _make_session(tmp_path)
+    session.suggest_preference("prefiero estudiar de noche siempre", _result("ok"))
+
+    # Un turno cualquiera no confirma ni declina: la pendiente sigue viva.
+    assert session.try_remember_command("¿qué hora es?") is None
+    reply = session.try_remember_command("recuérdalo")
+
+    assert reply is not None
+    assert any(
+        "prefiero estudiar de noche" in m.text for m in UserConfigService(app.db).list_memory()
+    )
+
+
+def test_pending_memory_corrupt_or_expired_is_discarded(tmp_path: Path) -> None:
+    from datetime import timedelta as _td
+
+    session, app = _make_session(tmp_path)
+
+    # JSON corrupto.
+    app.db.config.set("voice.pending_memory", "{no es json")
+    assert session.try_remember_command("sí, recuérdalo") is None
+
+    # Payload que no es dict.
+    app.db.config.set("voice.pending_memory", "[1, 2]")
+    assert session.try_remember_command("sí, recuérdalo") is None
+
+    # Expirada.
+    import json as _json
+
+    app.db.config.set(
+        "voice.pending_memory",
+        _json.dumps(
+            {
+                "text": "prefiero estudiar de noche",
+                "expires_at": (_now() - _td(minutes=1)).isoformat(),
+            }
+        ),
+    )
+    assert session.try_remember_command("sí, recuérdalo") is None
+    assert UserConfigService(app.db).list_memory() == ()

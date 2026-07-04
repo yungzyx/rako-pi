@@ -29,6 +29,13 @@ from channels.whatsapp.service import WhatsAppService
 from config import Settings
 from db.connection import EncryptionRequiredError
 from orchestrator.orchestrator import TurnInput, TurnKind
+from orchestrator.proactive import (
+    DEFAULT_INACTIVITY_HOURS,
+    DEFAULT_MAX_PER_DAY,
+    DEFAULT_MIN_INTERVAL_HOURS,
+    decide_proactive_nudge,
+    record_nudge,
+)
 from orchestrator.types import default_user_context
 from product.user_config import UserConfigService
 from productivity.coaching import build_coaching_recommendation
@@ -84,6 +91,20 @@ def cli(argv: list[str] | None = None) -> int:
     p_checkin.add_argument("--quiet-end-hour", type=int, default=8)
     p_checkin.add_argument("--recent-interaction-minutes", type=float, default=45.0)
 
+    p_proactive = sub.add_parser(
+        "proactive-check",
+        help="Evalúa si corresponde un nudge proactivo por voz y lo despacha.",
+    )
+    p_proactive.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Solo muestra la decisión; no habla ni registra el nudge.",
+    )
+    p_proactive.add_argument("--at", default=None, help="Fecha/hora ISO para pruebas.")
+    p_proactive.add_argument("--min-interval-hours", type=float, default=DEFAULT_MIN_INTERVAL_HOURS)
+    p_proactive.add_argument("--inactivity-hours", type=float, default=DEFAULT_INACTIVITY_HOURS)
+    p_proactive.add_argument("--max-per-day", type=int, default=DEFAULT_MAX_PER_DAY)
+
     args = parser.parse_args(argv)
 
     settings = Settings()
@@ -100,6 +121,15 @@ def cli(argv: list[str] | None = None) -> int:
             return _run_purge_all(app)
         if args.cmd == "run":
             return _run_loop(app, max_iterations=args.max_iterations)
+        if args.cmd == "proactive-check":
+            return _run_proactive_check(
+                app,
+                dry_run=args.dry_run,
+                at=args.at,
+                min_interval_hours=args.min_interval_hours,
+                inactivity_hours=args.inactivity_hours,
+                max_per_day=args.max_per_day,
+            )
         if args.cmd == "smart-checkin":
             return _run_smart_checkin(
                 app,
@@ -210,6 +240,41 @@ def _run_loop(app: Application, *, max_iterations: int | None) -> int:
         loop.run(max_iterations=max_iterations)
     except KeyboardInterrupt:  # pragma: no cover - interactive only
         print("\n[Rako] deteniendo.")
+    return 0
+
+
+def _run_proactive_check(
+    app: Application,
+    *,
+    dry_run: bool,
+    at: str | None,
+    min_interval_hours: float,
+    inactivity_hours: float,
+    max_per_day: int,
+) -> int:
+    now = _parse_cli_datetime(at)
+    decision = decide_proactive_nudge(
+        app.db,
+        now=now,
+        rako_mode=app.settings.rako_mode,
+        do_not_disturb_start=app.settings.do_not_disturb_start,
+        do_not_disturb_end=app.settings.do_not_disturb_end,
+        min_interval_hours=min_interval_hours,
+        inactivity_hours=inactivity_hours,
+        max_per_day=max_per_day,
+    )
+    print(f"[Rako] proactive decision={decision.reason} nudge={decision.should_nudge}")
+    if not decision.should_nudge or decision.nudge_text is None:
+        return 0
+    print(f"  texto: {decision.nudge_text}")
+    if dry_run:
+        return 0
+    try:
+        synth = app.tts.synthesize(decision.nudge_text)
+        app.playback.play(synth.audio)
+    except Exception as exc:  # el nudge es best-effort; nunca crashea el timer
+        print(f"[Rako] nudge sin voz (TTS/playback falló): {exc}")
+    record_nudge(app.db, now=now)
     return 0
 
 

@@ -159,6 +159,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Synthesize the full reply in one call instead of speaking sentence by sentence",
     )
+    parser.add_argument(
+        "--no-stream-tts",
+        action="store_true",
+        help="Disable provider audio streaming; fall back to chunked/single synthesis",
+    )
     args = parser.parse_args(argv)
 
     if args.capture_seconds <= 0:
@@ -364,6 +369,10 @@ def _handle_press(
     print(f"Rako: {result.text}", flush=True)
     _synthesize_and_maybe_play(app=app, text=result.text, eyes=eyes, args=args)
     session.complete_turn(transcript=transcript, result=result, now=now)
+    suggestion = session.suggest_preference(transcript, result)
+    if suggestion is not None:
+        print(f"Rako: {suggestion}", flush=True)
+        _synthesize_and_maybe_play(app=app, text=suggestion, eyes=eyes, args=args)
     eyes.set_state(RakoVisualState.READY)
 
 
@@ -488,10 +497,74 @@ def _split_speech_chunks(
     return chunks
 
 
+def _resolve_stream_client(app: Any) -> Any | None:
+    """Cliente TTS con soporte de streaming, directo o dentro de la cadena."""
+    tts = app.tts
+    if callable(getattr(tts, "synthesize_stream", None)):
+        return tts
+    stream_client = getattr(tts, "stream_client", None)
+    if callable(stream_client):
+        return stream_client()
+    return None
+
+
+def _try_streaming_playback(
+    *, app: Any, text: str, eyes: OledEyeController | None, args: argparse.Namespace
+) -> bool:
+    """Reproduce audio a medida que llega del proveedor (latencia mínima).
+
+    Devuelve True si el turno quedó hablado por esta vía. Cualquier fallo
+    ANTES del primer byte cae en silencio al camino normal; un fallo a
+    mitad de reproducción no se reintenta (ya sonó parcialmente).
+    """
+    client = _resolve_stream_client(app)
+    if client is None:
+        return False
+    try:
+        stream_started = time.monotonic()
+        stream = client.synthesize_stream(text)
+        first_chunk = next(stream, None)
+        if first_chunk is None:
+            return False
+        print(
+            f"Tiempo TTS (primer byte, streaming): {time.monotonic() - stream_started:.2f}s",
+            flush=True,
+        )
+    except Exception as exc:
+        print(f"Streaming TTS no disponible ({exc}); uso síntesis normal.", flush=True)
+        return False
+
+    _play_cue(kind="reply_start", args=args)
+    _warm_up_audio_device(device=args.audio_device, seconds=args.playback_warmup_seconds)
+    if eyes is not None:
+        eyes.set_state(RakoVisualState.SPEAKING)
+    player = subprocess.Popen(
+        ["mpg123", "-q", "-o", "alsa", "-a", args.audio_device, "-"],
+        stdin=subprocess.PIPE,
+    )
+    try:
+        assert player.stdin is not None
+        player.stdin.write(first_chunk)
+        for chunk in stream:
+            player.stdin.write(chunk)
+        player.stdin.close()
+        player.wait()
+    except Exception as exc:
+        print(f"Streaming TTS se cortó a mitad de la respuesta: {exc}", flush=True)
+        player.kill()
+    return True
+
+
 def _synthesize_and_maybe_play(
     *, app: Any, text: str, eyes: OledEyeController | None = None, args: argparse.Namespace
 ) -> None:
     playback_available = not args.no_playback and shutil.which("mpg123") is not None
+    if (
+        playback_available
+        and not args.no_stream_tts
+        and _try_streaming_playback(app=app, text=text, eyes=eyes, args=args)
+    ):
+        return
     chunks = [text]
     if playback_available and not args.no_chunked_tts:
         chunks = _split_speech_chunks(text) or [text]

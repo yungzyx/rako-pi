@@ -1,0 +1,14 @@
+[Unit]
+Description=Rako — chequeo proactivo cada 30 minutos
+# Opt-in: NO va en el set por defecto del instalador. Instalar con:
+#   ./scripts/install_systemd.sh rako-proactive
+# La decisión respeta modo privado, crisis reciente, horario silencioso
+# y rate limit (orchestrator/proactive.py), así que el timer puede correr
+# seguido sin spamear.
+
+[Timer]
+OnCalendar=*:00/30
+Persistent=false
+
+[Install]
+WantedBy=timers.target

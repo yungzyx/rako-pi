@@ -1,0 +1,19 @@
+[Unit]
+Description=Rako — chequeo proactivo de bloqueo (nudge suave por voz)
+Documentation=https://github.com/yungzyx/rako-pi
+
+[Service]
+Type=oneshot
+User=__RAKO_USER__
+Group=__RAKO_USER__
+WorkingDirectory=__RAKO_DIR__
+Environment="PYTHONPATH=__RAKO_DIR__/src"
+EnvironmentFile=-__RAKO_DIR__/.env
+ExecStart=__RAKO_DIR__/.venv/bin/python -m main proactive-check
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rako-proactive
+
+[Install]
+WantedBy=multi-user.target

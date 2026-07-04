@@ -352,3 +352,81 @@ def test_fallback_tts_close_closes_all_clients() -> None:
 
     assert primary.closed
     assert backup.closed
+
+
+# ---------------------------------------------------------------------------
+# Streaming — ElevenLabs /stream y delegación de la cadena
+# ---------------------------------------------------------------------------
+
+
+class _FakeStreamResponse:
+    def __init__(self, chunks: list[bytes]) -> None:
+        self._chunks = chunks
+
+    def __enter__(self) -> _FakeStreamResponse:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def iter_bytes(self):
+        yield from self._chunks
+
+
+class _FakeStreamingHTTPClient:
+    def __init__(self, chunks: list[bytes]) -> None:
+        self.chunks = chunks
+        self.stream_calls: list[str] = []
+
+    def stream(self, method: str, url: str, **kwargs: Any) -> _FakeStreamResponse:
+        self.stream_calls.append(url)
+        return _FakeStreamResponse(self.chunks)
+
+
+def test_elevenlabs_stream_yields_chunks_as_they_arrive() -> None:
+    http = _FakeStreamingHTTPClient([b"AA", b"BB", b"CC"])
+    client = ElevenLabsTTS(
+        http_client=http,
+        api_key="el-test",
+        voice_id="voice-123",
+        model="eleven_flash_v2_5",
+    )
+
+    chunks = list(client.synthesize_stream("hola rako"))
+
+    assert chunks == [b"AA", b"BB", b"CC"]
+    assert http.stream_calls == ["https://api.elevenlabs.io/v1/text-to-speech/voice-123/stream"]
+
+
+def test_elevenlabs_stream_rejects_empty_text() -> None:
+    client = ElevenLabsTTS(
+        http_client=_FakeStreamingHTTPClient([]),
+        api_key="el-test",
+        voice_id="voice-123",
+        model="eleven_flash_v2_5",
+    )
+
+    with pytest.raises(ValueError):
+        list(client.synthesize_stream("  "))
+
+
+def test_fallback_chain_exposes_first_streaming_client() -> None:
+    plain = _StaticTTS("plain")
+    streaming = ElevenLabsTTS(
+        http_client=_FakeStreamingHTTPClient([b"X"]),
+        api_key="el-test",
+        voice_id="voice-123",
+        model="eleven_flash_v2_5",
+    )
+    chain = FallbackTTS((plain, streaming))
+
+    assert chain.stream_client() is streaming
+
+
+def test_fallback_chain_without_streaming_clients_returns_none() -> None:
+    chain = FallbackTTS((_StaticTTS("a"), _StaticTTS("b")))
+
+    assert chain.stream_client() is None

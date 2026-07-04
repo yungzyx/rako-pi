@@ -151,6 +151,7 @@ Rako, para la música
 ```
 
 ```bash
+./scripts/rako.sh proactive-check --dry-run   # ¿corresponde un nudge proactivo?
 ./scripts/rako-demo         # sesión guiada: ojos + sonido + voz, sin botón
 ./scripts/rako-demo-mode    # guion y comandos para demos sin datos reales
 ./scripts/rako.sh demo-crisis-panic   # protocolo de pánico curado (sin LLM)
@@ -160,6 +161,7 @@ Rako, para la música
 
 ```bash
 ./scripts/rako-backup       # snapshot cifrado de la BD en ./backups (rota 7)
+./scripts/rako-restore      # restaura el más reciente (aparta la base actual)
 ```
 
 Los datos del usuario nunca salen de la Pi, así que una SD muerta los

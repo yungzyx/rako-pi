@@ -111,3 +111,66 @@ def test_create_backup_rejects_invalid_keep(tmp_path: Path) -> None:
 
 def test_list_backups_empty_when_dir_missing(tmp_path: Path) -> None:
     assert list_backups(tmp_path / "nope") == ()
+
+
+def test_restore_replaces_database_and_keeps_pre_restore_copy(tmp_path: Path) -> None:
+    from product.backup import restore_backup
+
+    sqlite_path = _seed_database(tmp_path)
+    output_dir = tmp_path / "backups"
+    snapshot = create_backup(
+        sqlite_path=sqlite_path,
+        encryption_key=None,
+        output_dir=output_dir,
+        now=_now(),
+    ).backup_path
+
+    # La base sigue viva después del backup y cambia.
+    db = Database.open(sqlite_path, None)
+    db.config.set("preferred_name", "Otro")
+    db.close()
+
+    result = restore_backup(
+        backup_path=snapshot,
+        sqlite_path=sqlite_path,
+        encryption_key=None,
+        now=_now(1),
+    )
+
+    restored = Database.open(sqlite_path, None)
+    try:
+        assert restored.config.get("preferred_name") == "Nico"
+    finally:
+        restored.close()
+    assert result.pre_restore_copy is not None
+    assert result.pre_restore_copy.exists()
+
+
+def test_restore_rejects_non_rako_file(tmp_path: Path) -> None:
+    from product.backup import restore_backup
+
+    bogus = tmp_path / "bogus.db"
+    conn = sqlite3.connect(bogus)
+    conn.execute("CREATE TABLE nada (x INTEGER)")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(ValueError, match="user_config"):
+        restore_backup(
+            backup_path=bogus,
+            sqlite_path=str(tmp_path / "rako.db"),
+            encryption_key=None,
+            now=_now(),
+        )
+
+
+def test_restore_missing_backup_raises(tmp_path: Path) -> None:
+    from product.backup import restore_backup
+
+    with pytest.raises(FileNotFoundError):
+        restore_backup(
+            backup_path=tmp_path / "nope.db",
+            sqlite_path=str(tmp_path / "rako.db"),
+            encryption_key=None,
+            now=_now(),
+        )

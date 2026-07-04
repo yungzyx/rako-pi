@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     # Cache de frases curadas pre-sintetizadas (rako-pregen-tts): permite
     # que crisis/derivaciones hablen sin internet. Solo audio de salida.
     tts_cache_dir: str = "./data/tts-cache"
+    # STT local de fallback (whisper.cpp). Vacíos = deshabilitado; con
+    # binario + modelo presentes, entra a la cadena si el cloud falla.
+    whisper_cpp_bin: str | None = None
+    whisper_cpp_model: str | None = None
 
     # --- RAG ---
     chroma_db_path: str = "./chroma_db"

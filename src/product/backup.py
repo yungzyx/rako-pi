@@ -93,3 +93,61 @@ def _prune_old_backups(output_dir: Path, *, keep: int) -> tuple[str, ...]:
         stale.unlink()
         pruned.append(stale.name)
     return tuple(pruned)
+
+
+@dataclass(frozen=True, slots=True)
+class RestoreResult:
+    restored_from: Path
+    pre_restore_copy: Path | None
+
+
+def restore_backup(
+    *,
+    backup_path: Path,
+    sqlite_path: str,
+    encryption_key: str | None,
+    now: datetime,
+) -> RestoreResult:
+    """Restaura un snapshot sobre la base activa.
+
+    Antes de tocar nada: (1) valida que el snapshot abre con la clave
+    actual y contiene el esquema esperado; (2) aparta la base actual como
+    copia `pre-restore` (nunca se pierde el estado previo). Los sidecars
+    WAL/SHM de la base vieja se eliminan para que SQLite no mezcle
+    journal viejo con datos restaurados.
+
+    Los servicios deben estar detenidos al restaurar (el CLI lo advierte).
+    """
+    if not backup_path.exists():
+        raise FileNotFoundError(f"backup not found: {backup_path}")
+    _verify_snapshot(backup_path, encryption_key)
+
+    target = Path(sqlite_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    pre_restore_copy: Path | None = None
+    if target.exists():
+        stamp = now.strftime("%Y%m%d-%H%M%S")
+        pre_restore_copy = target.with_name(f"{target.name}.pre-restore-{stamp}")
+        target.replace(pre_restore_copy)
+    for suffix in ("-wal", "-shm"):
+        sidecar = Path(str(target) + suffix)
+        if sidecar.exists():
+            sidecar.unlink()
+    target.write_bytes(backup_path.read_bytes())
+    return RestoreResult(restored_from=backup_path, pre_restore_copy=pre_restore_copy)
+
+
+def _verify_snapshot(backup_path: Path, encryption_key: str | None) -> None:
+    conn = open_connection(str(backup_path), encryption_key)
+    try:
+        tables = {
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
+    finally:
+        conn.close()
+    if "user_config" not in tables:
+        raise ValueError(
+            f"{backup_path} no parece un snapshot de Rako (falta la tabla user_config) "
+            "o la SQLITE_ENCRYPTION_KEY actual no coincide con la del backup"
+        )

@@ -12,6 +12,7 @@ persistía historial. Este módulo es la única implementación.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -25,7 +26,8 @@ from orchestrator.context import (
     find_last_interaction_at,
 )
 from orchestrator.memory import ConversationMemory
-from orchestrator.orchestrator import TurnInput, TurnResult
+from orchestrator.orchestrator import TurnInput, TurnKind, TurnResult
+from orchestrator.preferences import extract_preference
 from orchestrator.voice_commands import parse_remember_command
 from product.user_config import UserConfigService
 from safety.detector import detect_crisis
@@ -36,6 +38,27 @@ _log = logging.getLogger(__name__)
 # Al reiniciar, retomamos la conversación solo si es realmente reciente —
 # una charla de ayer no debe tratarse como "conversación en curso".
 MEMORY_RESTORE_WINDOW = timedelta(minutes=45)
+
+# Sugerencia de memoria pendiente de confirmación por voz (opt-in).
+_PENDING_MEMORY_KEY = "voice.pending_memory"
+_PENDING_MEMORY_TTL = timedelta(minutes=15)
+_CONFIRM_MEMORY_PHRASES = frozenset(
+    {
+        "si recuerdalo",
+        "sí recuérdalo",
+        "si, recuerdalo",
+        "sí, recuérdalo",
+        "recuerdalo",
+        "recuérdalo",
+        "guardalo",
+        "guárdalo",
+        "si guardalo",
+        "sí guárdalo",
+        "dale recuerdalo",
+        "dale recuérdalo",
+    }
+)
+_DECLINE_MEMORY_PHRASES = frozenset({"no", "no gracias", "no, gracias", "mejor no"})
 
 
 def _utc_now() -> datetime:  # pragma: no cover - default factory
@@ -101,6 +124,9 @@ class TurnSession:
         seguir el pipeline normal hacia el protocolo curado, no guardarse
         en silencio como preferencia.
         """
+        pending_reply = self._resolve_pending_memory(transcript)
+        if pending_reply is not None:
+            return pending_reply
         memory_text = parse_remember_command(transcript)
         if memory_text is None:
             return None
@@ -127,6 +153,82 @@ class TurnSession:
         confirmation = f"Listo, lo voy a recordar: {memory.text}"
         self.memory.add_turn(user=transcript, rako=confirmation)
         return confirmation
+
+    # ------------------------------------------------------------------
+    # Aprendizaje opt-in de preferencias (nunca silencioso)
+    # ------------------------------------------------------------------
+
+    def suggest_preference(self, transcript: str, result: TurnResult) -> str | None:
+        """Si el turno normal mencionó una preferencia de estudio, deja una
+        sugerencia pendiente y devuelve la pregunta para que el loop la
+        hable DESPUÉS de la respuesta principal. Solo turnos LLM_RESPONSE
+        (nunca crisis/derivaciones) y solo si no existe una memoria
+        similar."""
+        if result.kind is not TurnKind.LLM_RESPONSE:
+            return None
+        candidate = extract_preference(transcript)
+        if candidate is None:
+            return None
+        candidate_lower = candidate.lower()
+        for memory in UserConfigService(self._db).list_memory():
+            existing = memory.text.lower()
+            if candidate_lower in existing or existing in candidate_lower:
+                return None
+        now = self._now()
+        self._db.config.set(
+            _PENDING_MEMORY_KEY,
+            json.dumps(
+                {
+                    "text": candidate,
+                    "expires_at": (now + _PENDING_MEMORY_TTL).isoformat(),
+                },
+                ensure_ascii=False,
+            ),
+        )
+        return f"Oye, ¿quieres que recuerde esto: {candidate}? Dime: sí, recuérdalo."
+
+    def _resolve_pending_memory(self, transcript: str) -> str | None:
+        pending = self._read_pending_memory()
+        if pending is None:
+            return None
+        normalized = " ".join(transcript.strip().split()).lower().strip(".!?¡¿ ")
+        if normalized in _CONFIRM_MEMORY_PHRASES:
+            self._db.config.delete(_PENDING_MEMORY_KEY)
+            try:
+                memory = UserConfigService(self._db).add_memory(
+                    text=pending, category="preference", now=self._now()
+                )
+            except ValueError:
+                _log.warning("pending memory rejected by validation")
+                return None
+            confirmation = f"Listo, lo voy a recordar: {memory.text}"
+            self.memory.add_turn(user=transcript, rako=confirmation)
+            return confirmation
+        if normalized in _DECLINE_MEMORY_PHRASES:
+            self._db.config.delete(_PENDING_MEMORY_KEY)
+            reply = "Perfecto, no lo guardo. Sigamos."
+            self.memory.add_turn(user=transcript, rako=reply)
+            return reply
+        return None
+
+    def _read_pending_memory(self) -> str | None:
+        raw = self._db.config.get(_PENDING_MEMORY_KEY)
+        if raw is None:
+            return None
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            self._db.config.delete(_PENDING_MEMORY_KEY)
+            return None
+        if not isinstance(payload, dict):
+            self._db.config.delete(_PENDING_MEMORY_KEY)
+            return None
+        expires_at = payload.get("expires_at")
+        if isinstance(expires_at, str) and datetime.fromisoformat(expires_at) <= self._now():
+            self._db.config.delete(_PENDING_MEMORY_KEY)
+            return None
+        text = payload.get("text")
+        return text if isinstance(text, str) and text.strip() else None
 
     # ------------------------------------------------------------------
     # Turno completo vía orquestador

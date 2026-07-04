@@ -153,6 +153,11 @@ class RunLoop:
         result = self._app.orchestrator.handle_turn(turn)
         self._session.complete_turn(transcript=transcript, result=result, now=now)
         self._dispatch(result)
+        suggestion = self._session.suggest_preference(transcript, result)
+        if suggestion is not None:
+            self._app.leds.set_state(LEDState.SPEAKING)
+            self._speak(suggestion)
+            self._app.leds.turn_off()
 
     def _handle_remember_command(self, transcript: str) -> bool:
         """Comando local "recuerda que ..." — guarda preferencia sin LLM."""
