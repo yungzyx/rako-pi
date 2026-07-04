@@ -59,6 +59,37 @@ PYTHONPATH=src python scripts/button_conversation.py --no-playback
   - `PORCUPINE_ACCESS_KEY=...`
   - `PORCUPINE_KEYWORD_PATH=./models/oye-rako.ppn`
 
+## ReSpeaker — overlay conocido-bueno (verificado 2026-05-10)
+
+Configuración de overlay verificada y funcionando en hardware real (fusionado
+desde notas previas de bring-up):
+
+- Overlay fuente: `hardware/overlays/seeed-2mic-voicecard-micbias-fix.dts`
+  (incluye la ruta `mclk` de WM8960 y la ruta `"Mic Jack", "MICB"`).
+- Instalado como `/boot/firmware/overlays/seeed-2mic-voicecard.dtbo`.
+- ALSA card: `seeed2micvoicec`. Dispositivo de captura para scripts de Rako:
+  `plughw:seeed2micvoicec,0`.
+- Verificado post-reboot: `MICB: On` durante captura; RMS de captura directa
+  ~5536, peak ~32250; RMS de captura vía script ~7103, peak ~32757.
+- Backup de referencia: `seeed-2mic-voicecard.dtbo.before-seeed-micbias-20260510-005959`.
+- El STT puede seguir fallando si el audio clippea o si no se habla con
+  claridad en la ventana de captura — `scripts/button_conversation.py`
+  normaliza el peak de PCM16 antes de mandar a STT.
+
+### Perfil de captura calibrado
+
+Aplicado y persistido con `alsactl store` vía `scripts/setup_respeaker_audio.sh`:
+
+- `Capture=50`
+- `ADC PCM=210`
+- `Input Boost LINPUT1/RINPUT1=2`
+- `ALC Function=Stereo`
+- `ALC Max Gain=6`
+- `ALC Target=6`
+
+Resultado de calibración: sin clipping; test final RMS ~10768, peak ~28347,
+0 muestras clippeadas.
+
 ## Reglas de implementación
 
 - Mantener interfaces mockeables para hardware.

@@ -4,7 +4,7 @@ set -euo pipefail
 FIXED_DTBO="/tmp/seeed-2mic-voicecard-fixed.dtbo"
 TARGET="/boot/firmware/overlays/seeed-2mic-voicecard.dtbo"
 if [[ ! -f "$FIXED_DTBO" ]]; then
-  echo "Missing $FIXED_DTBO. Build it first from tmp-seeedsound-fix.dts." >&2
+  echo "Missing $FIXED_DTBO. Build it first from hardware/overlays/seeed-2mic-voicecard-micbias-fix.dts." >&2
   exit 1
 fi
 if [[ ! -f "$TARGET" ]]; then

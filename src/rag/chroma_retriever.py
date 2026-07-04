@@ -7,12 +7,15 @@ colección no existe (no se ha re-indexado), retorna vacío sin levantar
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from typing import Any
 
 import chromadb
 
 from rag.types import Chunk
+
+_log = logging.getLogger(__name__)
 
 
 class ChromaRetriever:
@@ -35,6 +38,12 @@ class ChromaRetriever:
         try:
             collection = self._client.get_collection(name=self._collection_name)
         except Exception:
+            _log.warning(
+                "chroma collection %r not found at %r; returning no RAG chunks",
+                self._collection_name,
+                self._db_path,
+                exc_info=True,
+            )
             return ()
 
         result = collection.query(
