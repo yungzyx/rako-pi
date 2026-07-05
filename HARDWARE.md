@@ -58,6 +58,25 @@ PYTHONPATH=src python scripts/button_conversation.py --no-playback
   - `PORCUPINE_ACCESS_KEY=...`
   - `PORCUPINE_KEYWORD_PATH=./models/oye-rako.ppn`
 
+## ReSpeaker — PREREQUISITO: instalar el driver WM8960 antes del overlay
+
+**En una SD/OS nuevo el driver de la placa NO viene instalado.**
+`scripts/rako-fix-audio-boot` solo agrega el overlay a `config.txt` y
+aborta con "Missing seeed-2mic-voicecard.dtbo overlay" si el driver no
+está — no lo instala. Síntoma típico: `rako-doctor` sigue reportando
+"falta dtoverlay=seeed-2mic-voicecard" y `arecord -L` no muestra
+`seeed2micvoicec` aunque hayas corrido el fix.
+
+Primero hay que instalar el driver WM8960/seeed-voicecard contra el
+kernel actual, y solo DESPUÉS correr `rako-fix-audio-boot` + reboot. En
+Raspberry Pi OS reciente (Bookworm/Trixie, kernel 6.x) el instalador
+clásico de `respeaker/seeed-voicecard` suele estar roto; usar un fork
+mantenido/DKMS para el kernel en uso. Verificar tras instalar:
+`ls /boot/firmware/overlays/ | grep seeed` debe mostrar el `.dtbo`, y
+`dmesg | grep -i wm8960` debe cargar el codec. Este paso es hardware-loop
+puro (instalar → reboot → revisar `dmesg`/`aplay -l`/`i2cdetect -y 1`):
+hacerlo en la Pi con acceso directo, no por relay.
+
 ## ReSpeaker — overlay conocido-bueno (verificado 2026-05-10)
 
 Configuración de overlay verificada y funcionando en hardware real (fusionado
