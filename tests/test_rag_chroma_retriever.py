@@ -143,9 +143,7 @@ def test_query_uses_injected_embedder(tmp_path: Path) -> None:
         collection_name="test_embedder",
         embedder=embedder,
     )
-    retriever = ChromaRetriever(
-        db_path=db_path, collection_name="test_embedder", embedder=embedder
-    )
+    retriever = ChromaRetriever(db_path=db_path, collection_name="test_embedder", embedder=embedder)
 
     results = retriever.query("foco", top_k=1)
 
