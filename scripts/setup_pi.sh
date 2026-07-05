@@ -24,7 +24,7 @@ sudo apt install -y \
   python3 python3-venv python3-dev python3-pip \
   sqlcipher libsqlcipher-dev \
   portaudio19-dev libsndfile1 \
-  ffmpeg \
+  ffmpeg mpg123 \
   i2c-tools \
   git curl
 

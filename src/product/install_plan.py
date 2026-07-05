@@ -29,7 +29,7 @@ def build_install_plan(settings: Settings) -> InstallPlan:
         _step(
             "system packages",
             "ready",
-            "sudo apt update && sudo apt install -y python3 python3-venv python3-dev sqlcipher libsqlcipher-dev portaudio19-dev libsndfile1 ffmpeg i2c-tools",
+            "sudo apt update && sudo apt install -y python3 python3-venv python3-dev sqlcipher libsqlcipher-dev portaudio19-dev libsndfile1 ffmpeg mpg123 i2c-tools",
             "Base packages for Python, SQLCipher, audio, media and I2C.",
         ),
         _step(
