@@ -1,6 +1,6 @@
-"""Smoke test contra la vault real (`../Rako-kb`).
+"""Smoke test contra la base de conocimiento real (`knowledge-base/`).
 
-Si la vault no existe (CI sin checkout, etc.), el test se skippea.
+Si la carpeta no existe, el test se skippea.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import pytest
 
 from rag.chunker import chunk_vault
 
-_VAULT_PATH = Path(__file__).resolve().parents[2] / "Rako-kb"
+_VAULT_PATH = Path(__file__).resolve().parents[1] / "knowledge-base"
 
 
 @pytest.mark.skipif(not _VAULT_PATH.exists(), reason="Rako-kb vault not checked out")

@@ -83,7 +83,10 @@ app móvil ni el contenido del RAG.
 - App móvil: **Flutter 3.x** (en `../rako-app`, no acá). El servidor FastAPI
   de este repo (`src/mobile/`) expone una API local + páginas de setup/factory
   para el primer emparejamiento vía hotspot, pero no reemplaza la app.
-- Contenido RAG: vault Obsidian en `../Rako-kb` (no acá).
+- Contenido RAG: **base de conocimiento versionada en `knowledge-base/`** (dentro
+  de este repo). Antes era un vault Obsidian externo (`../Rako-kb`); se movió acá
+  para respaldarla y testearla junto al código. La ruta la fija
+  `OBSIDIAN_VAULT_PATH` (default `./knowledge-base`).
 
 ---
 
@@ -356,5 +359,6 @@ Detalle: `../docs/Arquitectura_Tecnica.md` §5.
 
 - `../docs/Arquitectura_Tecnica.md` — fuente de verdad técnica.
 - `../docs/RAG_PROMPT.md` — guía de curaduría del contenido del RAG.
-- `../Rako-kb/` — vault Obsidian que alimenta el RAG.
-- `../Rako-kb/system_prompt_rako.md` — system prompt base del LLM.
+- `knowledge-base/` — base de conocimiento (in-repo) que alimenta el RAG.
+- `knowledge-base/system_prompt_rako.md` — system prompt base del LLM (opcional;
+  si falta, `bootstrap._load_system_prompt` usa un fallback).

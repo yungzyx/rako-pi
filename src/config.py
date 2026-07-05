@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     chroma_collection: str = "rako_kb"
     rag_embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     rag_top_k: int = 5
-    obsidian_vault_path: str = "../Rako-kb"
+    obsidian_vault_path: str = "./knowledge-base"
 
     # --- SER ---
     ser_model: str = "audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim"
