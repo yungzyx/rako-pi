@@ -155,6 +155,22 @@ Aplicado y persistido con `alsactl store` vía `scripts/setup_respeaker_audio.sh
 Resultado de calibración: sin clipping; test final RMS ~10768, peak ~28347,
 0 muestras clippeadas.
 
+### Perfil de salida / playback (VERIFICADO 2026-07-04)
+
+**Síntoma:** el TTS reproduce (mpg123 a `plughw:seeed2micvoicec,0`) pero **no
+sale sonido**. **Causa:** el WM8960 arranca con la ruta de salida cerrada — el
+DAC no llega al output mixer y el Headphone está en 0%. `setup_respeaker_audio.sh`
+antes solo calibraba captura; ahora también configura playback:
+
+- `Left Output Mixer PCM=on`, `Right Output Mixer PCM=on` (rutea el DAC a la salida)
+- `Headphone=100` (jack de 3.5mm)
+- `Speaker=120` (conector JST, ampli clase-D)
+
+Persistido con `sudo alsactl store`. Verificado con un tono de 440 Hz por el
+mismo device del TTS: audible. El jack de 3.5mm del ReSpeaker sale por `HP_L/HP_R`
+(control `Headphone`); un parlante crudo en el JST sale por `SPK` (control
+`Speaker`).
+
 ## Reglas de implementación
 
 - Mantener interfaces mockeables para hardware.

@@ -517,6 +517,12 @@ def _try_elevenlabs_tts(settings: Settings) -> TTSClient | None:
 def _try_google_tts(settings: Settings) -> TTSClient | None:
     if not settings.google_application_credentials:
         return None
+    creds_path = Path(settings.google_application_credentials)
+    if not creds_path.exists():
+        _log.info(
+            "Google TTS fallback disabled: credentials file %s not found", creds_path
+        )
+        return None
     _ensure_google_credentials_env(settings)
     try:  # pragma: no cover - only with google-cloud-texttospeech installed
         from google.cloud.texttospeech_v1 import TextToSpeechClient

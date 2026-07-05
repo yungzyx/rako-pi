@@ -94,6 +94,21 @@ def test_try_real_tts_returns_none_without_credentials(tmp_path: Path) -> None:
     assert _try_real_tts(settings) is None
 
 
+def test_try_google_tts_skips_when_creds_file_missing(tmp_path: Path) -> None:
+    """Si GOOGLE_APPLICATION_CREDENTIALS apunta a un archivo inexistente, el
+    fallback de Google TTS se salta limpio (sin traceback) en vez de dejar que
+    google.auth levante DefaultCredentialsError al construir el cliente."""
+    from bootstrap import _try_google_tts
+
+    settings = Settings(
+        _env_file=None,
+        rako_env="prod",
+        google_application_credentials=str(tmp_path / "does-not-exist.json"),
+    )
+
+    assert _try_google_tts(settings) is None
+
+
 def test_try_real_tts_returns_none_when_elevenlabs_selected_without_key() -> None:
     from bootstrap import _try_real_tts
 
