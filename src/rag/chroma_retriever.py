@@ -13,16 +13,23 @@ from typing import Any
 
 import chromadb
 
+from rag.embeddings import Embedder
 from rag.types import Chunk
 
 _log = logging.getLogger(__name__)
 
 
 class ChromaRetriever:
-    def __init__(self, db_path: str, collection_name: str) -> None:
+    def __init__(
+        self,
+        db_path: str,
+        collection_name: str,
+        embedder: Embedder | None = None,
+    ) -> None:
         self._db_path = db_path
         self._collection_name = collection_name
         self._client = chromadb.PersistentClient(path=db_path)
+        self._embedder = embedder
 
     def query(
         self,
@@ -46,11 +53,19 @@ class ChromaRetriever:
             )
             return ()
 
-        result = collection.query(
-            query_texts=[text],
-            n_results=top_k,
-            where=dict(where) if where else None,
-        )
+        where_clause = dict(where) if where else None
+        if self._embedder is not None:
+            result = collection.query(
+                query_embeddings=[self._embedder.embed([text])[0]],
+                n_results=top_k,
+                where=where_clause,
+            )
+        else:
+            result = collection.query(
+                query_texts=[text],
+                n_results=top_k,
+                where=where_clause,
+            )
         return tuple(_unpack_results(result))
 
 

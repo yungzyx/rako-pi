@@ -118,3 +118,36 @@ def test_query_handles_collection_missing(tmp_path: Path) -> None:
     results = retriever.query("cualquier cosa")
 
     assert results == ()
+
+
+class _FakeEmbedder:
+    """Embedder determinístico por conteo de palabras clave (para tests)."""
+
+    _VOCAB = ("foco", "sueno", "ansiedad")
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return [[float(t.lower().count(w)) for w in self._VOCAB] for t in texts]
+
+
+def test_query_uses_injected_embedder(tmp_path: Path) -> None:
+    # Con un embedder inyectado, index y query calculan vectores con él y
+    # ChromaDB solo los almacena/busca (el mismo embedder en ambos lados).
+    embedder = _FakeEmbedder()
+    db_path = str(tmp_path / "chroma")
+    index_chunks(
+        (
+            Chunk(id="foco#0", text="foco foco foco", metadata={"source": "foco"}),
+            Chunk(id="sueno#0", text="sueno sueno", metadata={"source": "sueno"}),
+        ),
+        db_path=db_path,
+        collection_name="test_embedder",
+        embedder=embedder,
+    )
+    retriever = ChromaRetriever(
+        db_path=db_path, collection_name="test_embedder", embedder=embedder
+    )
+
+    results = retriever.query("foco", top_k=1)
+
+    assert len(results) == 1
+    assert results[0].metadata["source"] == "foco"

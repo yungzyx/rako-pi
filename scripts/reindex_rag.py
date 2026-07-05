@@ -16,6 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from config import Settings
+from rag.embeddings import build_embedder
 from rag.indexer import index_vault
 
 
@@ -25,6 +26,7 @@ def main() -> int:
         vault_path=settings.obsidian_vault_path,
         db_path=settings.chroma_db_path,
         collection_name=settings.chroma_collection,
+        embedder=build_embedder(settings.rag_embedding_model),
     )
     print(
         f"Indexados {result.indexed_count} chunks en colección "

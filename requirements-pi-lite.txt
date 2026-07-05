@@ -20,6 +20,8 @@ google-cloud-texttospeech>=2.16,<3.0
 # RAG
 PyYAML>=6.0,<7.0
 chromadb>=1.5,<2.0
+# Embeddings multilingües (paraphrase-multilingual-MiniLM-L12-v2) vía ONNX, sin torch.
+fastembed>=0.8,<0.9
 
 # Local encrypted state
 sqlcipher3>=0.6.2,<1.0

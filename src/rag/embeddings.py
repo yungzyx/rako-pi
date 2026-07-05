@@ -12,10 +12,13 @@ Para producción en la Pi, usar
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 from chromadb.utils.embedding_functions import DefaultEmbeddingFunction as _ChromaDefault
+
+_log = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -39,3 +42,54 @@ class DefaultEmbeddingFunction:
         # ChromaDB devuelve numpy arrays; los normalizamos a listas de floats.
         result = self._fn(list(texts))
         return [[float(x) for x in vec] for vec in result]
+
+
+@runtime_checkable
+class Embedder(Protocol):
+    """Calcula vectores para una lista de textos.
+
+    A diferencia de `EmbeddingFunction` (interfaz de ChromaDB), el indexer y el
+    retriever comparten un `Embedder`: si hay uno, ambos calculan los vectores y
+    ChromaDB solo almacena/busca; si es `None`, ambos caen a la embedding
+    function default de ChromaDB.
+    """
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
+
+
+class FastEmbedEmbedder:  # pragma: no cover - requires fastembed + model at runtime
+    """Embedder multilingüe vía fastembed (ONNX, sin torch).
+
+    Usa `paraphrase-multilingual-MiniLM-L12-v2` por defecto (ver
+    `Settings.rag_embedding_model`) para queries en español de calidad, sin
+    arrastrar `torch`. El modelo se descarga la primera vez y se cachea.
+    """
+
+    def __init__(self, model_name: str) -> None:
+        from fastembed import TextEmbedding
+
+        self._model = TextEmbedding(model_name=model_name)
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        if not texts:
+            raise ValueError("cannot embed an empty list")
+        return [[float(x) for x in vec] for vec in self._model.embed(list(texts))]
+
+
+def build_embedder(model_name: str | None) -> Embedder | None:
+    """Construye el embedder multilingüe, o `None` para caer al default.
+
+    Nunca levanta: si `model_name` está vacío, o si fastembed/el modelo no
+    están disponibles, degrada silenciosamente a la embedding function default
+    de ChromaDB (inglés-céntrica pero funcional y offline).
+    """
+    if not model_name:
+        return None
+    try:  # pragma: no cover - depende de fastembed y del modelo en runtime
+        return FastEmbedEmbedder(model_name)
+    except Exception:  # pragma: no cover - fastembed ausente o fallo de carga
+        _log.warning(
+            "multilingual embedder unavailable (%s); using ChromaDB default",
+            model_name,
+        )
+        return None

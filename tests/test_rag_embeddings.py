@@ -7,6 +7,7 @@ import pytest
 from rag.embeddings import (
     DefaultEmbeddingFunction,
     EmbeddingFunction,
+    build_embedder,
 )
 
 
@@ -40,3 +41,9 @@ def test_default_rejects_empty_input() -> None:
 
     with pytest.raises(ValueError):
         fn([])
+
+
+def test_build_embedder_returns_none_without_model() -> None:
+    # Sin nombre de modelo, el pipeline debe caer a la default de ChromaDB.
+    assert build_embedder(None) is None
+    assert build_embedder("") is None

@@ -42,6 +42,7 @@ from orchestrator.orchestrator import Orchestrator
 from orchestrator.prompts import extract_system_prompt
 from rag.chroma_retriever import ChromaRetriever
 from rag.client import InMemoryRetriever, Retriever
+from rag.embeddings import build_embedder
 from safety.protocol import CrisisProtocol
 from safety.types import CrisisSignal
 from sync.coordinator import SyncCoordinator
@@ -546,6 +547,7 @@ def _build_retriever(settings: Settings) -> Retriever:
     return ChromaRetriever(
         db_path=settings.chroma_db_path,
         collection_name=settings.chroma_collection,
+        embedder=build_embedder(settings.rag_embedding_model),
     )
 
 
