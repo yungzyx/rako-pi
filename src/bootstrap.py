@@ -211,7 +211,10 @@ def _close_if_available(resource: object) -> None:
 def build_dev_application(settings: Settings) -> Application:
     """Compone Application con fakes — sin tocar GPIO ni APIs cloud reales."""
     _ensure_parent_dir(settings.sqlite_path)
-    db = Database.open(settings.sqlite_path)
+    # Misma apertura que build_pi_application: con clave configurada la base
+    # local puede estar cifrada (p. ej. una Pi con RAKO_ENV=dev) y abrirla
+    # sin clave falla con "file is not a database".
+    db = Database.open(settings.sqlite_path, key=settings.sqlite_encryption_key)
 
     # Hardware
     leds = FakeLEDController()

@@ -54,13 +54,17 @@ def main() -> int:
             print(f"Rako: {result.text}")
             memory.add_turn(user=text, rako=result.text)
 
-            audio = app.tts.synthesize(result.text)
-            out = Path("/tmp/rako-reply.mp3")
-            out.write_bytes(audio.audio.data)
-            subprocess.run(
-                ["mpg123", "-q", "-o", "alsa", "-a", "plughw:seeed2micvoicec,0", str(out)],
-                check=False,
-            )
+            try:
+                audio = app.tts.synthesize(result.text)
+                out = Path("/tmp/rako-reply.mp3")
+                out.write_bytes(audio.audio.data)
+                subprocess.run(
+                    ["mpg123", "-q", "-o", "alsa", "-a", "plughw:seeed2micvoicec,0", str(out)],
+                    check=False,
+                )
+            except Exception as exc:
+                # La voz es opcional en este canal: el texto ya se imprimió.
+                print(f"No pude sintetizar voz: {exc}", flush=True)
     except KeyboardInterrupt:
         pass
     finally:

@@ -42,6 +42,16 @@ def main() -> int:
     parser.add_argument("--no-playback", action="store_true")
     parser.add_argument("--no-cues", action="store_true")
     parser.add_argument("--no-oled", action="store_true")
+    parser.add_argument(
+        "--no-chunked-tts",
+        action="store_true",
+        help="Synthesize the completion phrase in one call instead of sentence by sentence",
+    )
+    parser.add_argument(
+        "--no-stream-tts",
+        action="store_true",
+        help="Disable provider audio streaming; fall back to chunked/single synthesis",
+    )
     parser.add_argument("--tick-seconds", type=float, default=1.0)
     args = parser.parse_args()
 

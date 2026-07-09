@@ -13,12 +13,21 @@ Para producción en la Pi, usar
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from chromadb.utils.embedding_functions import DefaultEmbeddingFunction as _ChromaDefault
 
 _log = logging.getLogger(__name__)
+
+# fastembed cachea el modelo en $TMPDIR/fastembed_cache por defecto; en la Pi
+# /tmp es tmpfs, así que un reinicio borraría el modelo y `build_embedder`
+# degradaría silenciosamente al default inglés (retrieval basura sin error).
+# Cache persistente en el home, con override por env var.
+_FASTEMBED_CACHE_ENV = "FASTEMBED_CACHE_PATH"
+_FASTEMBED_CACHE_DEFAULT = Path.home() / ".cache" / "fastembed"
 
 
 @runtime_checkable
@@ -68,7 +77,8 @@ class FastEmbedEmbedder:  # pragma: no cover - requires fastembed + model at run
     def __init__(self, model_name: str) -> None:
         from fastembed import TextEmbedding
 
-        self._model = TextEmbedding(model_name=model_name)
+        cache_dir = os.environ.get(_FASTEMBED_CACHE_ENV) or str(_FASTEMBED_CACHE_DEFAULT)
+        self._model = TextEmbedding(model_name=model_name, cache_dir=cache_dir)
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         if not texts:
