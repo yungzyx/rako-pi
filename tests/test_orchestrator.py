@@ -429,3 +429,110 @@ def test_handle_turn_is_pure_for_same_input() -> None:
     assert r1.kind == r2.kind
     assert r1.text == r2.text
     assert r1.rag_chunk_ids == r2.rag_chunk_ids
+
+
+# ---------------------------------------------------------------------------
+# Aftercare post-crisis: los turnos que SIGUEN a una crisis no vuelven al LLM
+# ---------------------------------------------------------------------------
+
+
+def test_post_crisis_followup_stays_in_aftercare_not_llm() -> None:
+    from datetime import timedelta
+
+    orch, retriever, llm, journal = _build_orchestrator()
+
+    # El turno siguiente a una crisis, sin repetir palabras clave, no debe
+    # caer al LLM ("abre tu libro de cálculo"): presencia + derivación.
+    result = orch.handle_turn(
+        _input(
+            transcript="no quiero contactar a nadie, no se que hacer",
+            recent_crisis_at=_now() - timedelta(minutes=2),
+        )
+    )
+
+    assert result.kind is TurnKind.CRISIS_AFTERCARE
+    assert llm.calls == []  # el LLM no se invoca
+    assert retriever.queries == []  # ni el RAG
+    assert result.notify_contact is False  # ya se alertó en la crisis
+    assert result.show_resources is True
+    assert journal.entries == []  # el aftercare no re-registra crisis
+
+
+def test_aftercare_response_derives_and_never_suggests_studying() -> None:
+    from datetime import timedelta
+
+    orch, _, _, _ = _build_orchestrator()
+
+    result = orch.handle_turn(
+        _input(
+            transcript="ayudame con calculo por favor",
+            recent_crisis_at=_now() - timedelta(minutes=1),
+        )
+    )
+
+    assert result.kind is TurnKind.CRISIS_AFTERCARE
+    lowered = result.text.lower()
+    assert "estudi" not in lowered  # nada de "estudia/estudiar"
+    assert "131" in result.text  # deriva a recursos de crisis
+
+
+def test_fresh_crisis_during_aftercare_still_runs_full_protocol() -> None:
+    from datetime import timedelta
+
+    orch, _, llm, journal = _build_orchestrator()
+
+    result = orch.handle_turn(
+        _input(
+            transcript="quiero morir",
+            recent_crisis_at=_now() - timedelta(minutes=2),
+        )
+    )
+
+    # Una crisis fresca dentro de la ventana debe correr el protocolo
+    # completo (alerta al contacto, journal), no el aftercare pasivo.
+    assert result.kind is TurnKind.CRISIS_PROTOCOL
+    assert result.notify_contact is True
+    assert len(journal.entries) == 1
+    assert llm.calls == []
+
+
+def test_aftercare_window_expires_returns_to_normal_llm() -> None:
+    from datetime import timedelta
+
+    orch, _, llm, _ = _build_orchestrator()
+
+    result = orch.handle_turn(
+        _input(
+            transcript="ayudame con una tarea",
+            recent_crisis_at=_now() - timedelta(hours=3),
+        )
+    )
+
+    assert result.kind is TurnKind.LLM_RESPONSE
+    assert len(llm.calls) == 1
+
+
+def test_future_crisis_timestamp_does_not_trigger_aftercare() -> None:
+    from datetime import timedelta
+
+    orch, _, llm, _ = _build_orchestrator()
+
+    # Timestamp en el futuro (reloj desincronizado) no debe abrir aftercare.
+    result = orch.handle_turn(
+        _input(
+            transcript="ayudame con una tarea",
+            recent_crisis_at=_now() + timedelta(minutes=10),
+        )
+    )
+
+    assert result.kind is TurnKind.LLM_RESPONSE
+    assert len(llm.calls) == 1
+
+
+def test_no_recent_crisis_means_no_aftercare() -> None:
+    orch, _, llm, _ = _build_orchestrator()
+
+    result = orch.handle_turn(_input(transcript="ayudame con una tarea"))
+
+    assert result.kind is TurnKind.LLM_RESPONSE
+    assert len(llm.calls) == 1

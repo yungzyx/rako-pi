@@ -76,3 +76,50 @@ def test_count_recent_low_mood_days_ignores_neutral_and_old_samples(db_conn) -> 
     db.emotional_states.append(_low_mood_sample("old", now - timedelta(days=10)))
 
     assert count_recent_low_mood_days(db, now) == 0
+
+
+# ---------------------------------------------------------------------------
+# find_last_crisis_at — alimenta la ventana de aftercare post-crisis
+# ---------------------------------------------------------------------------
+
+
+def _record_crisis_signal(db: Database, reason, at: datetime) -> None:
+    from safety.types import CrisisLevel, CrisisSignal
+
+    db.crisis_journal.record(
+        CrisisSignal(level=CrisisLevel.CRISIS, reasons=(reason,), detected_at=at)
+    )
+
+
+def test_find_last_crisis_at_returns_most_recent_real_crisis(db_conn) -> None:
+    from orchestrator.context import find_last_crisis_at
+    from safety.types import CrisisReason
+
+    db = Database(db_conn)
+    now = datetime(2026, 6, 20, 10, 0, tzinfo=UTC)
+    _record_crisis_signal(db, CrisisReason.KEYWORDS_IDEATION, now - timedelta(hours=2))
+    _record_crisis_signal(db, CrisisReason.KEYWORDS_IDEATION, now - timedelta(minutes=5))
+
+    assert find_last_crisis_at(db) == now - timedelta(minutes=5)
+
+
+def test_find_last_crisis_at_ignores_pure_inactivity_followup(db_conn) -> None:
+    from orchestrator.context import find_last_crisis_at
+    from safety.types import CrisisReason
+
+    db = Database(db_conn)
+    now = datetime(2026, 6, 20, 10, 0, tzinfo=UTC)
+    _record_crisis_signal(
+        db, CrisisReason.PROLONGED_INACTIVITY_AFTER_DISTRESS, now - timedelta(minutes=5)
+    )
+
+    # Un follow-up de inactividad no cuenta como crisis nueva para aftercare.
+    assert find_last_crisis_at(db) is None
+
+
+def test_find_last_crisis_at_none_when_no_events(db_conn) -> None:
+    from orchestrator.context import find_last_crisis_at
+
+    db = Database(db_conn)
+
+    assert find_last_crisis_at(db) is None

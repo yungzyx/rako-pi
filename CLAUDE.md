@@ -236,6 +236,20 @@ app móvil ni el contenido del RAG.
    no requiere `wellbeing_escalation_enabled`. Tests en el gate de CI
    (`test_safety_triage.py`). Si el LLM falla en runtime, el turno degrada
    a una respuesta curada breve (`LLM_FALLBACK`), nunca silencio.
+8. **Aftercare post-crisis (`orchestrator`, `TurnKind.CRISIS_AFTERCARE`):**
+   el pipeline evalúa cada turno en aislamiento, así que sin esto el turno
+   SIGUIENTE a una crisis —si no repite palabras clave— caía al LLM y podía
+   responder "abre tu libro de cálculo" a alguien que acababa de expresar
+   ideación. Ahora, durante una ventana (`_AFTERCARE_WINDOW`, 45 min) tras
+   una crisis real registrada en el journal, cualquier turno que NO sea una
+   crisis nueva se queda en presencia + derivación curada
+   (`build_crisis_aftercare_response`), sin LLM ni coaching de productividad
+   y sin re-alertar al contacto. La crisis fresca siempre gana primero
+   (bypass del detector). La señal la inyecta `TurnSession` vía
+   `find_last_crisis_at` (`orchestrator/context.py`), que ignora los eventos
+   de puro follow-up de inactividad (anti-loop). El journal se escribe
+   también en modo privado, así que el aftercare protege igual en
+   `RAKO_MODE=private`.
 
 ### 4.3 Funcionamiento offline
 - Sin internet, la Pi sigue operando con respuestas pre-curadas del RAG (sin

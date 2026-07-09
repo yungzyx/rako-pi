@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from safety.scope import (
+    build_crisis_aftercare_response,
     build_elevated_support_response,
     build_scope_redirect_response,
     mentions_mental_health_topic,
@@ -62,3 +63,20 @@ def test_elevated_support_response_offers_concrete_step_and_udd_resources() -> N
 
     assert "Bienestar UDD" in text
     assert "primer paso" in text
+
+
+def test_crisis_aftercare_response_is_presence_and_referral_not_productivity() -> None:
+    text = build_crisis_aftercare_response()
+    lowered = text.lower()
+
+    # Presencia + derivación, sin coaching de estudio ni motivación vacía.
+    assert "sigo aqui" in _strip_accents(lowered)
+    assert "131" in text  # deriva a recursos de crisis
+    assert "estudi" not in lowered  # nunca "estudia/estudiar"
+    assert "tarea" not in lowered
+
+
+def _strip_accents(text: str) -> str:
+    import unicodedata
+
+    return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")

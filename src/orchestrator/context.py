@@ -130,6 +130,29 @@ def find_last_high_distress_at(db: Database, now: datetime) -> datetime | None:
     return max(candidates)
 
 
+def find_last_crisis_at(db: Database) -> datetime | None:
+    """Timestamp de la última crisis real registrada en el journal.
+
+    Alimenta la ventana de aftercare post-crisis (orchestrator): tras una
+    crisis, los turnos de seguimiento no deben volver al LLM ni al coaching
+    de productividad. La ventana de frescura la aplica el orquestador; aquí
+    solo devolvemos el evento más reciente. Se ignoran los eventos cuyo
+    ÚNICO motivo es el follow-up de inactividad —igual que en
+    `find_last_high_distress_at`—, para que un seguimiento no perpetúe la
+    ventana. El journal se escribe SIEMPRE (también en modo privado: es un
+    evento de seguridad, no historial de producto), así que el aftercare
+    también protege en `rako_mode=private`.
+    """
+    candidates: list[datetime] = []
+    for entry in db.crisis_journal.list_recent(limit=_JOURNAL_SCAN_LIMIT):
+        if all(reason == _FOLLOWUP_REASON for reason in entry.reasons):
+            continue
+        candidates.append(_as_aware_utc(entry.detected_at))
+    if not candidates:
+        return None
+    return max(candidates)
+
+
 def find_last_interaction_at(db: Database) -> datetime | None:
     """Timestamp de la última interacción persistida (None en modo privado
     o dispositivo recién provisionado — el trigger queda apagado ahí)."""

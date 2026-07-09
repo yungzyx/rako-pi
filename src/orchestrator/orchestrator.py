@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
 
@@ -34,6 +34,7 @@ from safety.detector import detect_crisis
 from safety.protocol import CrisisProtocol
 from safety.responses import pick_response
 from safety.scope import (
+    build_crisis_aftercare_response,
     build_elevated_support_response,
     build_scope_redirect_response,
     build_wellbeing_referral_response,
@@ -52,6 +53,15 @@ _log = logging.getLogger(__name__)
 _RAG_TOP_K = 5
 _RAG_MAX_QUERY_LEN = 500
 
+# Ventana de "aftercare" tras una crisis: durante este lapso, cualquier turno
+# que NO sea una nueva crisis se queda en presencia + derivación curada, sin
+# LLM ni coaching de productividad. Es la corrección a un hueco real de
+# seguridad: hoy el pipeline evalúa cada turno en aislamiento, así que el
+# turno siguiente a "ya no quiero vivir" —si no repite palabras clave— caía al
+# LLM y respondía "abre tu libro de cálculo". La crisis fresca SIEMPRE se
+# atiende primero (bypass del detector); esto solo cubre los turnos de después.
+_AFTERCARE_WINDOW = timedelta(minutes=45)
+
 # Respuesta curada cuando el LLM falla en runtime (red caída, API con
 # error). Corta, honesta, sin fingir que entendió.
 _LLM_FALLBACK_TEXT = (
@@ -62,9 +72,11 @@ _LLM_FALLBACK_TEXT = (
 # Nota de tono que acompaña un turno con estrés académico detectado.
 # Instrucción fija: no lleva datos del usuario al LLM.
 _SUPPORT_HINT = (
-    "El usuario mencionó estrés, ansiedad o ánimo bajo en contexto cotidiano. "
-    "Valida brevemente con calidez, ofrece UN paso pequeño y realista, y no "
-    "diagnostiques ni des consejos clínicos."
+    "El usuario expresó una emoción difícil (nervios, estrés, ánimo bajo o "
+    "pocas ganas) en su día a día. Primero valida lo que siente con calidez y "
+    "sin minimizar. Solo después, y solo si encaja, ofrece UN paso pequeño, "
+    "amable y opcional — nunca una lista ni presión. No diagnostiques ni des "
+    "consejos clínicos."
 )
 
 # Instrucción de reformulación cuando el LLM generó casi lo mismo que ya
@@ -79,6 +91,7 @@ _VARY_HINT = (
 class TurnKind(Enum):
     LLM_RESPONSE = "LLM_RESPONSE"
     CRISIS_PROTOCOL = "CRISIS_PROTOCOL"
+    CRISIS_AFTERCARE = "CRISIS_AFTERCARE"
     SCOPE_REDIRECT = "SCOPE_REDIRECT"
     ELEVATED_SUPPORT = "ELEVATED_SUPPORT"
     WELLBEING_REFERRAL = "WELLBEING_REFERRAL"
@@ -101,6 +114,10 @@ class TurnInput:
     recent_low_mood_days: int = 0
     wellbeing_unit_name: str | None = None
     wellbeing_unit_phone: str | None = None
+    # Última crisis real registrada (journal). Si es reciente (< ventana de
+    # aftercare) los turnos de seguimiento no vuelven al LLM. None = sin
+    # crisis reciente (default conservador).
+    recent_crisis_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +147,13 @@ class Orchestrator:
 
         if signal.should_bypass_llm:
             return self._handle_crisis(signal)
+
+        # Aftercare post-crisis: si hubo una crisis real hace poco y este
+        # turno no es una nueva crisis, NO volvemos al LLM ni a coaching de
+        # estudio — presencia y derivación. Va antes que el triage porque
+        # domina todo salvo una crisis fresca (ya descartada arriba).
+        if self._in_aftercare_window(input):
+            return self._handle_aftercare()
 
         triage = triage_turn(
             input.transcript,
@@ -177,6 +201,28 @@ class Orchestrator:
                 "reasons": tuple(r.name for r in signal.reasons),
                 "response_id": outcome.response_id,
             },
+        )
+
+    def _in_aftercare_window(self, input: TurnInput) -> bool:
+        """True si hubo una crisis real dentro de la ventana de aftercare.
+
+        Los turnos de seguimiento a una crisis deben quedarse en presencia +
+        derivación, nunca en el LLM. Blindado contra timestamps futuros
+        (delta negativo → fuera de ventana)."""
+        if input.recent_crisis_at is None:
+            return False
+        elapsed = input.now - input.recent_crisis_at
+        return timedelta(0) <= elapsed <= _AFTERCARE_WINDOW
+
+    def _handle_aftercare(self) -> TurnResult:
+        return TurnResult(
+            kind=TurnKind.CRISIS_AFTERCARE,
+            text=build_crisis_aftercare_response(),
+            audio_path=None,
+            rag_chunk_ids=(),
+            notify_contact=False,  # ya se alertó en la crisis; no re-spamear
+            show_resources=True,
+            metadata={"reason": "post_crisis_aftercare"},
         )
 
     def _handle_scope_redirect(self, triage: TriageResult) -> TurnResult:

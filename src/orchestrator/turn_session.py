@@ -22,6 +22,7 @@ from db.types import Interaction, InteractionType
 from orchestrator.context import (
     build_user_context,
     count_recent_low_mood_days,
+    find_last_crisis_at,
     find_last_high_distress_at,
     find_last_interaction_at,
 )
@@ -250,6 +251,7 @@ class TurnSession:
             emotion_history=(),
             last_high_distress_at=find_last_high_distress_at(self._db, now),
             last_interaction_at=find_last_interaction_at(self._db),
+            recent_crisis_at=find_last_crisis_at(self._db),
             user_context=build_user_context(
                 self._db,
                 now,

@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from safety.resources import render_soft_udd_resources
+from safety.resources import render_crisis_resources, render_soft_udd_resources
 
 _HEALTH_TOPIC_PATTERNS = (
     "angustia",
@@ -89,6 +89,29 @@ def build_wellbeing_referral_response(
         "Gracias por contármelo — eso merece más apoyo del que yo puedo darte, "
         f"y buscarlo es un buen paso. {contact} "
         "Yo sigo aquí para acompañarte con lo académico cuando quieras."
+    )
+
+
+def build_crisis_aftercare_response() -> str:
+    """Acompañamiento para los turnos que SIGUEN a una crisis reciente.
+
+    Mientras dura la ventana de aftercare (ver `orchestrator`), cualquier
+    turno que no sea una nueva crisis recibe presencia + recursos, NUNCA
+    coaching de estudio ni generación del LLM: alguien que acaba de expresar
+    ideación no debe escuchar "estudia 5 minutos" en el turno siguiente.
+
+    Reglas de contenido §4.2.4 (mismas que responses.py): sin diagnóstico,
+    sin promesas de confidencialidad, sin motivación de plantilla; siempre
+    deriva. No reactiva al contacto de confianza (ya se alertó en la crisis).
+
+    NOTA: copy pendiente de revisión por profesional de salud mental antes
+    del release público, igual que safety/responses.py.
+    """
+    return (
+        "Sigo aquí contigo. Lo que me contaste importa y no tienes que "
+        "resolverlo ahora ni hacerlo solo. No hace falta que hagas nada más "
+        "en este momento. Cuando te sientas listo, contacta a una de estas "
+        f"líneas de apoyo. {render_crisis_resources()}"
     )
 
 

@@ -220,3 +220,15 @@ def test_result_is_immutable() -> None:
 
     with pytest.raises(Exception):
         result.level = TriageLevel.ACADEMIC  # type: ignore[misc]
+
+
+def test_nervousness_routes_to_supportive_academic() -> None:
+    result = triage_turn("estoy nervioso y no quiero trabajar")
+
+    assert result.level is TriageLevel.SUPPORTIVE_ACADEMIC
+
+
+def test_no_energy_routes_to_supportive_academic() -> None:
+    result = triage_turn("hoy no tengo ganas de nada")
+
+    assert result.level is TriageLevel.SUPPORTIVE_ACADEMIC

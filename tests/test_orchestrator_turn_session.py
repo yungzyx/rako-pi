@@ -442,3 +442,55 @@ def test_pending_memory_corrupt_or_expired_is_discarded(tmp_path: Path) -> None:
     )
     assert session.try_remember_command("sí, recuérdalo") is None
     assert UserConfigService(app.db).list_memory() == ()
+
+
+# ---------------------------------------------------------------------------
+# Aftercare post-crisis: build_turn_input expone la última crisis y el turno
+# de seguimiento no vuelve al LLM
+# ---------------------------------------------------------------------------
+
+
+def _record_crisis_minutes_ago(app, *, minutes_ago: int) -> None:
+    from safety.types import CrisisLevel, CrisisReason, CrisisSignal
+
+    app.db.crisis_journal.record(
+        CrisisSignal(
+            level=CrisisLevel.CRISIS,
+            reasons=(CrisisReason.KEYWORDS_IDEATION,),
+            detected_at=_now() - timedelta(minutes=minutes_ago),
+        )
+    )
+
+
+def test_turn_input_carries_recent_crisis_for_aftercare(tmp_path: Path) -> None:
+    session, app = _make_session(tmp_path)
+    _record_crisis_minutes_ago(app, minutes_ago=5)
+
+    turn = session.build_turn_input("no se que hacer")
+
+    assert turn.recent_crisis_at == _now() - timedelta(minutes=5)
+
+
+def test_recent_crisis_followup_reaches_aftercare_not_llm(tmp_path: Path) -> None:
+    session, app = _make_session(tmp_path)
+    _record_crisis_minutes_ago(app, minutes_ago=3)
+
+    # El turno siguiente a la crisis, sin repetir palabras clave, debe ir al
+    # acompañamiento curado — nunca al LLM con "estudia un rato".
+    turn = session.build_turn_input("no quiero contactar a nadie, no se que hacer")
+    result = app.orchestrator.handle_turn(turn)
+
+    assert result.kind is TurnKind.CRISIS_AFTERCARE
+    assert "estudi" not in result.text.lower()
+
+
+def test_aftercare_protects_even_in_private_mode(tmp_path: Path) -> None:
+    # El journal de crisis se escribe también en modo privado (evento de
+    # seguridad), así que el aftercare protege igual.
+    session, app = _make_session(tmp_path, rako_mode="private")
+    _record_crisis_minutes_ago(app, minutes_ago=2)
+
+    turn = session.build_turn_input("no se que hacer")
+    result = app.orchestrator.handle_turn(turn)
+
+    assert result.kind is TurnKind.CRISIS_AFTERCARE
