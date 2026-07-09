@@ -189,7 +189,7 @@ def test_build_turn_input_carries_prior_exchange_as_turns_after_complete_turn(
 ) -> None:
     # Extremo a extremo: un turno completado alimenta el conversation_turns del
     # siguiente build_turn_input (memory.turns() → build_user_context → LLM).
-    session, app = _make_session(tmp_path)
+    session, _ = _make_session(tmp_path)
     session.complete_turn(
         transcript="quiero estudiar cálculo",
         result=_result("Dale, ¿qué tema te complica?"),

@@ -179,10 +179,10 @@ def test_conversation_messages_keep_strict_user_assistant_alternation() -> None:
 
     messages = build_conversation_messages("sigue", (), ctx)
 
+    # Estricta alternancia user/assistant/user: el par incompleto ("a medias", "")
+    # se omite, y nunca quedan dos mensajes seguidos del mismo rol.
     roles = [m["role"] for m in messages]
-    assert roles == ["user", "assistant", "user"]  # el par incompleto se omite
-    for a, b in zip(roles, roles[1:], strict=False):
-        assert a != b  # nunca dos mensajes seguidos del mismo rol
+    assert roles == ["user", "assistant", "user"]
 
 
 def test_prior_turn_is_carried_as_assistant_message() -> None:
