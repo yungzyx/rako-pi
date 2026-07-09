@@ -238,18 +238,22 @@ app móvil ni el contenido del RAG.
    a una respuesta curada breve (`LLM_FALLBACK`), nunca silencio.
 8. **Aftercare post-crisis (`orchestrator`, `TurnKind.CRISIS_AFTERCARE`):**
    el pipeline evalúa cada turno en aislamiento, así que sin esto el turno
-   SIGUIENTE a una crisis —si no repite palabras clave— caía al LLM y podía
-   responder "abre tu libro de cálculo" a alguien que acababa de expresar
-   ideación. Ahora, durante una ventana (`_AFTERCARE_WINDOW`, 45 min) tras
-   una crisis real registrada en el journal, cualquier turno que NO sea una
-   crisis nueva se queda en presencia + derivación curada
-   (`build_crisis_aftercare_response`), sin LLM ni coaching de productividad
-   y sin re-alertar al contacto. La crisis fresca siempre gana primero
-   (bypass del detector). La señal la inyecta `TurnSession` vía
+   SIGUIENTE a una crisis —si no repite palabras clave— caía al flujo normal
+   y podía responder "abre tu libro de cálculo" a alguien que acababa de
+   expresar ideación. Durante una ventana (`_AFTERCARE_WINDOW`, 45 min) tras
+   una crisis real registrada en el journal, los turnos que NO son crisis
+   nueva se acompañan en modo aftercare: **LLM acotado por `_AFTERCARE_HINT`**
+   (presencia, se ADAPTA a lo que pide la persona —p. ej. un ejercicio de
+   respiración/mindfulness del RAG—, pero prohíbe coaching de estudio y obliga
+   a una derivación suave). Es LLM adaptativo, NO un texto fijo: un string
+   estático se repetía verbatim cada turno y sonaba como un loop roto. El
+   guard de near-repeat evita que se repita; si el LLM falla, degrada a
+   presencia curada (`build_crisis_aftercare_response`), nunca a coaching ni
+   silencio. La crisis fresca y el triage clínico/derivación ganan primero;
+   no se re-alerta al contacto. La señal la inyecta `TurnSession` vía
    `find_last_crisis_at` (`orchestrator/context.py`), que ignora los eventos
-   de puro follow-up de inactividad (anti-loop). El journal se escribe
-   también en modo privado, así que el aftercare protege igual en
-   `RAKO_MODE=private`.
+   de puro follow-up de inactividad (anti-loop). El journal se escribe también
+   en modo privado, así que el aftercare protege igual en `RAKO_MODE=private`.
 
 ### 4.3 Funcionamiento offline
 - Sin internet, la Pi sigue operando con respuestas pre-curadas del RAG (sin

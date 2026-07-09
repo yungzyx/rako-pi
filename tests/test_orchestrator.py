@@ -434,48 +434,70 @@ def test_handle_turn_is_pure_for_same_input() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Aftercare post-crisis: los turnos que SIGUEN a una crisis no vuelven al LLM
+# Aftercare post-crisis: los turnos que SIGUEN a una crisis se acompañan con un
+# LLM acotado por el hint de aftercare (adaptativo, sin coaching de estudio),
+# no con un texto fijo que se repetiría en loop.
 # ---------------------------------------------------------------------------
 
 
-def test_post_crisis_followup_stays_in_aftercare_not_llm() -> None:
+def test_post_crisis_followup_uses_aftercare_toned_llm() -> None:
     from datetime import timedelta
+
+    from orchestrator.orchestrator import _AFTERCARE_HINT
 
     orch, retriever, llm, journal = _build_orchestrator()
 
-    # El turno siguiente a una crisis, sin repetir palabras clave, no debe
-    # caer al LLM ("abre tu libro de cálculo"): presencia + derivación.
+    # El turno siguiente a una crisis se adapta a lo que pide la persona, pero
+    # el LLM va acotado por el hint de aftercare (presencia, nunca estudio).
     result = orch.handle_turn(
         _input(
-            transcript="no quiero contactar a nadie, no se que hacer",
+            transcript="que ejercicio de mindfulness me recomiendas",
             recent_crisis_at=_now() - timedelta(minutes=2),
         )
     )
 
     assert result.kind is TurnKind.CRISIS_AFTERCARE
-    assert llm.calls == []  # el LLM no se invoca
-    assert retriever.queries == []  # ni el RAG
+    assert len(llm.calls) == 1  # SÍ usa el LLM (adaptativo)
+    assert retriever.queries != []  # y consulta el RAG (mindfulness, etc.)
+    assert llm.contexts[0].support_hint == _AFTERCARE_HINT
     assert result.notify_contact is False  # ya se alertó en la crisis
     assert result.show_resources is True
+    assert result.metadata["aftercare"] is True
     assert journal.entries == []  # el aftercare no re-registra crisis
 
 
-def test_aftercare_response_derives_and_never_suggests_studying() -> None:
+def test_aftercare_hint_forbids_productivity_and_derives() -> None:
+    # El hint es la garantía de tono: prohíbe estudio/productividad y obliga a
+    # una derivación suave. (El contenido real lo produce el LLM en runtime.)
+    from orchestrator.orchestrator import _AFTERCARE_HINT
+
+    lowered = _AFTERCARE_HINT.lower()
+    assert "prohibido" in lowered
+    assert "estudiar" in lowered
+    assert "bienestar udd" in lowered
+    assert "131" in _AFTERCARE_HINT
+
+
+def test_aftercare_falls_back_to_curated_presence_on_llm_error() -> None:
     from datetime import timedelta
 
-    orch, _, _, _ = _build_orchestrator()
+    orch, _, _, _ = _build_orchestrator(llm=_ExplodingLLMClient())  # type: ignore[arg-type]
 
     result = orch.handle_turn(
         _input(
-            transcript="ayudame con calculo por favor",
+            transcript="que ejercicio me recomiendas",
             recent_crisis_at=_now() - timedelta(minutes=1),
         )
     )
 
+    # Si el LLM falla en aftercare, degradamos a presencia curada (no al
+    # fallback genérico ni a silencio), y nunca a coaching de estudio.
     assert result.kind is TurnKind.CRISIS_AFTERCARE
+    assert result.metadata["reason"] == "aftercare_llm_error"
+    assert result.show_resources is True
     lowered = result.text.lower()
-    assert "estudi" not in lowered  # nada de "estudia/estudiar"
-    assert "131" in result.text  # deriva a recursos de crisis
+    assert "estudi" not in lowered
+    assert "131" in result.text
 
 
 def test_fresh_crisis_during_aftercare_still_runs_full_protocol() -> None:

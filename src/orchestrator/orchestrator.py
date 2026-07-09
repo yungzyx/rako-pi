@@ -79,6 +79,23 @@ _SUPPORT_HINT = (
     "consejos clínicos."
 )
 
+# Nota de tono para la ventana de aftercare post-crisis. Instrucción fija (no
+# lleva datos del usuario). Deja que Rako se ADAPTE a lo que la persona pide
+# —incluido un ejercicio de respiración o mindfulness, que sí es apropiado—
+# pero prohíbe el coaching de productividad y obliga a una derivación suave.
+# Reemplaza al viejo texto estático que se repetía verbatim cada turno.
+_AFTERCARE_HINT = (
+    "El usuario acaba de pasar por un momento muy difícil y sigue en una "
+    "ventana de acompañamiento. Tu única tarea es estar presente con calidez y "
+    "responder a lo que te pide AHORA, sin repetir frases que ya dijiste. "
+    "PROHIBIDO sugerir estudiar, tareas, productividad, metas o 'un primer paso "
+    "académico'. Si pide calmarse, relajarse o un ejercicio, ofrece UNO breve "
+    "de respiración o grounding, en pasos simples y usando el material de "
+    "apoyo si viene al caso. Valida lo que siente sin dramatizar ni "
+    "diagnosticar. Cierra con UNA línea suave recordando que puede apoyarse en "
+    "Bienestar UDD, y en el SAMU 131 si es urgente — sin recitar otros números."
+)
+
 # Instrucción de reformulación cuando el LLM generó casi lo mismo que ya
 # dijo en esta sesión. Un solo reintento — si insiste, se acepta.
 _VARY_HINT = (
@@ -148,22 +165,28 @@ class Orchestrator:
         if signal.should_bypass_llm:
             return self._handle_crisis(signal)
 
-        # Aftercare post-crisis: si hubo una crisis real hace poco y este
-        # turno no es una nueva crisis, NO volvemos al LLM ni a coaching de
-        # estudio — presencia y derivación. Va antes que el triage porque
-        # domina todo salvo una crisis fresca (ya descartada arriba).
-        if self._in_aftercare_window(input):
-            return self._handle_aftercare()
+        aftercare = self._in_aftercare_window(input)
 
         triage = triage_turn(
             input.transcript,
             recent_low_mood_days=input.recent_low_mood_days,
             elevated=signal.level is CrisisLevel.ELEVATED,
         )
+        # Consejo clínico y revelación personal se derivan curado SIEMPRE,
+        # también en aftercare: son seguros y apropiados.
         if triage.level is TriageLevel.CLINICAL_SCOPE:
             return self._handle_scope_redirect(triage)
         if triage.level is TriageLevel.WELLBEING_REFERRAL:
             return self._handle_wellbeing_referral(input, triage)
+
+        # Aftercare post-crisis: acompañamos ADAPTÁNDONOS a lo que pide la
+        # persona (p. ej. un ejercicio de respiración), nunca con coaching de
+        # productividad y con derivación suave. Es un LLM acotado por el hint
+        # de aftercare, no un texto fijo — así no cae en un loop repetitivo.
+        # La crisis fresca ya ganó arriba; el triage clínico también.
+        if aftercare:
+            return self._handle_llm_turn(input, signal, aftercare=True)
+
         if triage.level is TriageLevel.ELEVATED_SUPPORT:
             return self._handle_elevated_support()
 
@@ -214,15 +237,17 @@ class Orchestrator:
         elapsed = input.now - input.recent_crisis_at
         return timedelta(0) <= elapsed <= _AFTERCARE_WINDOW
 
-    def _handle_aftercare(self) -> TurnResult:
+    def _aftercare_fallback(self) -> TurnResult:
+        # El LLM falló durante aftercare: degradamos a presencia curada (no al
+        # fallback genérico "se me cortó la conexión"), sin coaching ni silencio.
         return TurnResult(
             kind=TurnKind.CRISIS_AFTERCARE,
             text=build_crisis_aftercare_response(),
             audio_path=None,
             rag_chunk_ids=(),
-            notify_contact=False,  # ya se alertó en la crisis; no re-spamear
+            notify_contact=False,
             show_resources=True,
-            metadata={"reason": "post_crisis_aftercare"},
+            metadata={"reason": "aftercare_llm_error"},
         )
 
     def _handle_scope_redirect(self, triage: TriageResult) -> TurnResult:
@@ -267,26 +292,30 @@ class Orchestrator:
         signal: CrisisSignal,
         *,
         supportive: bool = False,
+        aftercare: bool = False,
     ) -> TurnResult:
         chunks = self._safe_chunks(input.transcript)
         context = input.user_context
-        if supportive:
+        if aftercare:
+            context = replace(context, support_hint=_AFTERCARE_HINT)
+        elif supportive:
             context = replace(context, support_hint=_SUPPORT_HINT)
         try:
             llm_response, retried = self._generate_avoiding_repeats(input, chunks, context)
         except Exception:
             _log.exception("LLM generation failed; returning curated fallback")
-            return self._llm_fallback()
+            return self._aftercare_fallback() if aftercare else self._llm_fallback()
         return TurnResult(
-            kind=TurnKind.LLM_RESPONSE,
+            kind=TurnKind.CRISIS_AFTERCARE if aftercare else TurnKind.LLM_RESPONSE,
             text=llm_response.text,
             audio_path=None,
             rag_chunk_ids=tuple(c.id for c in chunks),
             notify_contact=False,
-            show_resources=False,
+            show_resources=aftercare,
             metadata={
                 "elevated": signal.level is CrisisLevel.ELEVATED,
                 "supportive": supportive,
+                "aftercare": aftercare,
                 "repeat_retry": retried,
                 "input_tokens": llm_response.input_tokens,
                 "output_tokens": llm_response.output_tokens,

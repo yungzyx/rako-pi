@@ -471,17 +471,17 @@ def test_turn_input_carries_recent_crisis_for_aftercare(tmp_path: Path) -> None:
     assert turn.recent_crisis_at == _now() - timedelta(minutes=5)
 
 
-def test_recent_crisis_followup_reaches_aftercare_not_llm(tmp_path: Path) -> None:
+def test_recent_crisis_followup_reaches_aftercare(tmp_path: Path) -> None:
     session, app = _make_session(tmp_path)
     _record_crisis_minutes_ago(app, minutes_ago=3)
 
-    # El turno siguiente a la crisis, sin repetir palabras clave, debe ir al
-    # acompañamiento curado — nunca al LLM con "estudia un rato".
+    # El turno siguiente a la crisis se acompaña en modo aftercare (LLM acotado
+    # por el hint, adaptativo), no en el flujo normal de productividad.
     turn = session.build_turn_input("no quiero contactar a nadie, no se que hacer")
     result = app.orchestrator.handle_turn(turn)
 
     assert result.kind is TurnKind.CRISIS_AFTERCARE
-    assert "estudi" not in result.text.lower()
+    assert result.metadata.get("aftercare") is True
 
 
 def test_aftercare_protects_even_in_private_mode(tmp_path: Path) -> None:
