@@ -16,11 +16,14 @@ def build_user_context(
     now: datetime,
     *,
     recent_conversation: Iterable[str] = (),
+    conversation_turns: Iterable[tuple[str, str]] = (),
 ) -> UserContext:
     """Return aggregate context plus user-controlled non-sensitive memory.
 
     The LLM gets counts and normal preference memory only. Sensitive memory and
-    full transcripts stay local.
+    full transcripts stay local. `conversation_turns` carries the same recent
+    history as `recent_conversation`, as (user, rako) pairs for real multi-turn
+    messages (both come from ConversationMemory, already 180-char truncated).
     """
     base = default_user_context(now, recent_conversation=recent_conversation)
     tasks = db.tasks.list_recent(limit=100)
@@ -40,6 +43,7 @@ def build_user_context(
         time_of_day=base.time_of_day,
         recent_mood_summary=_recent_mood_summary(db, now),
         recent_conversation=tuple(recent_conversation),
+        conversation_turns=tuple(conversation_turns),
         user_memory=_normal_memory_lines(db),
     )
 

@@ -27,7 +27,9 @@ _MIN_COMPARABLE_LEN = 20
 
 @dataclass(slots=True)
 class ConversationMemory:
-    max_turns: int = 4
+    # 6 intercambios de contexto: suficiente para seguir el hilo sin inflar el
+    # prompt. Cada línea queda truncada a 180 chars (`_clean`, §4.1.3).
+    max_turns: int = 6
     _turns: deque[tuple[str, str]] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -50,6 +52,12 @@ class ConversationMemory:
             if rako:
                 lines.append(f"Rako: {rako}")
         return tuple(lines)
+
+    def turns(self) -> tuple[tuple[str, str], ...]:
+        """Pares (usuario, rako) almacenados —ya truncados a 180 chars— para
+        mandarlos al LLM como turnos reales (ver
+        `prompts.build_conversation_messages`)."""
+        return tuple(self._turns)
 
     def clear(self) -> None:
         self._turns.clear()

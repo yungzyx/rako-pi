@@ -34,6 +34,24 @@ def test_conversation_memory_rejects_non_positive_size() -> None:
         ConversationMemory(max_turns=0)
 
 
+def test_turns_returns_truncated_user_rako_pairs() -> None:
+    memory = ConversationMemory(max_turns=2)
+    memory.add_turn(user="viejo", rako="viejo r")
+    memory.add_turn(user="hola rako", rako="hola, ¿cómo vas?")
+    memory.add_turn(user="x" * 240, rako="ok")
+
+    turns = memory.turns()
+
+    # Solo los últimos 2 pares, ya truncados a 180 chars (mismo sobre que lines()).
+    assert turns[0] == ("hola rako", "hola, ¿cómo vas?")
+    assert turns[1][1] == "ok"
+    assert len(turns[1][0]) < 200 and turns[1][0].endswith("…")
+
+
+def test_default_max_turns_is_six() -> None:
+    assert ConversationMemory().max_turns == 6
+
+
 # ---------------------------------------------------------------------------
 # Detección de repetición (is_near_repeat)
 # ---------------------------------------------------------------------------

@@ -361,6 +361,11 @@ def _handle_press(
     if guardrail_result is not None:
         print(f"Rako: {guardrail_result.text}", flush=True)
         _synthesize_and_maybe_play(app=app, text=guardrail_result.text, eyes=eyes, args=args)
+        # Una derivación de alcance clínico es parte del hilo: guárdala en la
+        # memoria conversacional para que el próximo turno LLM sepa que ocurrió.
+        # La crisis NO (ya queda en crisis_journal y no va a memoria de producto).
+        if guardrail_result.kind is TurnKind.SCOPE_REDIRECT:
+            session.add_exchange(user=transcript, rako=guardrail_result.text)
         eyes.set_state(RakoVisualState.READY)
         return
 

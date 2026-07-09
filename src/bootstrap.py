@@ -39,7 +39,7 @@ from orchestrator.llm_client import (
     OpenAILLMClient,
 )
 from orchestrator.orchestrator import Orchestrator
-from orchestrator.prompts import extract_system_prompt
+from orchestrator.prompts import build_system_prompt, extract_system_prompt
 from rag.chroma_retriever import ChromaRetriever
 from rag.client import InMemoryRetriever, Retriever
 from rag.embeddings import build_embedder
@@ -553,7 +553,10 @@ def _build_retriever(settings: Settings) -> Retriever:
 
 
 def _build_llm_client(settings: Settings) -> LLMClient:
-    system_prompt = _load_system_prompt(settings.obsidian_vault_path)
+    # Persona base (nota KB o fallback) + guía de estilo, ensamblada UNA vez
+    # como rol `system`. Antes las reglas se re-inyectaban en cada mensaje del
+    # usuario, inflando el prompt y degradando el seguimiento del hilo.
+    system_prompt = build_system_prompt(_load_system_prompt(settings.obsidian_vault_path))
     if settings.llm_provider == "openai":
         openai = _try_openai_llm(settings, system_prompt)
         if openai is not None:

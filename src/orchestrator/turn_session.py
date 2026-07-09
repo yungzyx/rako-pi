@@ -256,6 +256,7 @@ class TurnSession:
                 self._db,
                 now,
                 recent_conversation=self.memory.lines(),
+                conversation_turns=self.memory.turns(),
             ),
             now=now,
             recent_low_mood_days=count_recent_low_mood_days(self._db, now),

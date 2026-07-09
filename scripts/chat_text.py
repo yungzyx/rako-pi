@@ -16,15 +16,18 @@ from pathlib import Path
 
 from bootstrap import build_pi_application
 from config import Settings
-from orchestrator.context import build_user_context
-from orchestrator.memory import ConversationMemory
-from orchestrator.orchestrator import TurnInput
+from orchestrator.turn_session import TurnSession
 
 
 def main() -> int:
     settings = Settings()
     app = build_pi_application(settings)
-    memory = ConversationMemory()
+    # Mismo pipeline que el loop de voz/botón (TurnSession): memoria con
+    # restauración, triage, señales de aftercare/inactividad y persistencia con
+    # gate de privacidad. Antes este canal armaba su propio TurnInput "pelado"
+    # y quedaba SIN aftercare post-crisis ni triage de recurrencia.
+    session = TurnSession(db=app.db, settings=app.settings)
+    session.restore_recent_memory()
     print("Rako listo. Escribe algo y Enter. Ctrl+C para salir.")
     try:
         while True:
@@ -36,23 +39,10 @@ def main() -> int:
                 continue
 
             now = datetime.now(UTC)
-            turn_in = TurnInput(
-                transcript=text,
-                emotion=None,
-                panic_button=None,
-                emotion_history=(),
-                last_high_distress_at=None,
-                last_interaction_at=None,
-                user_context=build_user_context(
-                    app.db,
-                    now,
-                    recent_conversation=memory.lines(),
-                ),
-                now=now,
-            )
+            turn_in = session.build_turn_input(text, now=now)
             result = app.orchestrator.handle_turn(turn_in)
             print(f"Rako: {result.text}")
-            memory.add_turn(user=text, rako=result.text)
+            session.complete_turn(transcript=text, result=result, now=now)
 
             try:
                 audio = app.tts.synthesize(result.text)

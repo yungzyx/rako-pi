@@ -389,3 +389,107 @@ def test_openai_client_closes_underlying_http_client() -> None:
     client.close()
 
     assert fake.closed is True
+
+
+# ---------------------------------------------------------------------------
+# Historial como turnos reales user/assistant (fix de seguimiento del hilo)
+# ---------------------------------------------------------------------------
+
+
+def _ctx_with_turns() -> UserContext:
+    return UserContext(
+        pending_task_count=0,
+        recent_completion_count=0,
+        robot_level=1,
+        time_of_day="tarde",
+        recent_mood_summary=None,
+        conversation_turns=(
+            ("quiero estudiar cálculo", "Dale, ¿qué tema?"),
+            ("derivadas", "Partamos con la regla de la cadena."),
+        ),
+    )
+
+
+def test_openai_sends_prior_turns_as_real_messages() -> None:
+    fake = _FakeOpenAIHTTPClient(_openai_payload())
+    client = OpenAILLMClient(
+        http_client=fake,
+        api_key="k",
+        model="gpt-4o-mini",
+        max_tokens=128,
+        system_prompt="System.",
+    )
+
+    client.generate(query="¿y ahora?", chunks=(), context=_ctx_with_turns())
+
+    inp = fake.calls[0]["json"]["input"]
+    assert [m["role"] for m in inp] == ["system", "user", "assistant", "user", "assistant", "user"]
+    assert inp[1]["content"] == "quiero estudiar cálculo"
+    assert inp[2]["content"] == "Dale, ¿qué tema?"
+    assert "¿y ahora?" in inp[-1]["content"]
+
+
+def test_anthropic_sends_prior_turns_as_real_messages() -> None:
+    response = _FakeMessage(content=[_FakeBlock(type="text", text="ok")])
+    fake = _FakeAnthropic(response)
+    client = AnthropicLLMClient(
+        client=fake,
+        model="claude-haiku-4-5",
+        max_tokens=128,
+        system_prompt="System.",
+    )
+
+    client.generate(query="¿y ahora?", chunks=(), context=_ctx_with_turns())
+
+    msgs = fake.messages.calls[0].messages
+    assert [m["role"] for m in msgs] == ["user", "assistant", "user", "assistant", "user"]
+    assert msgs[0]["content"] == "quiero estudiar cálculo"
+    assert "¿y ahora?" in msgs[-1]["content"]
+
+
+def test_whole_payload_has_no_pii_across_history_and_current_turn() -> None:
+    # El sobre §4.1.3 debe cumplirse en TODO el array de mensajes, no solo en el
+    # turno actual: sin nombre, sin vector emocional crudo.
+    fake = _FakeOpenAIHTTPClient(_openai_payload())
+    client = OpenAILLMClient(
+        http_client=fake,
+        api_key="k",
+        model="gpt-4o-mini",
+        max_tokens=128,
+        system_prompt="System.",
+    )
+
+    client.generate(query="hola", chunks=(), context=_ctx_with_turns())
+
+    whole = " ".join(m["content"] for m in fake.calls[0]["json"]["input"]).lower()
+    assert "nombre" not in whole
+    assert "valencia" not in whole
+    assert "valence" not in whole
+
+
+def test_history_turns_are_passed_through_within_truncation_envelope() -> None:
+    # El builder no infla el historial: los turnos vienen ya truncados (180) de
+    # ConversationMemory y se pasan tal cual, sin exceder ese sobre.
+    truncated = "a" * 180
+    ctx = UserContext(
+        pending_task_count=0,
+        recent_completion_count=0,
+        robot_level=1,
+        time_of_day="tarde",
+        recent_mood_summary=None,
+        conversation_turns=((truncated, truncated),),
+    )
+    fake = _FakeOpenAIHTTPClient(_openai_payload())
+    client = OpenAILLMClient(
+        http_client=fake,
+        api_key="k",
+        model="gpt-4o-mini",
+        max_tokens=128,
+        system_prompt="System.",
+    )
+
+    client.generate(query="hola", chunks=(), context=ctx)
+
+    inp = fake.calls[0]["json"]["input"]
+    assert inp[1]["content"] == truncated and len(inp[1]["content"]) <= 180
+    assert inp[2]["content"] == truncated and len(inp[2]["content"]) <= 180

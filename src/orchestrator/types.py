@@ -20,7 +20,12 @@ class UserContext:
     robot_level: int
     time_of_day: str
     recent_mood_summary: str | None
+    # Historial en dos formas: `recent_conversation` (líneas "Usuario:/Rako:")
+    # lo consume el guard anti-repetición; `conversation_turns` (pares
+    # user/rako) se manda al LLM como turnos reales. Ambos salen de
+    # ConversationMemory, ya truncados a 180 chars (§4.1.3).
     recent_conversation: tuple[str, ...] = ()
+    conversation_turns: tuple[tuple[str, str], ...] = ()
     user_memory: tuple[str, ...] = ()
     # Instrucción de tono para el turno (p.ej. cuando el triage detectó
     # estrés académico). Es una instrucción fija — NO contiene datos del
@@ -32,6 +37,7 @@ def default_user_context(
     now: datetime,
     *,
     recent_conversation: Iterable[str] = (),
+    conversation_turns: Iterable[tuple[str, str]] = (),
 ) -> UserContext:
     """Contexto mínimo basado solo en la hora — para usar cuando todavía
     no tenemos estado real del usuario en SQLite (e.g. demos, primer turn)."""
@@ -49,5 +55,6 @@ def default_user_context(
         time_of_day=tod,
         recent_mood_summary=None,
         recent_conversation=tuple(recent_conversation),
+        conversation_turns=tuple(conversation_turns),
         user_memory=(),
     )

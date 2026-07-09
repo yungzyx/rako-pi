@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 
 from orchestrator.prompts import (
+    build_conversation_messages,
+    build_system_prompt,
     build_user_message,
     extract_system_prompt,
     format_chunks_for_prompt,
@@ -100,21 +102,26 @@ def test_format_user_context_omits_pii_and_includes_safe_aggregates() -> None:
     assert "valencia" not in formatted.lower()
 
 
-def test_format_user_context_includes_recent_conversation_when_present() -> None:
+def test_recent_conversation_goes_as_real_turns_not_context_text() -> None:
+    # El historial ya NO va como texto citado en el contexto del usuario: se
+    # manda como turnos reales user/assistant (así el modelo sigue el hilo).
     ctx = UserContext(
         pending_task_count=1,
         recent_completion_count=0,
         robot_level=1,
         time_of_day="tarde",
         recent_mood_summary=None,
-        recent_conversation=("Usuario: quiero estudiar", "Rako: Dale, partimos."),
+        conversation_turns=(("quiero estudiar", "Dale, partimos."),),
     )
 
     formatted = format_user_context(ctx)
+    assert "Dale, partimos" not in formatted  # no como texto de contexto
 
-    assert "Conversación reciente" in formatted
-    assert "quiero estudiar" in formatted
-    assert "Dale, partimos" in formatted
+    messages = build_conversation_messages("sigamos", (), ctx)
+    assert messages[0] == {"role": "user", "content": "quiero estudiar"}
+    assert messages[1] == {"role": "assistant", "content": "Dale, partimos."}
+    assert messages[-1]["role"] == "user"
+    assert "sigamos" in messages[-1]["content"]
 
 
 def test_format_user_context_includes_editable_memory_when_present() -> None:
@@ -150,24 +157,53 @@ def test_build_user_message_combines_query_chunks_and_context() -> None:
     assert "tarde" in message
 
 
-def test_build_user_message_tells_llm_to_continue_existing_topic() -> None:
+def test_system_prompt_tells_llm_to_continue_thread() -> None:
+    system = build_system_prompt("Eres Rako.")
+
+    assert "Eres Rako." in system  # persona base preservada
+    assert "Continúa el hilo" in system
+    assert "sin volver a saludar" in system
+
+
+def test_conversation_messages_keep_strict_user_assistant_alternation() -> None:
+    # Un par incompleto (respuesta vacía) se descarta para no romper la
+    # alternancia estricta que exige la API de Anthropic.
+    ctx = UserContext(
+        pending_task_count=0,
+        recent_completion_count=0,
+        robot_level=1,
+        time_of_day="tarde",
+        recent_mood_summary=None,
+        conversation_turns=(("hola", "qué tal"), ("a medias", "")),
+    )
+
+    messages = build_conversation_messages("sigue", (), ctx)
+
+    roles = [m["role"] for m in messages]
+    assert roles == ["user", "assistant", "user"]  # el par incompleto se omite
+    for a, b in zip(roles, roles[1:], strict=False):
+        assert a != b  # nunca dos mensajes seguidos del mismo rol
+
+
+def test_prior_turn_is_carried_as_assistant_message() -> None:
     ctx = UserContext(
         pending_task_count=1,
         recent_completion_count=0,
         robot_level=1,
         time_of_day="tarde",
         recent_mood_summary=None,
-        recent_conversation=("Usuario: ayúdame con cálculo", "Rako: Partamos por límites."),
+        conversation_turns=(("ayúdame con cálculo", "Partamos por límites."),),
     )
 
-    message = build_user_message(query="ya, sigamos", chunks=(), context=ctx)
+    messages = build_conversation_messages("ya, sigamos", (), ctx)
 
-    assert "continúa algo" in message
-    assert "sin volver a saludar" in message
-    assert "Partamos por límites" in message
+    assert {"role": "assistant", "content": "Partamos por límites."} in messages
+    # La consulta actual queda al final, como último turno de usuario.
+    assert messages[-1]["role"] == "user"
+    assert "ya, sigamos" in messages[-1]["content"]
 
 
-def test_build_user_message_guides_memory_without_literal_repetition() -> None:
+def test_build_user_message_includes_editable_memory_but_guidance_is_in_system() -> None:
     ctx = UserContext(
         pending_task_count=1,
         recent_completion_count=0,
@@ -179,31 +215,21 @@ def test_build_user_message_guides_memory_without_literal_repetition() -> None:
 
     message = build_user_message(query="ayúdame a partir", chunks=(), context=ctx)
 
+    # El DATO agregado (memoria editable) va en el turno; la REGLA de no
+    # recitarla vive en el system prompt, no re-inyectada cada turno.
     assert "memoria editable" in message.lower()
-    assert "no la cites literalmente" in message
+    assert "no los recites" in build_system_prompt("x").lower()
 
 
-def test_build_user_message_guides_task_breakdowns_and_suggestions() -> None:
-    ctx = UserContext(
-        pending_task_count=3,
-        recent_completion_count=0,
-        robot_level=1,
-        time_of_day="tarde",
-        recent_mood_summary=None,
-    )
+def test_system_prompt_carries_identity_and_response_guidance() -> None:
+    system = build_system_prompt("Base persona.")
+    lowered = system.lower()
 
-    message = build_user_message(
-        query="No sé cómo empezar el informe",
-        chunks=(),
-        context=ctx,
-    )
-
-    lowered = message.lower()
-    assert "divide" in lowered
+    assert "Base persona." in system
+    assert "compañero de estudio" in lowered
+    assert "salud mental" in lowered  # frontera clínica
     assert "pasos pequeños" in lowered
-    assert "sugerencia" in lowered
-    assert "asistente académico" in lowered
-    assert "salud mental" in lowered
+    assert "primer paso" in lowered
 
 
 def test_build_user_message_handles_empty_chunks() -> None:

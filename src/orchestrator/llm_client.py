@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from orchestrator.prompts import build_user_message
+from orchestrator.prompts import build_conversation_messages
 from orchestrator.types import UserContext
 from rag.types import Chunk
 
@@ -61,7 +61,7 @@ class AnthropicLLMClient:
         chunks: tuple[Chunk, ...],
         context: UserContext,
     ) -> LLMResponse:
-        user_message = build_user_message(query, chunks, context)
+        messages = build_conversation_messages(query, chunks, context)
         response = self._client.messages.create(
             model=self._model,
             max_tokens=self._max_tokens,
@@ -72,7 +72,7 @@ class AnthropicLLMClient:
                     "cache_control": {"type": "ephemeral"},
                 }
             ],
-            messages=[{"role": "user", "content": user_message}],
+            messages=messages,
         )
         return _parse_response(response)
 
@@ -108,7 +108,7 @@ class OpenAILLMClient:
         chunks: tuple[Chunk, ...],
         context: UserContext,
     ) -> LLMResponse:
-        user_message = build_user_message(query, chunks, context)
+        messages = build_conversation_messages(query, chunks, context)
         response = self._http.post(
             "https://api.openai.com/v1/responses",
             headers={
@@ -120,7 +120,7 @@ class OpenAILLMClient:
                 "max_output_tokens": self._max_tokens,
                 "input": [
                     {"role": "system", "content": self._system_prompt},
-                    {"role": "user", "content": user_message},
+                    *messages,
                 ],
             },
             timeout=self._timeout_s,

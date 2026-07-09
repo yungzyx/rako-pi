@@ -177,8 +177,30 @@ def test_build_turn_input_includes_wellbeing_unit_and_conversation(
     assert turn.wellbeing_unit_name == "Bienestar UDD"
     assert turn.wellbeing_unit_phone == "+56228203419"
     assert any("hola" in line for line in turn.user_context.recent_conversation)
+    # El historial también viaja como PARES (user, rako) para mandarlo al LLM
+    # como turnos reales — esta es la cadena completa del fix de seguimiento.
+    assert ("hola", "hola, ¿cómo vas?") in turn.user_context.conversation_turns
     assert turn.recent_low_mood_days == 0
     assert turn.now == _now()
+
+
+def test_build_turn_input_carries_prior_exchange_as_turns_after_complete_turn(
+    tmp_path: Path,
+) -> None:
+    # Extremo a extremo: un turno completado alimenta el conversation_turns del
+    # siguiente build_turn_input (memory.turns() → build_user_context → LLM).
+    session, app = _make_session(tmp_path)
+    session.complete_turn(
+        transcript="quiero estudiar cálculo",
+        result=_result("Dale, ¿qué tema te complica?"),
+        now=_now(),
+    )
+
+    turn = session.build_turn_input("las derivadas")
+
+    assert ("quiero estudiar cálculo", "Dale, ¿qué tema te complica?") in (
+        turn.user_context.conversation_turns
+    )
 
 
 def test_build_turn_input_counts_recent_low_mood_days(tmp_path: Path) -> None:
