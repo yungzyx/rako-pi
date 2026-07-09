@@ -3,7 +3,8 @@
 Default target: ReSpeaker 2-Mics Pi HAT user button, commonly wired to BCM GPIO17.
 
 Flow:
-    button press -> capture mic audio -> lazy app init -> STT -> orchestrator -> TTS -> optional playback
+    startup: warm up app (Chroma/DB/clients) so the first turn isn't slow
+    button press -> capture mic audio -> STT -> orchestrator -> TTS -> optional playback
 
 Input audio is never persisted. Only TTS output may be written to /tmp for playback.
 
@@ -38,6 +39,7 @@ from orchestrator.types import default_user_context
 from productivity.runtime import maybe_start_focus_from_transcript
 from safety.detector import detect_crisis
 from safety.scope import mentions_mental_health_topic
+from safety.triage import TriageLevel, triage_turn
 from safety.types import CrisisInput
 from voice.types import AudioBuffer
 
@@ -188,6 +190,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         "Press the ReSpeaker button, then speak after 'Escuchando...'. Ctrl+C to stop.", flush=True
     )
 
+    # Warm-up al arranque: pagar el init ahora (antes de que nadie hable) para
+    # que el PRIMER turno sea tan rápido como los siguientes. Si falla, el
+    # listener igual arranca y el init se reintenta perezosamente al primer botón.
+    try:
+        _ensure_app_ready(app_holder=app_holder, eyes=eyes)
+        eyes.set_state(RakoVisualState.READY)
+    except Exception as exc:
+        print(
+            f"No pude inicializar Rako al arranque ({exc}); reintento al primer botón.", flush=True
+        )
+
     def handle_press() -> None:
         _handle_press(
             app_holder=app_holder, eyes=eyes, capture_seconds=args.capture_seconds, args=args
@@ -260,6 +273,29 @@ def _run_gpiomon_loop(*, pin: int, gpio_chip: str, on_press: Callable[[], None])
         on_press()
 
 
+def _ensure_app_ready(*, app_holder: dict[str, Any], eyes: OledEyeController) -> None:
+    """Inicializa la app y la sesión una sola vez (idempotente).
+
+    Se llama al ARRANQUE para que el primer turno no pague los ~5 s de init
+    (Chroma, embeddings, DB, clientes cloud) DESPUÉS de que el usuario ya
+    habló — ese hueco de silencio caía en el peor momento. Queda como fallback
+    perezoso dentro del turno por si el arranque falló. Pipeline de turno
+    compartido con RunLoop: memoria + triage + persistencia con gate de
+    privacidad (orchestrator/turn_session).
+    """
+    if app_holder["app"] is not None:
+        return
+    eyes.set_state(RakoVisualState.STARTING)
+    print("Inicializando Rako...", flush=True)
+    init_started = time.monotonic()
+    app = build_pi_application(Settings())
+    session = TurnSession(db=app.db, settings=app.settings)
+    session.restore_recent_memory()
+    app_holder["app"] = app
+    app_holder["session"] = session
+    print(f"Tiempo inicialización: {time.monotonic() - init_started:.2f}s", flush=True)
+
+
 def _handle_press(
     *,
     app_holder: dict[str, Any],
@@ -284,17 +320,7 @@ def _handle_press(
         print(f"Tiempo captura: {time.monotonic() - capture_started:.2f}s", flush=True)
         eyes.set_state(RakoVisualState.CAPTURED)
         _play_cue(kind="listen_end", args=args)
-        if app_holder["app"] is None:
-            eyes.set_state(RakoVisualState.STARTING)
-            print("Inicializando Rako...", flush=True)
-            init_started = time.monotonic()
-            app_holder["app"] = build_pi_application(Settings())
-            # Pipeline de turno compartido con RunLoop: memoria + triage +
-            # persistencia con gate de privacidad (orchestrator/turn_session).
-            session = TurnSession(db=app_holder["app"].db, settings=app_holder["app"].settings)
-            session.restore_recent_memory()
-            app_holder["session"] = session
-            print(f"Tiempo inicialización: {time.monotonic() - init_started:.2f}s", flush=True)
+        _ensure_app_ready(app_holder=app_holder, eyes=eyes)
         app = app_holder["app"]
         eyes.set_state(RakoVisualState.TRANSCRIBING)
         stt_started = time.monotonic()
@@ -303,7 +329,19 @@ def _handle_press(
     except Exception as exc:
         eyes.set_state(RakoVisualState.ERROR)
         print(f"No pude capturar/transcribir: {exc}", flush=True)
-        time.sleep(1)
+        # Feedback hablado en vez de silencio total: STT vacío, ruido o red
+        # caída son las fallas más comunes y dejaban al usuario sin saber si
+        # repetir o esperar. Si la voz también falla, caemos a la pausa breve.
+        app = app_holder.get("app")
+        spoke = False
+        if app is not None:
+            try:
+                _synthesize_and_maybe_play(app=app, text=_DID_NOT_HEAR_TEXT, eyes=eyes, args=args)
+                spoke = True
+            except Exception:
+                spoke = False
+        if not spoke:
+            time.sleep(1)
         eyes.set_state(RakoVisualState.READY)
         return
 
@@ -387,8 +425,19 @@ def _guardrail_result_for_transcript(*, app: Any, transcript: str, now: datetime
             now=now,
         )
     )
-    if not signal.should_bypass_llm and not mentions_mental_health_topic(transcript):
-        return None
+    # Este guard corre ANTES de los intent handlers locales (música, foco) para
+    # que una crisis o una redirección de alcance clínico no queden enmascaradas
+    # por ellos. Solo nos interesan esos dos desenlaces —ambos CURADOS, sin LLM—.
+    # Decidimos de forma determinística: si el turno terminaría en el LLM, NO lo
+    # corremos acá. Antes se llamaba a `handle_turn` siempre que hubiera una
+    # palabra de salud mental, gatillando una llamada RAG+LLM que se descartaba
+    # y luego el turno real volvía a llamar al LLM: doble latencia en justo los
+    # turnos de ansiedad académica ("estoy con ansiedad por la prueba").
+    if not signal.should_bypass_llm:
+        if not mentions_mental_health_topic(transcript):
+            return None
+        if triage_turn(transcript).level is not TriageLevel.CLINICAL_SCOPE:
+            return None
 
     turn = TurnInput(
         transcript=transcript,
@@ -681,14 +730,17 @@ def _warm_up_audio_device(*, device: str, seconds: float) -> None:
     if shutil.which("aplay") is None:
         time.sleep(min(seconds, 0.5))
         return
-    path = Path("/tmp/rako-playback-warmup.wav")
-    sample_rate = 44100
-    frame_count = max(1, int(sample_rate * seconds))
-    with wave.open(str(path), "wb") as wav:
-        wav.setnchannels(1)
-        wav.setsampwidth(2)
-        wav.setframerate(sample_rate)
-        wav.writeframes(b"\x00\x00" * frame_count)
+    # Cacheado por duración (como los cues): su contenido solo depende de
+    # `seconds`, así que reescribirlo en cada respuesta era I/O de disco al pedo.
+    path = Path(f"/tmp/rako-playback-warmup-{seconds:.2f}.wav")
+    if not path.exists():
+        sample_rate = 44100
+        frame_count = max(1, int(sample_rate * seconds))
+        with wave.open(str(path), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(sample_rate)
+            wav.writeframes(b"\x00\x00" * frame_count)
     subprocess.run(["aplay", "-q", "-D", device, str(path)], check=False)
     time.sleep(0.05)
 

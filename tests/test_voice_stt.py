@@ -122,7 +122,9 @@ def test_transcribe_clamps_confidence_to_unit_interval() -> None:
     assert 0.0 <= result.confidence <= 1.0
 
 
-def test_transcribe_picks_first_result_when_multiple() -> None:
+def test_transcribe_concatenates_all_result_segments() -> None:
+    # Google parte un enunciado largo en varios `results`; deben unirse todos,
+    # no solo el primero (antes se perdía el final de las frases largas).
     fake = _FakeSpeechClient(
         _FakeResponse(
             results=[
@@ -135,4 +137,22 @@ def test_transcribe_picks_first_result_when_multiple() -> None:
 
     result = client.transcribe(_audio())
 
-    assert result.text == "primero"
+    assert result.text == "primero segundo"
+    assert result.confidence == pytest.approx(0.8)  # la más baja, conservador
+
+
+def test_transcribe_skips_result_segments_without_alternatives() -> None:
+    fake = _FakeSpeechClient(
+        _FakeResponse(
+            results=[
+                _FakeResult(alternatives=[_FakeAlternative(transcript="hola", confidence=0.9)]),
+                _FakeResult(alternatives=[]),
+                _FakeResult(alternatives=[_FakeAlternative(transcript="rako", confidence=0.85)]),
+            ]
+        )
+    )
+    client = GoogleCloudSTT(client=fake, language="es-CL")
+
+    result = client.transcribe(_audio())
+
+    assert result.text == "hola rako"

@@ -41,14 +41,28 @@ class GoogleCloudSTT:
 
         if not response.results:
             raise ValueError("STT returned no transcription results")
-        first = response.results[0]
-        if not first.alternatives:
-            raise ValueError("STT result had no alternatives")
-        top = first.alternatives[0]
 
-        confidence = max(0.0, min(1.0, float(top.confidence)))
+        # Google divide un enunciado largo en varios `results` consecutivos;
+        # tomar solo el primero cortaba el final de frases largas ("estudiar
+        # cálculo... y también física" → solo "estudiar cálculo"). Unimos el
+        # mejor alternativo de cada segmento y usamos la confianza más baja
+        # (conservador) para no sobrestimar la calidad del reconocimiento.
+        parts: list[str] = []
+        confidences: list[float] = []
+        for result in response.results:
+            if not result.alternatives:
+                continue
+            top = result.alternatives[0]
+            segment = top.transcript.strip()
+            if segment:
+                parts.append(segment)
+                confidences.append(max(0.0, min(1.0, float(top.confidence))))
+
+        if not parts:
+            raise ValueError("STT result had no alternatives")
+
         return TranscriptResult(
-            text=top.transcript,
-            confidence=confidence,
+            text=" ".join(parts),
+            confidence=min(confidences),
             language=self._language,
         )

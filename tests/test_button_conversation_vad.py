@@ -91,6 +91,39 @@ def test_guardrail_result_ignores_normal_llm_turns_for_local_intents() -> None:
     assert app.orchestrator.calls == 0
 
 
+def test_guardrail_does_not_call_llm_for_supportive_academic_mention() -> None:
+    # Mención de salud mental que NO es crisis ni redirección clínica (ansiedad
+    # académica → apoyo con LLM): el guard no debe correr handle_turn, para no
+    # gastar una llamada al LLM que luego el turno real repite (doble latencia).
+    app = SimpleNamespace(orchestrator=_FakeOrchestrator(button_conversation.TurnKind.LLM_RESPONSE))
+
+    result = button_conversation._guardrail_result_for_transcript(
+        app=app,
+        transcript="estoy con ansiedad por la prueba de mañana",
+        now=datetime(2026, 5, 14, 19, 58, tzinfo=UTC),
+    )
+
+    assert result is None
+    assert app.orchestrator.calls == 0
+
+
+def test_guardrail_catches_clinical_scope_before_local_intents() -> None:
+    # Consejo clínico sí debe cortar acá (curado, sin LLM) antes de música/foco.
+    app = SimpleNamespace(
+        orchestrator=_FakeOrchestrator(button_conversation.TurnKind.SCOPE_REDIRECT)
+    )
+
+    result = button_conversation._guardrail_result_for_transcript(
+        app=app,
+        transcript="¿qué pastilla debería tomar para la depresión?",
+        now=datetime(2026, 5, 14, 19, 58, tzinfo=UTC),
+    )
+
+    assert result is not None
+    assert result.kind is button_conversation.TurnKind.SCOPE_REDIRECT
+    assert app.orchestrator.calls == 1
+
+
 def test_trim_after_end_of_turn_keeps_speech_plus_required_silence() -> None:
     sample_rate = 10
     # 1s silence, 1s speech, 3s trailing silence. Threshold sees only the speech block.
