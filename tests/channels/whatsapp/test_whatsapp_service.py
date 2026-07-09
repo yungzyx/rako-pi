@@ -440,8 +440,8 @@ def test_inbound_personal_disclosure_gets_wellbeing_referral(db_conn) -> None:
     )
 
     assert result.action == "WELLBEING_REFERRAL"
-    assert "Bienestar UDD" in result.response_text
-    assert "+56228203419" in result.response_text
+    assert "Bienestar UDD" in result.response_text  # nombra la unidad
+    assert "+56228203419" not in result.response_text  # sin recitar el número
     assert result.crisis is False
 
 

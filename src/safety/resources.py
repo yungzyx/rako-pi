@@ -76,15 +76,21 @@ CHILE_HELPLINES: tuple[HelpResource, ...] = (
 
 
 def render_crisis_resources() -> str:
+    # Por voz no recitamos números largos (difíciles de retener en un mal
+    # momento): nombramos la unidad y dejamos solo el SAMU 131, que es corto
+    # y es la emergencia inmediata. El detalle de contacto (teléfonos,
+    # correos, links) llega por WhatsApp y la app.
     return (
-        "Contacta ahora a Bienestar UDD: +56 2 2820 3419. "
-        "Si hay emergencia inmediata, llama al SAMU: 131. "
-        "Mantén estos datos visibles mientras contactas apoyo."
+        "Contacta ahora a Bienestar UDD. "
+        "Si hay una emergencia inmediata, llama al SAMU: 131. "
+        "Te voy a mandar los datos de contacto a tu WhatsApp y a la app "
+        "para que los tengas a mano."
     )
 
 
 def render_soft_udd_resources() -> str:
     return (
-        "Si necesitas hablar con alguien de la UDD, Bienestar UDD está en "
-        "+56 2 2820 3419 y CADA UDD en 800 200 125 / 800 718 700."
+        "Si necesitas hablar con alguien de la UDD, puedes acudir a "
+        "Bienestar UDD o a CADA UDD. Te mando sus datos de contacto a tu "
+        "WhatsApp y a la app."
     )

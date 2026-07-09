@@ -78,11 +78,17 @@ def build_wellbeing_referral_response(
     requiere el consentimiento `wellbeing_escalation_enabled`; es mostrar
     un recurso, igual que las líneas de ayuda.
 
+    Por voz nombramos la unidad, no recitamos su teléfono: `unit_phone` se
+    acepta por compatibilidad de firma pero NO se dice en voz alta — el
+    detalle de contacto llega por WhatsApp y la app.
+
     NOTA: copy pendiente de revisión por profesional de salud mental
     antes del release público, igual que safety/responses.py.
     """
-    if unit_name and unit_phone:
-        contact = f"Puedes contactar a {unit_name} al {unit_phone}."
+    if unit_name:
+        contact = (
+            f"Puedes acudir a {unit_name}. Te mando sus datos de contacto a tu WhatsApp y a la app."
+        )
     else:
         contact = render_soft_udd_resources()
     return (

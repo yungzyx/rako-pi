@@ -251,7 +251,8 @@ def test_personal_disclosure_refers_to_wellbeing_without_llm() -> None:
     assert result.kind is TurnKind.WELLBEING_REFERRAL
     assert llm.calls == []
     assert retriever.queries == []
-    assert "+56 2 2820 3419" in result.text  # Bienestar UDD por defecto
+    assert "Bienestar UDD" in result.text  # nombra la unidad, no el número
+    assert "+56 2 2820 3419" not in result.text
     assert result.show_resources is True
 
 
@@ -277,8 +278,9 @@ def test_wellbeing_referral_uses_configured_unit_when_available() -> None:
     )
 
     assert result.kind is TurnKind.WELLBEING_REFERRAL
-    assert "Bienestar UDD" in result.text
-    assert "+56 2 2820 3419" in result.text
+    assert "Bienestar UDD" in result.text  # nombra la unidad configurada
+    assert "+56 2 2820 3419" not in result.text  # sin recitar el número
+    assert "WhatsApp" in result.text
     assert llm.calls == []
 
 

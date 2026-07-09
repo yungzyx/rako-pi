@@ -26,13 +26,16 @@ def test_salud_responde_is_present() -> None:
 def test_crisis_resources_are_short_for_voice() -> None:
     rendered = render_crisis_resources()
 
-    assert "+56 2 2820 3419" in rendered
+    # Por voz nombramos la unidad y dejamos SOLO el SAMU 131 (corto); el resto
+    # de números no se recitan — el detalle llega por WhatsApp y la app.
+    assert "Bienestar UDD" in rendered
     assert "SAMU: 131" in rendered
-    assert "WhatsApp" not in rendered
-    assert "Mantén estos datos visibles" in rendered
+    assert "WhatsApp" in rendered
+    assert "app" in rendered
+    assert "+56 2 2820 3419" not in rendered
     assert "800 200 125" not in rendered
     assert "+56 9 8821 9885" not in rendered
-    assert len(rendered) < 180
+    assert len(rendered) < 220
 
 
 def test_resources_are_immutable() -> None:

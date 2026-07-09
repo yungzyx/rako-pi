@@ -129,8 +129,9 @@ def test_golden_personal_disclosure_gets_configured_referral(tmp_path: Path) -> 
     )
 
     assert result.kind is TurnKind.WELLBEING_REFERRAL
-    assert "Bienestar UDD" in result.text
-    assert "+56228203419" in result.text
+    assert "Bienestar UDD" in result.text  # nombra la unidad configurada
+    assert "+56228203419" not in result.text  # sin recitar el número
+    assert "WhatsApp" in result.text  # el detalle llega por WhatsApp y la app
 
 
 def test_golden_recurrent_low_mood_upgrades_to_referral(tmp_path: Path) -> None:
