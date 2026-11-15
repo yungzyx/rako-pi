@@ -92,6 +92,11 @@ Los datos del usuario nunca salen de la Pi, así que una SD muerta los
 perdería: `rako-backup` crea snapshots consistentes (misma clave SQLCipher)
 en un USB u otro destino. Detalle y restauración: [`INSTALL.md`](../INSTALL.md) §8.
 
+El listado, la selección del respaldo más reciente y la rotación automática
+solo consideran archivos con el formato `rako-db-AAAAMMDD-HHMMSS.db`.
+Las copias con otros nombres se conservan; para restaurarlas, indica su ruta
+explícitamente con `./scripts/rako-restore /ruta/a/copia.db`.
+
 ### Arranque automático (systemd)
 
 Las unidades en `systemd/` son plantillas (`__RAKO_USER__`/`__RAKO_DIR__`);

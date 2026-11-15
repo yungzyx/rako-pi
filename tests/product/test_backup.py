@@ -79,6 +79,28 @@ def test_create_backup_requires_existing_database(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.parametrize("filename", ["rako-db-manual.db", "rako-db-0000.db"])
+def test_backup_rotation_preserves_manual_copies(tmp_path: Path, filename: str) -> None:
+    sqlite_path = _seed_database(tmp_path)
+    output_dir = tmp_path / "backups"
+    output_dir.mkdir()
+    manual_copy = output_dir / filename
+    manual_copy.write_bytes(b"manual backup")
+
+    result = create_backup(
+        sqlite_path=sqlite_path,
+        encryption_key=None,
+        output_dir=output_dir,
+        now=_now(),
+        keep=1,
+    )
+
+    assert manual_copy.read_bytes() == b"manual backup"
+    assert result.backup_path.exists()
+    assert result.pruned == ()
+    assert list_backups(output_dir) == (result.backup_path,)
+
+
 def test_create_backup_rejects_duplicate_timestamp(tmp_path: Path) -> None:
     sqlite_path = _seed_database(tmp_path)
     output_dir = tmp_path / "backups"

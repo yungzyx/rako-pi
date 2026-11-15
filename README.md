@@ -12,6 +12,7 @@ Rako es un robot mapache que acompaña a estudiantes universitarios a retomar su
 ![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-1e3c72?style=flat-square)
 ![Raspberry Pi 4](https://img.shields.io/badge/Hardware-Raspberry_Pi_4-1e3c72?style=flat-square)
 ![Estado MVP](https://img.shields.io/badge/Estado-MVP-1e3c72?style=flat-square)
+[![Licencia MIT](https://img.shields.io/badge/Licencia-MIT-1e3c72?style=flat-square)](LICENSE)
 
 [Empezar](#setup) · [Ver el proyecto](docs/SHOWCASE.md) · [Arquitectura](#arquitectura) · [Documentación](docs/README.md) · [Contribuir](CONTRIBUTING.md)
 
@@ -160,4 +161,6 @@ Las imágenes se extrajeron del examen final del equipo, presentado el 9 de juli
 
 ## Licencia
 
-Por definir. Este repositorio todavía no declara una licencia de uso o redistribución.
+El código y la documentación se distribuyen bajo la [licencia MIT](LICENSE).
+Las imágenes de la presentación y las marcas de terceros quedan fuera de esta
+licencia; consulta su [procedencia y condiciones](docs/assets/README.md).

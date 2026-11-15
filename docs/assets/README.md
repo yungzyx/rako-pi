@@ -14,4 +14,4 @@ Fuente: **Examen Final - Grupo Mapaches.pdf**, presentación académica del equi
 
 Se renderizaron directamente desde el PDF a JPEG con calidad 88. Los cinco archivos suman menos de 600 KiB. Se conserva el texto de las capturas; el contenido de las diapositivas no se usa como especificación técnica del software.
 
-No se añadieron imágenes generadas ni material de bancos de imágenes. Se conserva la atribución del equipo y de la institución visible en la portada. Estos recursos no tienen una licencia de redistribución independiente declarada.
+No se añadieron imágenes generadas ni material de bancos de imágenes. Se conserva la atribución del equipo y de la institución visible en la portada. Estas imágenes y las marcas de terceros quedan fuera de la licencia MIT del código y la documentación. No se concede aquí una licencia de redistribución para estos recursos visuales.

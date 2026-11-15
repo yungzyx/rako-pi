@@ -34,4 +34,4 @@ Las rutas de crisis deben seguir evitando el LLM. Los cambios en proveedores, me
 
 Mantén el README como entrada al proyecto y coloca los detalles técnicos en `docs/`. Guarda las imágenes en `docs/assets/`, añade texto alternativo y registra su procedencia. Distingue capturas reales, renders y propuestas futuras.
 
-Comprueba que los enlaces relativos funcionen en GitHub y que las instrucciones puedan seguirse desde una clonación limpia. La [licencia del proyecto](README.md#licencia) sigue pendiente de definición.
+Comprueba que los enlaces relativos funcionen en GitHub y que las instrucciones puedan seguirse desde una clonación limpia. El código y la documentación usan la [licencia MIT](LICENSE); los recursos visuales tienen sus condiciones indicadas por separado.
