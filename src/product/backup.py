@@ -15,6 +15,7 @@ clave debe respaldarse aparte: sin ella el snapshot es irrecuperable.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -73,15 +74,13 @@ def create_backup(
 
 
 def list_backups(output_dir: Path) -> tuple[Path, ...]:
-    """Backups existentes, del más nuevo al más viejo (por nombre/fecha)."""
+    """Snapshots con nombre automático, del más nuevo al más viejo."""
     if not output_dir.is_dir():
         return ()
     candidates = [
         path
         for path in output_dir.iterdir()
-        if path.is_file()
-        and path.name.startswith(BACKUP_PREFIX)
-        and path.name.endswith(BACKUP_SUFFIX)
+        if path.is_file() and re.fullmatch(r"rako-db-[0-9]{8}-[0-9]{6}\.db", path.name)
     ]
     return tuple(sorted(candidates, key=lambda path: path.name, reverse=True))
 
