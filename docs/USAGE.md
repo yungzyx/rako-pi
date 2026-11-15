@@ -66,6 +66,21 @@ Rako, para la música
 ./scripts/rako.sh demo-crisis-panic   # protocolo de pánico curado (sin LLM)
 ```
 
+### Chequeos proactivos opcionales
+
+El monitor está implementado en `src/orchestrator/proactive.py`. Decide si
+corresponde proponer una acción breve a partir de tareas pendientes e
+inactividad; respeta el modo privado, las crisis recientes, los horarios
+silenciosos y los límites de frecuencia.
+
+```bash
+./scripts/rako.sh proactive-check --dry-run
+./scripts/install_systemd.sh rako-proactive
+```
+
+El timer revisa las condiciones cada 30 minutos y no se instala por defecto.
+La evaluación periódica no implica que se envíe un recordatorio cada vez.
+
 ### Respaldo local
 
 ```bash

@@ -59,7 +59,10 @@ contenido: `../docs/RAG_PROMPT.md`.
 
 - **Datos emocionales detallados nunca salen de la Pi** (SQLite local
   cifrado con SQLCipher).
-- **Audio del usuario nunca se persiste** — ni en disco ni en cloud.
+- **El audio del usuario no se guarda como historial.** El fallback local
+  `whisper.cpp` utiliza un WAV temporal durante la transcripción y lo elimina
+  al terminar. El STT cloud recibe audio para transcribir; esta arquitectura
+  no debe describirse como un procesamiento completamente local.
 - **El LLM se bypassea en crisis.** Solo respuestas curadas por
   profesionales; el sistema nunca diagnostica y siempre deriva.
 - **Borrado total** desde la app o WhatsApp purga todo el historial local

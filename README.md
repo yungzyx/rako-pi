@@ -34,11 +34,13 @@ Rako es un robot mapache que acompaña a estudiantes universitarios a retomar su
 | Disponible en el código | Pendiente o fuera de este repositorio |
 | --- | --- |
 | Voz con STT, LLM y TTS cloud; RAG local | Reconocimiento emocional de audio (SER) diferido |
-| Protocolo de crisis con bypass del LLM | Monitor proactivo continuo en la Pi |
+| Protocolo de crisis con bypass del LLM; chequeos proactivos opcionales | Cambio atómico de releases OTA todavía manual |
 | API móvil, setup y herramientas de fábrica | Conexión real a Firebase; hoy se usa un cliente simulado |
 | Memoria editable, modo privado y borrado de datos | App Flutter y vault Obsidian mantenidos por separado |
 
 El hardware documentado usa **Raspberry Pi 4 de 8 GB, ReSpeaker 2-Mics Pi HAT y OLED SSD1306**. La salida de audio actual depende de un parlante externo. Consulta [HARDWARE.md](HARDWARE.md) para el montaje real y [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md) para los próximos pasos.
+
+Los chequeos proactivos de la Pi se activan mediante un timer opcional; respetan el modo privado, los horarios silenciosos y los eventos recientes de crisis. [Activación y operación](docs/USAGE.md#chequeos-proactivos-opcionales).
 
 ## Arquitectura
 
